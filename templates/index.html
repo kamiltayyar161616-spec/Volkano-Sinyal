@@ -14,6 +14,7 @@
     --amber:#f2a93b;
     --amber-dim:#8a6a2e;
     --turf:#4fae7a;
+    --turf-dim:#2c5f42;
     --clay:#d1594a;
     --chalk:#eef1f6;
     --chalk-dim:#8996ac;
@@ -110,6 +111,8 @@
     background: linear-gradient(90deg, var(--amber-dim), var(--amber));
     border-radius:3px;
   }
+  .edge-fill.strong{ background: linear-gradient(90deg, var(--turf-dim, #2c5f42), var(--turf)); }
+  .edge-fill.weak{ background: linear-gradient(90deg, #3a3020, #6b5a2e); }
   .edge-label{
     display:flex; justify-content:space-between; font-size:10px; color:var(--chalk-dim); margin-top:4px;
   }
@@ -132,6 +135,7 @@
     <span>SON GÜNCELLEME: {{ data.generated_at[11:19] }} UTC &middot; EŞLEŞEN MAÇ: {{ data.total_matched }}</span>
     <span id="countdown">120s</span>
   </div>
+  <a href="/istatistik" style="display:inline-block; margin-top:10px; color:var(--amber); font-size:11px; text-decoration:none; border:1px solid var(--navy-line); padding:4px 10px; border-radius:6px;">📊 STRATEJİ KARNESİ →</a>
   <div class="refresh-bar"><div class="refresh-fill" id="refreshFill"></div></div>
 </header>
 
@@ -162,7 +166,7 @@
         <span>KAYNAK <b>{{ r.src }}</b></span>
         <span class="time-tag">{{ r.time[11:16] }} UTC</span>
       </div>
-      <div class="edge-track"><div class="edge-fill" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
+      <div class="edge-track"><div class="edge-fill {{ 'strong' if r.value_edge >= 4 else ('weak' if r.value_edge < 2 else '') }}" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
       <div class="edge-label"><span>EDGE</span><span>%{{ r.value_edge }}</span></div>
     </div>
     {% endfor %}
@@ -188,7 +192,7 @@
         <span>KAZANMA PAYI <b>%{{ r.value_prob }}</b></span>
         <span class="time-tag">{{ r.time[11:16] }} UTC</span>
       </div>
-      <div class="edge-track"><div class="edge-fill" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
+      <div class="edge-track"><div class="edge-fill {{ 'strong' if r.value_edge >= 4 else ('weak' if r.value_edge < 2 else '') }}" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
       <div class="edge-label"><span>EDGE</span><span>%{{ r.value_edge }}</span></div>
     </div>
     {% endfor %}
@@ -214,7 +218,7 @@
         <span>VOLKANO OLASILIK <b>%{{ r.reverse_prob }}</b></span>
         <span class="time-tag">{{ r.time[11:16] }} UTC</span>
       </div>
-      <div class="edge-track"><div class="edge-fill" style="width:{{ (r.reverse_edge * 18)|round(1) if r.reverse_edge < 5.5 else 100 }}%;"></div></div>
+      <div class="edge-track"><div class="edge-fill {{ 'strong' if r.reverse_edge >= 4 else ('weak' if r.reverse_edge < 2 else '') }}" style="width:{{ (r.reverse_edge * 18)|round(1) if r.reverse_edge < 5.5 else 100 }}%;"></div></div>
       <div class="edge-label"><span>TERS-EDGE</span><span>%{{ r.reverse_edge }}</span></div>
     </div>
     {% endfor %}

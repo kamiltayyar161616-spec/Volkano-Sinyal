@@ -6,9 +6,13 @@ eşleştirir ve edge/olasılık hesaplayıp sıralı liste döner.
 """
 
 import json
+import os
 import re
+import sqlite3
 import difflib
 from datetime import datetime, timezone, timedelta
+
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "picks.db")
 
 # Cron'un ürettiği dosyaların VPS'teki gerçek yolları
 VOLCANO_FILE = "/root/volcanobet/volcanobet.json"
@@ -70,6 +74,97 @@ def _norm_probs(odds):
         return None
     total = sum(inv.values())
     return {k: v / total for k, v in inv.items()} if total else None
+
+
+def _get_conn():
+    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS picks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            home TEXT NOT NULL,
+            away TEXT NOT NULL,
+            league TEXT,
+            match_time TEXT NOT NULL,
+            side TEXT,
+            odd REAL,
+            edge REAL,
+            prob REAL,
+            mf_confirmed INTEGER,
+            first_seen TEXT,
+            result TEXT DEFAULT 'pending',
+            final_score TEXT,
+            checked_at TEXT,
+            UNIQUE(category, home, away, match_time)
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def record_snapshot(analysis: dict) -> None:
+    """Şu anki analiz sonucundaki her pick'i (henüz kaydedilmemişse) veritabanına yazar."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows = []
+        for r in analysis.get("value_picks", []):
+            rows.append(("value", r["home"], r["away"], r["league"], r["time"],
+                          r["value_side"], r["value_odd"], r["value_edge"], r["value_prob"],
+                          int(r["mf_confirmed"]), now_iso))
+        for r in analysis.get("favorite_picks", []):
+            rows.append(("favorite", r["home"], r["away"], r["league"], r["time"],
+                          r["value_side"], r["value_odd"], r["value_edge"], r["value_prob"],
+                          int(r["mf_confirmed"]), now_iso))
+        for r in analysis.get("reverse_picks", []):
+            rows.append(("reverse", r["home"], r["away"], r["league"], r["time"],
+                          r["reverse_side"], r["reverse_odd"], r["reverse_edge"], r["reverse_prob"],
+                          0, now_iso))
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_stats() -> dict:
+    """Kategori bazında won/lost/void/pending sayıları ve basit ROI (1 birim flat stake varsayımıyla)."""
+    conn = _get_conn()
+    try:
+        cur = conn.execute("SELECT category, result, odd FROM picks")
+        stats = {}
+        for category, result, odd in cur.fetchall():
+            s = stats.setdefault(category, {"won": 0, "lost": 0, "void": 0, "pending": 0, "roi_units": 0.0, "staked": 0})
+            s[result] = s.get(result, 0) + 1
+            if result in ("won", "lost"):
+                s["staked"] += 1
+            if result == "won" and odd:
+                s["roi_units"] += (odd - 1)
+            elif result == "lost":
+                s["roi_units"] -= 1
+        for s in stats.values():
+            s["win_rate"] = round(100 * s["won"] / s["staked"], 1) if s["staked"] else None
+            s["roi_pct"] = round(100 * s["roi_units"] / s["staked"], 1) if s["staked"] else None
+        return stats
+    finally:
+        conn.close()
+
+
+def get_recent_picks(limit=60) -> list:
+    conn = _get_conn()
+    try:
+        cur = conn.execute("""
+            SELECT category, home, away, league, match_time, side, odd, edge, result, final_score
+            FROM picks ORDER BY match_time DESC LIMIT ?
+        """, (limit,))
+        cols = ["category", "home", "away", "league", "match_time", "side", "odd", "edge", "result", "final_score"]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+    finally:
+        conn.close()
 
 
 def get_analysis():
