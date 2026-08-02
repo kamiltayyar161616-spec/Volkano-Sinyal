@@ -1,0 +1,153 @@
+"""
+Piyasa (Admiral + Sansabet) vs Volkano oran karşılaştırma mantığı.
+Bu dosya app.py tarafından her yenilemede çağrılır; VolcanoBet/AdmiralBet/
+SansaBet scraper'larının VPS'te cron ile ürettiği JSON dosyalarını okur,
+eşleştirir ve edge/olasılık hesaplayıp sıralı liste döner.
+"""
+
+import json
+import re
+import difflib
+from datetime import datetime, timezone, timedelta
+
+# Cron'un ürettiği dosyaların VPS'teki gerçek yolları
+VOLCANO_FILE = "/root/volcanobet/volcanobet.json"
+MONEY_FLOW_FILE = "/root/volcanobet/volcanobet_money_flow.json"
+ADMIRAL_FILE = "/root/monsure/admiralbet.json"
+SANSA_FILE = "/root/monsure/sansabet_odds.json"
+
+WINDOW_HOURS = 12
+FAVORITE_PROB_THRESHOLD = 50.0  # "kazanacak" filtresi için piyasa olasılık eşiği
+
+
+def _norm(name: str) -> str:
+    name = name.lower()
+    name = re.sub(r"[^a-z0-9ğüşiöçİĞÜŞÖÇ ]", "", name)
+    name = re.sub(r"\b(fc|sc|cf|cd|ac|sk|fk|if|bk|club|the)\b", "", name)
+    return re.sub(r"\s+", " ", name).strip()
+
+
+def _parse_time(t):
+    try:
+        return datetime.fromisoformat(str(t).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _load_json(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
+
+
+def _build_index(events):
+    index = {}
+    for ev in events:
+        key = (_norm(ev["home_team"]), _norm(ev["away_team"]))
+        index.setdefault(key, []).append(ev)
+    return index
+
+
+def _best_match(index, home, away):
+    key = (_norm(home), _norm(away))
+    if key in index:
+        return index[key][0]
+    keys = list(index.keys())
+    home_n, away_n = _norm(home), _norm(away)
+    for c in difflib.get_close_matches(home_n, [k[0] for k in keys], n=5, cutoff=0.75):
+        for k in keys:
+            if k[0] == c and difflib.SequenceMatcher(None, k[1], away_n).ratio() > 0.7:
+                return index[k][0]
+    return None
+
+
+def _norm_probs(odds):
+    try:
+        inv = {k: 1 / float(v) for k, v in odds.items() if v}
+    except Exception:
+        return None
+    total = sum(inv.values())
+    return {k: v / total for k, v in inv.items()} if total else None
+
+
+def get_analysis():
+    """Tüm hesaplamayı yapar, dict döner: {generated_at, value_picks, reverse_picks, favorite_picks, total_matched}"""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=WINDOW_HOURS)
+
+    volcano = _load_json(VOLCANO_FILE, [])
+    admiral = _load_json(ADMIRAL_FILE, [])
+    sansa_raw = _load_json(SANSA_FILE, {"matches": []})
+    sansa = sansa_raw.get("matches", []) if isinstance(sansa_raw, dict) else sansa_raw
+    money_flow = _load_json(MONEY_FLOW_FILE, [])
+    mf_map = {(m["home_team"], m["away_team"]): m for m in money_flow}
+
+    v_window = [
+        ev for ev in volcano
+        if (dt := _parse_time(ev.get("match_time"))) and now <= dt <= window_end
+    ]
+
+    a_index = _build_index(admiral)
+    s_index = _build_index(sansa)
+
+    results = []
+    for ev in v_window:
+        am = _best_match(a_index, ev["home_team"], ev["away_team"])
+        sm = _best_match(s_index, ev["home_team"], ev["away_team"])
+        if not am and not sm:
+            continue
+
+        vp = _norm_probs(ev.get("current_odds", {}))
+        if not vp:
+            continue
+
+        mps = [p for p in [
+            _norm_probs(am["odds"]) if am else None,
+            _norm_probs(sm["odds"]) if sm else None,
+        ] if p]
+        if not mps:
+            continue
+
+        mkt = {k: sum(p.get(k, 0) for p in mps) / len(mps) for k in ["1", "X", "2"]}
+        edges = {k: round(mkt[k] - vp.get(k, 0), 4) for k in ["1", "X", "2"]}
+        rev_edges = {k: round(vp.get(k, 0) - mkt[k], 4) for k in ["1", "X", "2"]}
+
+        best_side = max(edges, key=edges.get)
+        rev_side = max(rev_edges, key=rev_edges.get)
+
+        mfe = mf_map.get((ev["home_team"], ev["away_team"]))
+        mf_side = mfe["money_flow_side"] if mfe else None
+
+        results.append({
+            "league": ev["league"],
+            "home": ev["home_team"],
+            "away": ev["away_team"],
+            "time": ev["match_time"],
+            "src": ("Admiral+Sansa" if am and sm else ("Admiral" if am else "Sansa")),
+            "value_side": best_side,
+            "value_edge": round(edges[best_side] * 100, 2),
+            "value_odd": ev["current_odds"].get(best_side),
+            "value_prob": round(mkt[best_side] * 100, 1),
+            "mf_confirmed": bool(mf_side and mf_side == best_side),
+            "reverse_side": rev_side,
+            "reverse_edge": round(rev_edges[rev_side] * 100, 2),
+            "reverse_odd": ev["current_odds"].get(rev_side),
+            "reverse_prob": round(vp.get(rev_side, 0) * 100, 1),
+        })
+
+    value_picks = sorted(results, key=lambda r: -r["value_edge"])
+    reverse_picks = sorted(results, key=lambda r: -r["reverse_edge"])
+    favorite_picks = sorted(
+        [r for r in results if r["value_prob"] >= FAVORITE_PROB_THRESHOLD],
+        key=lambda r: (-r["value_prob"], -r["value_edge"]),
+    )
+
+    return {
+        "generated_at": now.isoformat(),
+        "total_matched": len(results),
+        "value_picks": value_picks[:25],
+        "reverse_picks": reverse_picks[:25],
+        "favorite_picks": favorite_picks[:25],
+    }

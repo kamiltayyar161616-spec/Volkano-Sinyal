@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAHA — Maç Analiz Skorbordu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-deep:#0a1220;
+    --navy:#101c30;
+    --navy-line:#1e2c44;
+    --amber:#f2a93b;
+    --amber-dim:#8a6a2e;
+    --turf:#4fae7a;
+    --clay:#d1594a;
+    --chalk:#eef1f6;
+    --chalk-dim:#8996ac;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 500px at 50% -10%, rgba(242,169,59,0.08), transparent 60%),
+      var(--navy-deep);
+    color:var(--chalk);
+    font-family:'JetBrains Mono', monospace;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:60px;
+  }
+  header{
+    position:sticky; top:0; z-index:10;
+    background:rgba(10,18,32,0.92);
+    backdrop-filter: blur(6px);
+    border-bottom:1px solid var(--navy-line);
+    padding:18px 20px 14px;
+  }
+  .brand{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:22px;
+    letter-spacing:0.02em;
+    display:flex; align-items:baseline; gap:10px;
+  }
+  .brand .dot{ color:var(--amber); }
+  .subtitle{ color:var(--chalk-dim); font-size:12px; margin-top:4px; }
+  .meta-row{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:12px; font-size:11px; color:var(--chalk-dim);
+  }
+  .refresh-bar{
+    height:2px; background:var(--navy-line); margin-top:10px; overflow:hidden; border-radius:2px;
+  }
+  .refresh-fill{
+    height:100%; background:var(--amber); width:0%;
+    transition: width 1s linear;
+  }
+
+  nav.tabs{
+    display:flex; gap:2px; margin:18px 16px 0; background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; padding:4px;
+  }
+  nav.tabs button{
+    flex:1; padding:10px 8px; background:transparent; border:none; color:var(--chalk-dim);
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12.5px; letter-spacing:0.02em;
+    border-radius:7px; cursor:pointer;
+  }
+  nav.tabs button.active{ background:var(--amber); color:var(--navy-deep); }
+
+  section.panel{ display:none; padding:16px; }
+  section.panel.active{ display:block; }
+
+  .panel-desc{ color:var(--chalk-dim); font-size:11.5px; margin-bottom:14px; line-height:1.5; }
+
+  .row{
+    background:var(--navy);
+    border:1px solid var(--navy-line);
+    border-radius:10px;
+    padding:12px 14px;
+    margin-bottom:8px;
+  }
+  .row-top{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
+  }
+  .teams{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600; font-size:14px; color:var(--chalk);
+    line-height:1.35;
+  }
+  .league{ color:var(--chalk-dim); font-size:10.5px; margin-top:2px; letter-spacing:0.03em; text-transform:uppercase; }
+  .side-badge{
+    background:var(--navy-line); color:var(--amber);
+    font-weight:700; font-size:13px; padding:3px 9px; border-radius:6px;
+    white-space:nowrap;
+  }
+  .mf-badge{
+    color:var(--turf); font-size:10px; font-weight:700; margin-left:6px;
+  }
+
+  .row-stats{
+    display:flex; gap:16px; margin-top:10px; font-size:11.5px; color:var(--chalk-dim); flex-wrap:wrap;
+  }
+  .row-stats b{ color:var(--chalk); font-weight:600; }
+
+  .edge-track{
+    height:6px; background:var(--navy-line); border-radius:3px; margin-top:10px; overflow:hidden;
+  }
+  .edge-fill{
+    height:100%;
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+    border-radius:3px;
+  }
+  .edge-label{
+    display:flex; justify-content:space-between; font-size:10px; color:var(--chalk-dim); margin-top:4px;
+  }
+
+  .time-tag{ font-size:10.5px; color:var(--chalk-dim); white-space:nowrap; }
+
+  .empty{ color:var(--chalk-dim); font-size:12px; text-align:center; padding:30px 0; }
+
+  footer{
+    text-align:center; color:var(--chalk-dim); font-size:10px; margin-top:20px; letter-spacing:0.03em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">SAHA<span class="dot">·</span><span style="font-size:12px; color:var(--chalk-dim); font-weight:500;">maç analiz skorboru</span></div>
+  <div class="subtitle">VolcanoBet &middot; Admiral &middot; Sansabet — piyasa karşılaştırmalı canlı liste</div>
+  <div class="meta-row">
+    <span>SON GÜNCELLEME: {{ data.generated_at[11:19] }} UTC &middot; EŞLEŞEN MAÇ: {{ data.total_matched }}</span>
+    <span id="countdown">120s</span>
+  </div>
+  <div class="refresh-bar"><div class="refresh-fill" id="refreshFill"></div></div>
+</header>
+
+<nav class="tabs">
+  <button class="active" data-target="value">VALUE</button>
+  <button data-target="favorite">FAVORİ+VALUE</button>
+  <button data-target="reverse">TERS</button>
+</nav>
+
+<section class="panel active" id="value">
+  <div class="panel-desc">Piyasanın (Admiral+Sansa) Volkano'dan daha yüksek olasılık verdiği taraf — Volkano fiyatı henüz ayarlamamış olabilir.</div>
+  {% if data.value_picks %}
+    {% for r in data.value_picks %}
+    <div class="row">
+      <div class="row-top">
+        <div>
+          <div class="teams">{{ r.home }} — {{ r.away }}</div>
+          <div class="league">{{ r.league }}</div>
+        </div>
+        <div style="text-align:right;">
+          <span class="side-badge">{{ r.value_side }}</span>
+          {% if r.mf_confirmed %}<div class="mf-badge">● PARA AKIŞI TEYİTLİ</div>{% endif %}
+        </div>
+      </div>
+      <div class="row-stats">
+        <span>ORAN <b>{{ r.value_odd }}</b></span>
+        <span>KAZANMA PAYI <b>%{{ r.value_prob }}</b></span>
+        <span>KAYNAK <b>{{ r.src }}</b></span>
+        <span class="time-tag">{{ r.time[11:16] }} UTC</span>
+      </div>
+      <div class="edge-track"><div class="edge-fill" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
+      <div class="edge-label"><span>EDGE</span><span>%{{ r.value_edge }}</span></div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Şu an eşleşen maç yok — cron bir sonraki döngüde tazeleyecek.</div>
+  {% endif %}
+</section>
+
+<section class="panel" id="favorite">
+  <div class="panel-desc">Piyasanın favori gördüğü (kazanma payı ≥ %50) ve aynı zamanda Volkano'ya göre değerli olan taraflar.</div>
+  {% if data.favorite_picks %}
+    {% for r in data.favorite_picks %}
+    <div class="row">
+      <div class="row-top">
+        <div>
+          <div class="teams">{{ r.home }} — {{ r.away }}</div>
+          <div class="league">{{ r.league }}</div>
+        </div>
+        <span class="side-badge">{{ r.value_side }}</span>
+      </div>
+      <div class="row-stats">
+        <span>ORAN <b>{{ r.value_odd }}</b></span>
+        <span>KAZANMA PAYI <b>%{{ r.value_prob }}</b></span>
+        <span class="time-tag">{{ r.time[11:16] }} UTC</span>
+      </div>
+      <div class="edge-track"><div class="edge-fill" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
+      <div class="edge-label"><span>EDGE</span><span>%{{ r.value_edge }}</span></div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Eşiği geçen favori maç yok şu an.</div>
+  {% endif %}
+</section>
+
+<section class="panel" id="reverse">
+  <div class="panel-desc">Volkano'nun piyasadan daha kısık fiyatladığı taraf — Volkano'nun kendi modeli/trader'ları o sonuca piyasadan daha çok inanıyor.</div>
+  {% if data.reverse_picks %}
+    {% for r in data.reverse_picks %}
+    <div class="row">
+      <div class="row-top">
+        <div>
+          <div class="teams">{{ r.home }} — {{ r.away }}</div>
+          <div class="league">{{ r.league }}</div>
+        </div>
+        <span class="side-badge">{{ r.reverse_side }}</span>
+      </div>
+      <div class="row-stats">
+        <span>ORAN <b>{{ r.reverse_odd }}</b></span>
+        <span>VOLKANO OLASILIK <b>%{{ r.reverse_prob }}</b></span>
+        <span class="time-tag">{{ r.time[11:16] }} UTC</span>
+      </div>
+      <div class="edge-track"><div class="edge-fill" style="width:{{ (r.reverse_edge * 18)|round(1) if r.reverse_edge < 5.5 else 100 }}%;"></div></div>
+      <div class="edge-label"><span>TERS-EDGE</span><span>%{{ r.reverse_edge }}</span></div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Eşleşen maç yok şu an.</div>
+  {% endif %}
+</section>
+
+<footer>10 DK'DA BİR TAZELENEN VERİ &middot; YATIRIM TAVSİYESİ DEĞİLDİR</footer>
+
+<script>
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('section.panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.target).classList.add('active');
+    });
+  });
+
+  let seconds = 120;
+  const countdownEl = document.getElementById('countdown');
+  const fillEl = document.getElementById('refreshFill');
+  const timer = setInterval(()=>{
+    seconds--;
+    countdownEl.textContent = seconds + 's';
+    fillEl.style.width = ((120-seconds)/120*100) + '%';
+    if(seconds <= 0){
+      clearInterval(timer);
+      location.reload();
+    }
+  }, 1000);
+</script>
+
+</body>
+</html>
