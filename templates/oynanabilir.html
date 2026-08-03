@@ -31,28 +31,32 @@
   .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
   .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; position:relative; }
 
-  .row{ padding:14px 15px; margin:0 16px 9px; }
-  .row.playable{ border-color:var(--turf-dim); box-shadow:0 0 0 1px rgba(79,174,122,0.18) inset; }
-  .row-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14px; }
-  .league{ color:var(--chalk-faint); font-size:10px; margin-top:3px; text-transform:uppercase; letter-spacing:0.04em; }
-  .side-badge{
-    background:linear-gradient(135deg, var(--navy-line), #2a3d5c); color:var(--amber-bright);
-    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:13px; padding:4px 11px; border-radius:8px;
+  .row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:11px 14px; margin:0 16px 6px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--navy-line); border-radius:10px;
   }
-  .seg-tag{
-    display:inline-block; font-size:9.5px; color:var(--chalk-dim); background:var(--navy-deep);
-    border:1px solid var(--navy-line); padding:3px 8px; border-radius:6px; margin-top:7px;
+  .row.playable{ border-color:var(--turf-dim); }
+  .row-left{ min-width:0; flex:1; }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; color:var(--chalk); }
+  .teams .side-chip{
+    display:inline-block; margin-left:6px; font-size:11px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:1px 7px; border-radius:5px; vertical-align:middle;
   }
-  .perf-row{ display:flex; gap:16px; margin-top:11px; padding-top:10px; border-top:1px dashed var(--navy-line); }
-  .perf-item .num{ font-weight:700; font-size:13.5px; font-family:'Space Grotesk', sans-serif; }
-  .perf-item .lbl{ color:var(--chalk-faint); font-size:9px; margin-top:2px; }
-  .num.pos{ color:var(--turf-bright); }
-  .num.neg{ color:var(--clay); }
-  .num.flat{ color:var(--chalk-dim); }
-  .row-stats{ display:flex; gap:14px; margin-top:9px; font-size:10.5px; color:var(--chalk-dim); flex-wrap:wrap; }
-  .row-stats b{ color:var(--chalk); }
-  .collecting-badge{ font-size:9.5px; color:var(--amber); border:1px solid var(--amber-dim); padding:3px 8px; border-radius:6px; display:inline-block; margin-top:9px; }
+  .meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:4px; line-height:1.6; }
+  .meta b{ color:var(--chalk-dim); font-weight:600; }
+  .row-right{ text-align:right; flex-shrink:0; }
+  .perf-badge{ font-size:14px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .perf-badge.pos{ color:var(--turf-bright); }
+  .perf-badge.neg{ color:var(--clay); }
+  .perf-badge.flat{ color:var(--chalk-faint); }
+  .perf-sub{ font-size:9px; color:var(--chalk-faint); margin-top:2px; }
+  .collecting-badge{
+    font-size:9px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); border:1px solid var(--amber-dim);
+    padding:3px 8px; border-radius:6px; white-space:nowrap;
+  }
 </style>
 {% endblock %}
 
@@ -87,24 +91,13 @@
 {% if data.playable %}
   {% for c in data.playable %}
   <div class="row playable">
-    <div class="row-top">
-      <div>
-        <div class="teams">{{ c.home }} — {{ c.away }}</div>
-        <div class="league">{{ c.league }}</div>
-        <div class="seg-tag">{{ c.perf.label }}</div>
-      </div>
-      <span class="side-badge">{{ c.side }}</span>
+    <div class="row-left">
+      <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
+      <div class="meta">{{ c.league }} &middot; {{ c.perf.label }} &middot; oran <b>{{ c.odd }}</b> &middot; olasılık <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
     </div>
-    <div class="row-stats">
-      <span>ORAN <b>{{ c.odd }}</b></span>
-      <span>OLASILIK <b>%{{ c.prob }}</b></span>
-      <span>EDGE <b>%{{ c.edge }}</b></span>
-      <span style="margin-left:auto;">{{ c.time[11:16] }} UTC</span>
-    </div>
-    <div class="perf-row">
-      <div class="perf-item"><div class="num pos">%{{ c.perf.win_rate }}</div><div class="lbl">SEGMENT KAZANMA</div></div>
-      <div class="perf-item"><div class="num {{ 'pos' if c.perf.roi_pct > 0 else 'neg' }}">{{ '+' if c.perf.roi_pct > 0 else '' }}%{{ c.perf.roi_pct }}</div><div class="lbl">SEGMENT ROI</div></div>
-      <div class="perf-item"><div class="num flat">{{ c.perf.staked }}</div><div class="lbl">ÖRNEKLEM</div></div>
+    <div class="row-right">
+      <div class="perf-badge pos">%{{ c.perf.win_rate }}</div>
+      <div class="perf-sub">{{ '+' if c.perf.roi_pct > 0 else '' }}%{{ c.perf.roi_pct }} ROI &middot; n={{ c.perf.staked }}</div>
     </div>
   </div>
   {% endfor %}
@@ -118,31 +111,18 @@
 {% if data.collecting %}
   {% for c in data.collecting[:20] %}
   <div class="row">
-    <div class="row-top">
-      <div>
-        <div class="teams">{{ c.home }} — {{ c.away }}</div>
-        <div class="league">{{ c.league }}</div>
-        <div class="seg-tag">{{ c.perf.label if c.perf else 'segment yok' }}</div>
-      </div>
-      <span class="side-badge">{{ c.side }}</span>
+    <div class="row-left">
+      <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
+      <div class="meta">{{ c.league }} &middot; {{ c.perf.label if c.perf else 'segment yok' }} &middot; oran <b>{{ c.odd }}</b> &middot; olasılık <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
     </div>
-    <div class="row-stats">
-      <span>ORAN <b>{{ c.odd }}</b></span>
-      <span>OLASILIK <b>%{{ c.prob }}</b></span>
-      <span>EDGE <b>%{{ c.edge }}</b></span>
-      <span style="margin-left:auto;">{{ c.time[11:16] }} UTC</span>
-    </div>
-    {% if c.perf %}
-    <div class="perf-row">
-      <div class="perf-item"><div class="num flat">{{ c.perf.staked }}/5</div><div class="lbl">ÖRNEKLEM</div></div>
-      {% if c.perf.win_rate is not none %}
-      <div class="perf-item"><div class="num flat">%{{ c.perf.win_rate }}</div><div class="lbl">ŞİMDİLİK KAZANMA</div></div>
-      <div class="perf-item"><div class="num {{ 'pos' if c.perf.roi_pct > 0 else 'neg' }}">%{{ c.perf.roi_pct }}</div><div class="lbl">ŞİMDİLİK ROI</div></div>
+    <div class="row-right">
+      {% if c.perf and c.perf.win_rate is not none %}
+        <div class="perf-badge flat">%{{ c.perf.win_rate }}</div>
+        <div class="perf-sub">{{ c.perf.staked }}/5 &middot; %{{ c.perf.roi_pct }} ROI</div>
+      {% else %}
+        <span class="collecting-badge">İZLEMEDE</span>
       {% endif %}
     </div>
-    {% else %}
-    <span class="collecting-badge">henüz sonuç yok</span>
-    {% endif %}
   </div>
   {% endfor %}
 {% else %}
