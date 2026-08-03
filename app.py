@@ -3,7 +3,7 @@ import time
 
 from flask import Flask, render_template, jsonify
 
-from match_analyzer import get_analysis, record_snapshot, get_stats, get_recent_picks
+from match_analyzer import get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks
 from results_checker import check_pending_results
 
 app = Flask(__name__)
@@ -16,6 +16,13 @@ RESULT_CHECK_INTERVAL_SEC = 900  # her 15 dakikada bir sonuçları kontrol et
 def index():
     data = get_analysis()
     return render_template("index.html", data=data)
+
+
+@app.route("/oynanabilir")
+def oynanabilir():
+    data = get_analysis()
+    playable_data = get_playable_picks(data)
+    return render_template("oynanabilir.html", data=playable_data, generated_at=data["generated_at"])
 
 
 @app.route("/istatistik")
@@ -33,6 +40,11 @@ def api_matches():
 @app.route("/api/stats")
 def api_stats():
     return jsonify(get_stats())
+
+
+@app.route("/api/oynanabilir")
+def api_oynanabilir():
+    return jsonify(get_playable_picks(get_analysis()))
 
 
 def _background_loop():

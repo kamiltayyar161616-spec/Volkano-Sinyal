@@ -167,6 +167,108 @@ def get_recent_picks(limit=60) -> list:
         conn.close()
 
 
+SEGMENT_MIN_SAMPLE = 5
+
+
+def _segment_for(category, mf_confirmed, prob):
+    if category == "favorite":
+        return "favori_value"
+    if category == "value":
+        return "value_mf" if mf_confirmed else "value_normal"
+    if category == "reverse":
+        return "reverse_favori" if (prob is not None and prob >= 50) else "reverse_underdog"
+    return "diger"
+
+
+SEGMENT_LABELS = {
+    "favori_value": "Favori + Value",
+    "value_mf": "Value (para akışı teyitli)",
+    "value_normal": "Value (teyitsiz)",
+    "reverse_favori": "Ters (Volkano favorisi)",
+    "reverse_underdog": "Ters (sürpriz taraf)",
+    "diger": "Diğer",
+}
+
+
+def get_segment_performance() -> dict:
+    """Her segmentin geçmiş (sonuçlanmış) bahislerine göre win_rate ve ROI'sini hesaplar."""
+    conn = _get_conn()
+    try:
+        cur = conn.execute("""
+            SELECT category, mf_confirmed, prob, result, odd
+            FROM picks WHERE result IN ('won','lost')
+        """)
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    perf = {}
+    for category, mf_confirmed, prob, result, odd in rows:
+        seg = _segment_for(category, mf_confirmed, prob)
+        s = perf.setdefault(seg, {"won": 0, "lost": 0, "roi_units": 0.0})
+        s[result] += 1
+        if result == "won" and odd:
+            s["roi_units"] += (odd - 1)
+        elif result == "lost":
+            s["roi_units"] -= 1
+
+    for seg, s in perf.items():
+        staked = s["won"] + s["lost"]
+        s["staked"] = staked
+        s["win_rate"] = round(100 * s["won"] / staked, 1) if staked else None
+        s["roi_pct"] = round(100 * s["roi_units"] / staked, 1) if staked else None
+        s["label"] = SEGMENT_LABELS.get(seg, seg)
+    return perf
+
+
+def get_playable_picks(analysis: dict) -> dict:
+    """Güncel maçları geçmiş segment performansına göre 'oynanabilir' / 'veri toplanıyor' diye ayırır."""
+    perf = get_segment_performance()
+    candidates = []
+
+    for r in analysis.get("value_picks", []):
+        seg = _segment_for("value", r["mf_confirmed"], r["value_prob"])
+        candidates.append({**r, "segment": seg, "perf": perf.get(seg),
+                            "side": r["value_side"], "odd": r["value_odd"],
+                            "edge": r["value_edge"], "prob": r["value_prob"]})
+
+    for r in analysis.get("favorite_picks", []):
+        seg = "favori_value"
+        candidates.append({**r, "segment": seg, "perf": perf.get(seg),
+                            "side": r["value_side"], "odd": r["value_odd"],
+                            "edge": r["value_edge"], "prob": r["value_prob"]})
+
+    for r in analysis.get("reverse_picks", []):
+        seg = _segment_for("reverse", False, r["reverse_prob"])
+        candidates.append({**r, "segment": seg, "perf": perf.get(seg),
+                            "side": r["reverse_side"], "odd": r["reverse_odd"],
+                            "edge": r["reverse_edge"], "prob": r["reverse_prob"]})
+
+    # aynı maç birden fazla listede çıkabilir -> en iyi segment performansına sahip olanı tut
+    def _score(c):
+        p = c["perf"]
+        return p["roi_pct"] if p and p["roi_pct"] is not None else -999
+
+    dedup = {}
+    for c in candidates:
+        key = (c["home"], c["away"], c["time"])
+        if key not in dedup or _score(c) > _score(dedup[key]):
+            dedup[key] = c
+    all_candidates = list(dedup.values())
+
+    playable = [
+        c for c in all_candidates
+        if c["perf"] and c["perf"]["staked"] >= SEGMENT_MIN_SAMPLE and c["perf"]["roi_pct"] and c["perf"]["roi_pct"] > 0
+    ]
+    playable.sort(key=lambda c: -c["perf"]["roi_pct"])
+
+    playable_keys = {(c["home"], c["away"], c["time"]) for c in playable}
+    collecting = [c for c in all_candidates if (c["home"], c["away"], c["time"]) not in playable_keys]
+    collecting.sort(key=lambda c: -(c["edge"] or 0))
+
+    return {"playable": playable, "collecting": collecting, "segment_perf": perf}
+
+
 def get_analysis():
     """Tüm hesaplamayı yapar, dict döner: {generated_at, value_picks, reverse_picks, favorite_picks, total_matched}"""
     now = datetime.now(timezone.utc)

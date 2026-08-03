@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAHA — Oynanabilir Maçlar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-deep:#0a1220; --navy:#101c30; --navy-line:#1e2c44;
+    --amber:#f2a93b; --amber-dim:#8a6a2e;
+    --turf:#4fae7a; --turf-dim:#2c5f42;
+    --clay:#d1594a; --clay-dim:#6e332c;
+    --chalk:#eef1f6; --chalk-dim:#8996ac;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--navy-deep); color:var(--chalk);
+    font-family:'JetBrains Mono', monospace; -webkit-font-smoothing:antialiased;
+    padding-bottom:50px;
+  }
+  header{
+    position:sticky; top:0; z-index:10;
+    padding:18px 20px 14px; border-bottom:1px solid var(--navy-line);
+    background:rgba(10,18,32,0.92); backdrop-filter:blur(6px);
+  }
+  .brand{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:22px; }
+  .brand .dot{ color:var(--amber); }
+  .subtitle{ color:var(--chalk-dim); font-size:12px; margin-top:4px; }
+  .meta-row{ margin-top:10px; font-size:11px; color:var(--chalk-dim); }
+  .navlinks{ display:flex; gap:10px; margin-top:10px; }
+  .navlinks a{ color:var(--amber); font-size:11px; text-decoration:none; border:1px solid var(--navy-line); padding:4px 10px; border-radius:6px; }
+
+  h2.section{ font-family:'Space Grotesk', sans-serif; font-size:15px; margin:20px 16px 4px; display:flex; align-items:center; gap:8px; }
+  .section-sub{ color:var(--chalk-dim); font-size:11px; margin:0 16px 12px; line-height:1.5; }
+
+  .row{ background:var(--navy); border:1px solid var(--navy-line); border-radius:12px; padding:13px 14px; margin:0 16px 8px; }
+  .row.playable{ border-color:var(--turf-dim); box-shadow:0 0 0 1px rgba(79,174,122,0.15) inset; }
+  .row-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; }
+  .league{ color:var(--chalk-dim); font-size:10.5px; margin-top:2px; text-transform:uppercase; letter-spacing:0.03em; }
+  .side-badge{ background:var(--navy-line); color:var(--amber); font-weight:700; font-size:13px; padding:3px 9px; border-radius:6px; }
+
+  .seg-tag{ display:inline-block; font-size:9.5px; color:var(--chalk-dim); background:var(--navy-deep); border:1px solid var(--navy-line); padding:2px 7px; border-radius:5px; margin-top:6px; }
+
+  .perf-row{ display:flex; gap:14px; margin-top:9px; font-size:11px; }
+  .perf-item .num{ font-weight:700; font-size:13px; font-family:'Space Grotesk', sans-serif; }
+  .perf-item .lbl{ color:var(--chalk-dim); font-size:9.5px; }
+  .num.pos{ color:var(--turf); }
+  .num.neg{ color:var(--clay); }
+  .num.flat{ color:var(--chalk-dim); }
+
+  .row-stats{ display:flex; gap:14px; margin-top:8px; font-size:11px; color:var(--chalk-dim); flex-wrap:wrap; }
+  .row-stats b{ color:var(--chalk); }
+
+  .collecting-badge{ font-size:9.5px; color:var(--amber); border:1px solid var(--amber-dim); padding:2px 7px; border-radius:5px; }
+
+  .empty{ color:var(--chalk-dim); font-size:12px; text-align:center; padding:24px 16px; }
+  footer{ text-align:center; color:var(--chalk-dim); font-size:10px; margin-top:24px; letter-spacing:0.03em; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">SAHA<span class="dot">·</span><span style="font-size:12px; color:var(--chalk-dim); font-weight:500;">oynanabilir maçlar</span></div>
+  <div class="subtitle">Geçmiş performansı pozitif çıkan segmentlerdeki güncel maçlar</div>
+  <div class="meta-row">SON GÜNCELLEME: {{ generated_at[11:19] }} UTC</div>
+  <div class="navlinks">
+    <a href="/">← canlı liste</a>
+    <a href="/istatistik">strateji karnesi</a>
+  </div>
+</header>
+
+<h2 class="section">✅ OYNANABİLİR ({{ data.playable|length }})</h2>
+<div class="section-sub">En az 5 sonuçlanmış bahisle test edilmiş VE pozitif ROI vermiş segmentlerdeki maçlar.</div>
+
+{% if data.playable %}
+  {% for c in data.playable %}
+  <div class="row playable">
+    <div class="row-top">
+      <div>
+        <div class="teams">{{ c.home }} — {{ c.away }}</div>
+        <div class="league">{{ c.league }}</div>
+        <div class="seg-tag">{{ c.perf.label }}</div>
+      </div>
+      <span class="side-badge">{{ c.side }}</span>
+    </div>
+    <div class="row-stats">
+      <span>ORAN <b>{{ c.odd }}</b></span>
+      <span>OLASILIK <b>%{{ c.prob }}</b></span>
+      <span>EDGE <b>%{{ c.edge }}</b></span>
+      <span>{{ c.time[11:16] }} UTC</span>
+    </div>
+    <div class="perf-row">
+      <div class="perf-item"><div class="num pos">%{{ c.perf.win_rate }}</div><div class="lbl">SEGMENT KAZANMA</div></div>
+      <div class="perf-item"><div class="num {{ 'pos' if c.perf.roi_pct > 0 else 'neg' }}">{{ '+' if c.perf.roi_pct > 0 else '' }}%{{ c.perf.roi_pct }}</div><div class="lbl">SEGMENT ROI</div></div>
+      <div class="perf-item"><div class="num flat">{{ c.perf.staked }}</div><div class="lbl">ÖRNEKLEM</div></div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Henüz pozitif ROI'li, yeterli örneklemi olan bir segment yok. Aşağıdaki "veri toplanıyor" listesi büyüdükçe burası dolacak.</div>
+{% endif %}
+
+<h2 class="section">⏳ VERİ TOPLANIYOR ({{ data.collecting|length }})</h2>
+<div class="section-sub">Segmentlerinin örneklemi henüz yetersiz (&lt;5) ya da ROI negatif — şimdilik izlemede.</div>
+
+{% if data.collecting %}
+  {% for c in data.collecting[:20] %}
+  <div class="row">
+    <div class="row-top">
+      <div>
+        <div class="teams">{{ c.home }} — {{ c.away }}</div>
+        <div class="league">{{ c.league }}</div>
+        <div class="seg-tag">{{ c.perf.label if c.perf else 'segment yok' }}</div>
+      </div>
+      <span class="side-badge">{{ c.side }}</span>
+    </div>
+    <div class="row-stats">
+      <span>ORAN <b>{{ c.odd }}</b></span>
+      <span>OLASILIK <b>%{{ c.prob }}</b></span>
+      <span>EDGE <b>%{{ c.edge }}</b></span>
+      <span>{{ c.time[11:16] }} UTC</span>
+    </div>
+    {% if c.perf %}
+    <div class="perf-row">
+      <div class="perf-item"><div class="num flat">{{ c.perf.staked }}/5</div><div class="lbl">ÖRNEKLEM</div></div>
+      {% if c.perf.win_rate is not none %}
+      <div class="perf-item"><div class="num flat">%{{ c.perf.win_rate }}</div><div class="lbl">ŞİMDİLİK KAZANMA</div></div>
+      <div class="perf-item"><div class="num {{ 'pos' if c.perf.roi_pct > 0 else 'neg' }}">%{{ c.perf.roi_pct }}</div><div class="lbl">ŞİMDİLİK ROI</div></div>
+      {% endif %}
+    </div>
+    {% else %}
+    <span class="collecting-badge">henüz sonuç yok</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Liste boş.</div>
+{% endif %}
+
+<footer>SEGMENT PERFORMANSI ZAMANLA GÜNCELLENİR &middot; YATIRIM TAVSİYESİ DEĞİLDİR</footer>
+
+</body>
+</html>
