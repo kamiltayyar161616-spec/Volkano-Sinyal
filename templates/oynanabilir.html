@@ -58,6 +58,19 @@
 
   .empty{ color:var(--chalk-dim); font-size:12px; text-align:center; padding:24px 16px; }
   footer{ text-align:center; color:var(--chalk-dim); font-size:10px; margin-top:24px; letter-spacing:0.03em; }
+  .overall-card{
+    margin:16px; padding:16px; border-radius:14px;
+    background:linear-gradient(135deg, var(--navy), var(--navy-deep));
+    border:1px solid var(--navy-line);
+  }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14px; color:var(--chalk-dim); letter-spacing:0.03em; margin-bottom:10px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; text-align:center; }
+  .overall-num{ font-size:22px; font-weight:700; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf); }
+  .overall-num.neg{ color:var(--clay); }
+  .overall-num.flat{ color:var(--chalk-dim); }
+  .overall-lbl{ font-size:9.5px; color:var(--chalk-dim); margin-top:3px; letter-spacing:0.03em; }
+  .overall-note{ font-size:10px; color:var(--chalk-dim); margin-top:10px; text-align:center; }
 </style>
 </head>
 <body>
@@ -71,6 +84,29 @@
     <a href="/istatistik">strateji karnesi</a>
   </div>
 </header>
+
+<div class="overall-card">
+  <div class="overall-title">OYNANABİLİR LİSTENİN TOPLAM PERFORMANSI</div>
+  {% if data.overall.staked and data.overall.staked > 0 %}
+    <div class="overall-grid">
+      <div>
+        <div class="overall-num {{ 'pos' if data.overall.win_rate >= 50 else 'neg' }}">%{{ data.overall.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if data.overall.roi_pct > 0 else 'neg' }}">{{ '+' if data.overall.roi_pct > 0 else '' }}%{{ data.overall.roi_pct }}</div>
+        <div class="overall-lbl">TOPLAM ROI</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ data.overall.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN BAHİS</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ data.overall.segment_count }} segment "oynanabilir" statüsünde &middot; {{ data.overall.won }} kazandı / {{ data.overall.lost }} kaybetti</div>
+  {% else %}
+    <div class="overall-note">Henüz "oynanabilir" statüsüne giren, yeterli örneklemi olan bir segment yok — veri biriktikçe burada toplam ROI görünecek.</div>
+  {% endif %}
+</div>
 
 <h2 class="section">✅ OYNANABİLİR ({{ data.playable|length }})</h2>
 <div class="section-sub">En az 5 sonuçlanmış bahisle test edilmiş VE pozitif ROI vermiş segmentlerdeki maçlar.</div>

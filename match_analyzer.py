@@ -266,7 +266,25 @@ def get_playable_picks(analysis: dict) -> dict:
     collecting = [c for c in all_candidates if (c["home"], c["away"], c["time"]) not in playable_keys]
     collecting.sort(key=lambda c: -(c["edge"] or 0))
 
-    return {"playable": playable, "collecting": collecting, "segment_perf": perf}
+    # "Oynanabilir" statüsüne giren segmentlerin TOPLAM (ağırlıklı) performansı
+    qualifying_segments = {
+        seg for seg, p in perf.items()
+        if p["staked"] >= SEGMENT_MIN_SAMPLE and p["roi_pct"] and p["roi_pct"] > 0
+    }
+    overall_won = sum(perf[s]["won"] for s in qualifying_segments)
+    overall_lost = sum(perf[s]["lost"] for s in qualifying_segments)
+    overall_roi_units = sum(perf[s]["roi_units"] for s in qualifying_segments)
+    overall_staked = overall_won + overall_lost
+    overall = {
+        "won": overall_won,
+        "lost": overall_lost,
+        "staked": overall_staked,
+        "win_rate": round(100 * overall_won / overall_staked, 1) if overall_staked else None,
+        "roi_pct": round(100 * overall_roi_units / overall_staked, 1) if overall_staked else None,
+        "segment_count": len(qualifying_segments),
+    }
+
+    return {"playable": playable, "collecting": collecting, "segment_perf": perf, "overall": overall}
 
 
 def get_analysis():
