@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Düşen Oranlar{% endblock %}
+{% block page_tag %}TREND{% endblock %}
+{% block subtitle %}VolcanoBet, Admiral ve Sansa'da açılıştan bu yana %5+ düşen oranlar — para akışı sinyali{% endblock %}
+
+{% block extra_style %}
+<style>
+  .row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:11px 14px; margin:0 16px 6px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--navy-line); border-radius:10px;
+  }
+  .row-left{ min-width:0; flex:1; }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; color:var(--chalk); }
+  .teams .side-chip{
+    display:inline-block; margin-left:6px; font-size:11px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:1px 7px; border-radius:5px; vertical-align:middle;
+  }
+  .src-chip{
+    display:inline-block; margin-left:6px; font-size:9px; font-weight:700; letter-spacing:0.03em;
+    padding:2px 7px; border-radius:5px; vertical-align:middle;
+  }
+  .src-chip.volcano{ background:var(--clay-dim); color:#ffb3a8; }
+  .src-chip.admiral{ background:var(--turf-dim); color:var(--turf-bright); }
+  .src-chip.sansa{ background:#2a3d5c; color:#a8c4f0; }
+  .meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:4px; line-height:1.6; }
+  .meta b{ color:var(--chalk-dim); font-weight:600; }
+  .meta .strike{ text-decoration:line-through; color:var(--chalk-faint); }
+  .row-right{ text-align:right; flex-shrink:0; }
+  .drop-num{ font-size:16px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--turf-bright); }
+  .drop-sub{ font-size:9px; color:var(--chalk-faint); margin-top:2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<h2 class="section">📉 DÜŞEN ORANLAR ({{ dropping|length }})</h2>
+<div class="section-sub">Açılış oranından güncel orana göre en az %5 düşüş yaşayan, henüz oynanmamış maçlar — düşüş ne kadar büyükse para o tarafa o kadar hızlı akıyor demektir.</div>
+
+{% if dropping %}
+  {% for r in dropping %}
+  <div class="row">
+    <div class="row-left">
+      <div class="teams">
+        {{ r.home }} — {{ r.away }}
+        <span class="side-chip">{{ r.side }}</span>
+        <span class="src-chip {{ r.source }}">{{ {'volcano':'VOLKANO','admiral':'ADMIRAL','sansa':'SANSA'}[r.source] }}</span>
+      </div>
+      <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ r.opening_odd }}</span> → güncel <b>{{ r.current_odd }}</b> &middot; {{ r.time[11:16] }} UTC</div>
+    </div>
+    <div class="row-right">
+      <div class="drop-num">-%{{ r.drop_pct }}</div>
+      <div class="drop-sub">düşüş</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an eşiği (%5) geçen bir düşüş yok — sistem her 5 dakikada bir tazeleniyor, biraz zaman içinde burada görünmeye başlayacak.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block footer %}AÇILIŞ = SİSTEMİN O MAÇI İLK GÖRDÜĞÜ AN <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

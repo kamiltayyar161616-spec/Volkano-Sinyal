@@ -3,7 +3,10 @@ import time
 
 from flask import Flask, render_template, jsonify
 
-from match_analyzer import get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks
+from match_analyzer import (
+    get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
+    record_odds_tracking, get_dropping_odds,
+)
 from results_checker import check_pending_results
 
 app = Flask(__name__)
@@ -23,6 +26,12 @@ def oynanabilir():
     data = get_analysis()
     playable_data = get_playable_picks(data)
     return render_template("oynanabilir.html", data=playable_data, generated_at=data["generated_at"], active_page="oynanabilir")
+
+
+@app.route("/dusen-oranlar")
+def dusen_oranlar():
+    dropping = get_dropping_odds()
+    return render_template("dusen_oranlar.html", dropping=dropping, active_page="dusen")
 
 
 @app.route("/istatistik")
@@ -47,12 +56,18 @@ def api_oynanabilir():
     return jsonify(get_playable_picks(get_analysis()))
 
 
+@app.route("/api/dusen-oranlar")
+def api_dusen_oranlar():
+    return jsonify(get_dropping_odds())
+
+
 def _background_loop():
     last_result_check = 0
     while True:
         try:
             data = get_analysis()
             record_snapshot(data)
+            record_odds_tracking()
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 

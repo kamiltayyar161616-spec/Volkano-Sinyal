@@ -99,6 +99,21 @@ def _get_conn():
             UNIQUE(category, home, away, match_time)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS odds_tracking (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            home TEXT NOT NULL,
+            away TEXT NOT NULL,
+            league TEXT,
+            match_time TEXT NOT NULL,
+            opening_1 REAL, opening_x REAL, opening_2 REAL,
+            opening_time TEXT,
+            current_1 REAL, current_x REAL, current_2 REAL,
+            updated_at TEXT,
+            UNIQUE(source, home, away, match_time)
+        )
+    """)
     conn.commit()
     return conn
 
@@ -286,6 +301,118 @@ def get_playable_picks(analysis: dict) -> dict:
     }
 
     return {"playable": playable, "collecting": collecting, "segment_perf": perf, "overall": overall}
+
+
+DROP_THRESHOLD_PCT = 5.0
+
+
+def _load_source_matches(source: str):
+    """Kaynağa göre ham maç listesini ve oran alanının adını döner."""
+    if source == "volcano":
+        return _load_json(VOLCANO_FILE, []), "current_odds"
+    if source == "admiral":
+        return _load_json(ADMIRAL_FILE, []), "odds"
+    if source == "sansa":
+        raw = _load_json(SANSA_FILE, {"matches": []})
+        matches = raw.get("matches", []) if isinstance(raw, dict) else raw
+        return matches, "odds"
+    return [], "odds"
+
+
+def record_odds_tracking() -> None:
+    """Her kaynaktaki (Volkano/Admiral/Sansa) maçların açılış/güncel oranını kaydeder/günceller."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        for source in ("volcano", "admiral", "sansa"):
+            matches, odds_key = _load_source_matches(source)
+            for ev in matches:
+                home = ev.get("home_team")
+                away = ev.get("away_team")
+                match_time = ev.get("match_time")
+                odds = ev.get(odds_key) or {}
+                o1, ox, o2 = odds.get("1"), odds.get("X"), odds.get("2")
+                if not home or not away or not match_time or o1 is None:
+                    continue
+
+                existing = conn.execute("""
+                    SELECT id FROM odds_tracking WHERE source=? AND home=? AND away=? AND match_time=?
+                """, (source, home, away, match_time)).fetchone()
+
+                if existing is None:
+                    conn.execute("""
+                        INSERT INTO odds_tracking
+                        (source, home, away, league, match_time, opening_1, opening_x, opening_2,
+                         opening_time, current_1, current_x, current_2, updated_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (source, home, away, ev.get("league"), match_time, o1, ox, o2,
+                          now_iso, o1, ox, o2, now_iso))
+                else:
+                    conn.execute("""
+                        UPDATE odds_tracking SET current_1=?, current_x=?, current_2=?, updated_at=?
+                        WHERE id=?
+                    """, (o1, ox, o2, now_iso, existing[0]))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_dropping_odds(window_hours=12) -> list:
+    """Açılıştan bu yana %5+ düşen (para akışı görülen) yaklaşan maçları, kaynak bazında döner."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT source, home, away, league, match_time,
+                   opening_1, opening_x, opening_2, current_1, current_x, current_2, updated_at
+            FROM odds_tracking
+        """).fetchall()
+    finally:
+        conn.close()
+
+    results = []
+    for (source, home, away, league, match_time,
+         o1, ox, o2, c1, cx, c2, updated_at) in rows:
+        dt = None
+        try:
+            dt = datetime.fromisoformat(str(match_time).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if dt is None or not (now <= dt <= window_end):
+            continue
+
+        drops = {}
+        for side, opening, current in (("1", o1, c1), ("X", ox, cx), ("2", o2, c2)):
+            if opening and current and opening > 0:
+                drops[side] = round((opening - current) / opening * 100, 2)
+
+        if not drops:
+            continue
+        best_side = max(drops, key=drops.get)
+        best_drop = drops[best_side]
+        if best_drop < DROP_THRESHOLD_PCT:
+            continue
+
+        opening_map = {"1": o1, "X": ox, "2": o2}
+        current_map = {"1": c1, "X": cx, "2": c2}
+        results.append({
+            "source": source,
+            "home": home,
+            "away": away,
+            "league": league,
+            "time": match_time,
+            "side": best_side,
+            "opening_odd": opening_map[best_side],
+            "current_odd": current_map[best_side],
+            "drop_pct": best_drop,
+            "updated_at": updated_at,
+        })
+
+    results.sort(key=lambda r: -r["drop_pct"])
+    return results
 
 
 def get_analysis():

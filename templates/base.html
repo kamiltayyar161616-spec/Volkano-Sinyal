@@ -78,10 +78,10 @@
     display:flex; gap:3px; margin:14px 0 0; padding-bottom:0;
   }
   nav.topnav a{
-    flex:1; text-align:center; padding:10px 6px 12px; text-decoration:none;
-    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:11.5px;
+    flex:1; text-align:center; padding:10px 4px 12px; text-decoration:none;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:10.5px;
     color:var(--chalk-faint); border-bottom:2px solid transparent;
-    letter-spacing:0.02em; display:flex; flex-direction:column; align-items:center; gap:3px;
+    letter-spacing:0.01em; display:flex; flex-direction:column; align-items:center; gap:3px;
   }
   nav.topnav a .ic{ font-size:14px; }
   nav.topnav a.active{ color:var(--amber-bright); border-bottom-color:var(--amber); }
@@ -125,8 +125,9 @@
   <div class="subtitle">{% block subtitle %}VolcanoBet · Admiral · Sansabet — piyasa karşılaştırmalı analiz{% endblock %}</div>
   {% block meta %}{% endblock %}
   <nav class="topnav">
-    <a href="/" class="{{ 'active' if active_page == 'canli' else '' }}"><span class="ic">📡</span>Canlı Liste</a>
+    <a href="/" class="{{ 'active' if active_page == 'canli' else '' }}"><span class="ic">📡</span>Canlı</a>
     <a href="/oynanabilir" class="{{ 'active' if active_page == 'oynanabilir' else '' }}"><span class="ic">✅</span>Oynanabilir</a>
+    <a href="/dusen-oranlar" class="{{ 'active' if active_page == 'dusen' else '' }}"><span class="ic">📉</span>Düşen Oran</a>
     <a href="/istatistik" class="{{ 'active' if active_page == 'karne' else '' }}"><span class="ic">📊</span>Karne</a>
   </nav>
 </header>
