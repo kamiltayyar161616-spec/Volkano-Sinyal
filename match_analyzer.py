@@ -279,6 +279,7 @@ def get_playable_picks(analysis: dict) -> dict:
         "won": overall_won,
         "lost": overall_lost,
         "staked": overall_staked,
+        "roi_units": round(overall_roi_units, 2),
         "win_rate": round(100 * overall_won / overall_staked, 1) if overall_staked else None,
         "roi_pct": round(100 * overall_roi_units / overall_staked, 1) if overall_staked else None,
         "segment_count": len(qualifying_segments),

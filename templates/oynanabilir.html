@@ -79,7 +79,7 @@
         <div class="overall-lbl">SONUÇLANAN BAHİS</div>
       </div>
     </div>
-    <div class="overall-note">{{ data.overall.segment_count }} segment "oynanabilir" statüsünde &middot; {{ data.overall.won }} kazandı / {{ data.overall.lost }} kaybetti</div>
+    <div class="overall-note">{{ data.overall.segment_count }} segment "oynanabilir" statüsünde &middot; {{ data.overall.won }} kazandı / {{ data.overall.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if data.overall.roi_units > 0 else 'var(--clay)' }};">{{ '+' if data.overall.roi_units > 0 else '' }}{{ data.overall.roi_units }} birim</b> (1 birim flat stake)</div>
   {% else %}
     <div class="overall-note">Henüz "oynanabilir" statüsüne giren, yeterli örneklemi olan bir segment yok — veri biriktikçe burada toplam ROI görünecek.</div>
   {% endif %}
@@ -97,7 +97,7 @@
     </div>
     <div class="row-right">
       <div class="perf-badge pos">%{{ c.perf.win_rate }}</div>
-      <div class="perf-sub">{{ '+' if c.perf.roi_pct > 0 else '' }}%{{ c.perf.roi_pct }} ROI &middot; n={{ c.perf.staked }}</div>
+      <div class="perf-sub">{{ '+' if c.perf.roi_pct > 0 else '' }}%{{ c.perf.roi_pct }} ROI &middot; <span style="color:{{ 'var(--turf-bright)' if c.perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if c.perf.roi_units > 0 else '' }}{{ c.perf.roi_units }} birim</span> &middot; n={{ c.perf.staked }}</div>
     </div>
   </div>
   {% endfor %}
@@ -118,7 +118,7 @@
     <div class="row-right">
       {% if c.perf and c.perf.win_rate is not none %}
         <div class="perf-badge flat">%{{ c.perf.win_rate }}</div>
-        <div class="perf-sub">{{ c.perf.staked }}/5 &middot; %{{ c.perf.roi_pct }} ROI</div>
+        <div class="perf-sub">{{ c.perf.staked }}/5 &middot; <span style="color:{{ 'var(--turf-bright)' if c.perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if c.perf.roi_units > 0 else '' }}{{ c.perf.roi_units }} birim</span></div>
       {% else %}
         <span class="collecting-badge">İZLEMEDE</span>
       {% endif %}
