@@ -46,6 +46,10 @@
   .badge.lost{ background:var(--clay-dim); color:#ffb3a8; }
   .badge.void{ background:var(--navy-line); color:var(--chalk-faint); }
   .badge.pending{ background:var(--navy-line); color:var(--amber-bright); }
+  .pnl{ font-size:9px; margin-top:3px; text-align:right; font-weight:600; }
+  .pnl.pos{ color:var(--turf-bright); }
+  .pnl.neg{ color:var(--clay); }
+  .pnl.flat{ color:var(--chalk-faint); }
 </style>
 {% endblock %}
 
@@ -93,7 +97,16 @@
       <span class="recent-teams">{{ r.home }} — {{ r.away }}</span>
       <span class="recent-meta">{{ labels[r.category] }} &middot; {{ r.side }} @ {{ r.odd }} &middot; {{ r.match_time[5:16] }}{% if r.final_score %} &middot; {{ r.final_score }}{% endif %}</span>
     </div>
-    <span class="badge {{ r.result }}">{{ {'won':'KAZANDI','lost':'KAYBETTİ','void':'İPTAL','pending':'BEKLİYOR'}[r.result] }}</span>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0;">
+      <span class="badge {{ r.result }}">{{ {'won':'KAZANDI','lost':'KAYBETTİ','void':'İPTAL','pending':'BEKLİYOR'}[r.result] }}</span>
+      {% if r.result == 'won' %}
+        <div class="pnl pos">+{{ '%.2f'|format(r.odd - 1) }}</div>
+      {% elif r.result == 'lost' %}
+        <div class="pnl neg">-1.00</div>
+      {% elif r.result == 'void' %}
+        <div class="pnl flat">0.00</div>
+      {% endif %}
+    </div>
   </div>
   {% endfor %}
 {% else %}
