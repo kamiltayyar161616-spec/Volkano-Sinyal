@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SAHA{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-deep:#080d18;
+    --navy:#111d33;
+    --navy-soft:#152540;
+    --navy-line:#22334f;
+    --amber:#f2a93b;
+    --amber-bright:#ffc266;
+    --amber-dim:#8a6a2e;
+    --turf:#4fae7a;
+    --turf-bright:#6fd89a;
+    --turf-dim:#2c5f42;
+    --clay:#e0685a;
+    --clay-dim:#6e332c;
+    --chalk:#f3f5f9;
+    --chalk-dim:#8c9ab2;
+    --chalk-faint:#5c6a82;
+    --radius:14px;
+    --radius-sm:9px;
+  }
+  *{box-sizing:border-box;}
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0; min-height:100vh;
+    background:
+      radial-gradient(900px 420px at 15% -8%, rgba(242,169,59,0.10), transparent 55%),
+      radial-gradient(700px 380px at 100% 0%, rgba(79,174,122,0.06), transparent 60%),
+      var(--navy-deep);
+    color:var(--chalk);
+    font-family:'JetBrains Mono', monospace;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:56px;
+  }
+  a{ color:inherit; }
+
+  /* ---------- Header ---------- */
+  header{
+    position:sticky; top:0; z-index:20;
+    background:rgba(8,13,24,0.86);
+    backdrop-filter:blur(10px) saturate(140%);
+    border-bottom:1px solid var(--navy-line);
+    padding:16px 18px 0;
+  }
+  .brand-row{ display:flex; align-items:center; justify-content:space-between; }
+  .brand{
+    font-family:'Space Grotesk', sans-serif; font-weight:800; font-size:21px;
+    letter-spacing:0.01em; display:flex; align-items:center; gap:8px;
+  }
+  .brand .pulse{
+    width:7px; height:7px; border-radius:50%; background:var(--turf-bright);
+    box-shadow:0 0 0 0 rgba(111,216,154,0.6);
+    animation:pulse 2.2s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(111,216,154,0.55); }
+    70%{ box-shadow:0 0 0 7px rgba(111,216,154,0); }
+    100%{ box-shadow:0 0 0 0 rgba(111,216,154,0); }
+  }
+  .page-tag{ font-size:11px; color:var(--chalk-faint); font-weight:500; }
+  .subtitle{ color:var(--chalk-dim); font-size:11.5px; margin-top:5px; line-height:1.5; }
+  .meta-row{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:11px; font-size:10.5px; color:var(--chalk-faint); letter-spacing:0.02em;
+  }
+  .refresh-bar{ height:2px; background:var(--navy-line); margin-top:10px; border-radius:2px; overflow:hidden; }
+  .refresh-fill{ height:100%; background:linear-gradient(90deg, var(--amber-dim), var(--amber)); width:0%; transition:width 1s linear; }
+
+  /* ---------- Top nav ---------- */
+  nav.topnav{
+    display:flex; gap:3px; margin:14px 0 0; padding-bottom:0;
+  }
+  nav.topnav a{
+    flex:1; text-align:center; padding:10px 6px 12px; text-decoration:none;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:11.5px;
+    color:var(--chalk-faint); border-bottom:2px solid transparent;
+    letter-spacing:0.02em; display:flex; flex-direction:column; align-items:center; gap:3px;
+  }
+  nav.topnav a .ic{ font-size:14px; }
+  nav.topnav a.active{ color:var(--amber-bright); border-bottom-color:var(--amber); }
+
+  main{ padding-top:4px; }
+
+  /* ---------- Shared card / section styles ---------- */
+  h2.section{
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14.5px;
+    margin:22px 16px 4px; display:flex; align-items:center; gap:8px; letter-spacing:0.01em;
+  }
+  .section-sub{ color:var(--chalk-dim); font-size:11px; margin:0 16px 12px; line-height:1.55; }
+
+  .card, .row{
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--navy-line);
+    border-radius:var(--radius);
+  }
+
+  .empty{
+    color:var(--chalk-faint); font-size:11.5px; text-align:center;
+    padding:30px 20px; border:1px dashed var(--navy-line); border-radius:var(--radius);
+    margin:0 16px;
+  }
+
+  footer{
+    text-align:center; color:var(--chalk-faint); font-size:9.5px;
+    margin-top:28px; letter-spacing:0.04em; padding:0 20px; line-height:1.8;
+  }
+  footer .sep{ color:var(--navy-line); }
+</style>
+{% block extra_style %}{% endblock %}
+</head>
+<body>
+
+<header>
+  <div class="brand-row">
+    <div class="brand"><span class="pulse"></span>SAHA</div>
+    <div class="page-tag">{% block page_tag %}{% endblock %}</div>
+  </div>
+  <div class="subtitle">{% block subtitle %}VolcanoBet · Admiral · Sansabet — piyasa karşılaştırmalı analiz{% endblock %}</div>
+  {% block meta %}{% endblock %}
+  <nav class="topnav">
+    <a href="/" class="{{ 'active' if active_page == 'canli' else '' }}"><span class="ic">📡</span>Canlı Liste</a>
+    <a href="/oynanabilir" class="{{ 'active' if active_page == 'oynanabilir' else '' }}"><span class="ic">✅</span>Oynanabilir</a>
+    <a href="/istatistik" class="{{ 'active' if active_page == 'karne' else '' }}"><span class="ic">📊</span>Karne</a>
+  </nav>
+</header>
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<footer>
+  {% block footer %}VERİLER OTOMATİK GÜNCELLENİR <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}
+</footer>
+
+{% block extra_script %}{% endblock %}
+</body>
+</html>

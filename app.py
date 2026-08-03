@@ -15,21 +15,21 @@ RESULT_CHECK_INTERVAL_SEC = 900  # her 15 dakikada bir sonuçları kontrol et
 @app.route("/")
 def index():
     data = get_analysis()
-    return render_template("index.html", data=data)
+    return render_template("index.html", data=data, active_page="canli")
 
 
 @app.route("/oynanabilir")
 def oynanabilir():
     data = get_analysis()
     playable_data = get_playable_picks(data)
-    return render_template("oynanabilir.html", data=playable_data, generated_at=data["generated_at"])
+    return render_template("oynanabilir.html", data=playable_data, generated_at=data["generated_at"], active_page="oynanabilir")
 
 
 @app.route("/istatistik")
 def istatistik():
     stats = get_stats()
     recent = get_recent_picks(60)
-    return render_template("stats.html", stats=stats, recent=recent)
+    return render_template("stats.html", stats=stats, recent=recent, active_page="karne")
 
 
 @app.route("/api/matches")

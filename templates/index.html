@@ -1,144 +1,61 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SAHA — Maç Analiz Skorbordu</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --navy-deep:#0a1220;
-    --navy:#101c30;
-    --navy-line:#1e2c44;
-    --amber:#f2a93b;
-    --amber-dim:#8a6a2e;
-    --turf:#4fae7a;
-    --turf-dim:#2c5f42;
-    --clay:#d1594a;
-    --chalk:#eef1f6;
-    --chalk-dim:#8996ac;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0;
-    background:
-      radial-gradient(1200px 500px at 50% -10%, rgba(242,169,59,0.08), transparent 60%),
-      var(--navy-deep);
-    color:var(--chalk);
-    font-family:'JetBrains Mono', monospace;
-    -webkit-font-smoothing:antialiased;
-    padding-bottom:60px;
-  }
-  header{
-    position:sticky; top:0; z-index:10;
-    background:rgba(10,18,32,0.92);
-    backdrop-filter: blur(6px);
-    border-bottom:1px solid var(--navy-line);
-    padding:18px 20px 14px;
-  }
-  .brand{
-    font-family:'Space Grotesk', sans-serif;
-    font-weight:700;
-    font-size:22px;
-    letter-spacing:0.02em;
-    display:flex; align-items:baseline; gap:10px;
-  }
-  .brand .dot{ color:var(--amber); }
-  .subtitle{ color:var(--chalk-dim); font-size:12px; margin-top:4px; }
-  .meta-row{
-    display:flex; justify-content:space-between; align-items:center;
-    margin-top:12px; font-size:11px; color:var(--chalk-dim);
-  }
-  .refresh-bar{
-    height:2px; background:var(--navy-line); margin-top:10px; overflow:hidden; border-radius:2px;
-  }
-  .refresh-fill{
-    height:100%; background:var(--amber); width:0%;
-    transition: width 1s linear;
-  }
+{% extends "base.html" %}
+{% block title %}SAHA — Canlı Liste{% endblock %}
+{% block page_tag %}CANLI{% endblock %}
 
-  nav.tabs{
-    display:flex; gap:2px; margin:18px 16px 0; background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; padding:4px;
-  }
-  nav.tabs button{
-    flex:1; padding:10px 8px; background:transparent; border:none; color:var(--chalk-dim);
-    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12.5px; letter-spacing:0.02em;
-    border-radius:7px; cursor:pointer;
-  }
-  nav.tabs button.active{ background:var(--amber); color:var(--navy-deep); }
-
-  section.panel{ display:none; padding:16px; }
-  section.panel.active{ display:block; }
-
-  .panel-desc{ color:var(--chalk-dim); font-size:11.5px; margin-bottom:14px; line-height:1.5; }
-
-  .row{
-    background:var(--navy);
-    border:1px solid var(--navy-line);
-    border-radius:10px;
-    padding:12px 14px;
-    margin-bottom:8px;
-  }
-  .row-top{
-    display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
-  }
-  .teams{
-    font-family:'Space Grotesk', sans-serif;
-    font-weight:600; font-size:14px; color:var(--chalk);
-    line-height:1.35;
-  }
-  .league{ color:var(--chalk-dim); font-size:10.5px; margin-top:2px; letter-spacing:0.03em; text-transform:uppercase; }
-  .side-badge{
-    background:var(--navy-line); color:var(--amber);
-    font-weight:700; font-size:13px; padding:3px 9px; border-radius:6px;
-    white-space:nowrap;
-  }
-  .mf-badge{
-    color:var(--turf); font-size:10px; font-weight:700; margin-left:6px;
-  }
-
-  .row-stats{
-    display:flex; gap:16px; margin-top:10px; font-size:11.5px; color:var(--chalk-dim); flex-wrap:wrap;
-  }
-  .row-stats b{ color:var(--chalk); font-weight:600; }
-
-  .edge-track{
-    height:6px; background:var(--navy-line); border-radius:3px; margin-top:10px; overflow:hidden;
-  }
-  .edge-fill{
-    height:100%;
-    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
-    border-radius:3px;
-  }
-  .edge-fill.strong{ background: linear-gradient(90deg, var(--turf-dim, #2c5f42), var(--turf)); }
-  .edge-fill.weak{ background: linear-gradient(90deg, #3a3020, #6b5a2e); }
-  .edge-label{
-    display:flex; justify-content:space-between; font-size:10px; color:var(--chalk-dim); margin-top:4px;
-  }
-
-  .time-tag{ font-size:10.5px; color:var(--chalk-dim); white-space:nowrap; }
-
-  .empty{ color:var(--chalk-dim); font-size:12px; text-align:center; padding:30px 0; }
-
-  footer{
-    text-align:center; color:var(--chalk-dim); font-size:10px; margin-top:20px; letter-spacing:0.03em;
-  }
-</style>
-</head>
-<body>
-
-<header>
-  <div class="brand">SAHA<span class="dot">·</span><span style="font-size:12px; color:var(--chalk-dim); font-weight:500;">maç analiz skorboru</span></div>
-  <div class="subtitle">VolcanoBet &middot; Admiral &middot; Sansabet — piyasa karşılaştırmalı canlı liste</div>
+{% block meta %}
   <div class="meta-row">
-    <span>SON GÜNCELLEME: {{ data.generated_at[11:19] }} UTC &middot; EŞLEŞEN MAÇ: {{ data.total_matched }}</span>
+    <span>GÜNCELLEME <b style="color:var(--chalk-dim)">{{ data.generated_at[11:19] }}</b> UTC &middot; EŞLEŞEN <b style="color:var(--chalk-dim)">{{ data.total_matched }}</b></span>
     <span id="countdown">120s</span>
   </div>
-  <a href="/istatistik" style="display:inline-block; margin-top:10px; color:var(--amber); font-size:11px; text-decoration:none; border:1px solid var(--navy-line); padding:4px 10px; border-radius:6px;">📊 STRATEJİ KARNESİ →</a>
-  <a href="/oynanabilir" style="display:inline-block; margin-top:10px; margin-left:6px; color:var(--turf); font-size:11px; text-decoration:none; border:1px solid var(--navy-line); padding:4px 10px; border-radius:6px;">✅ OYNANABİLİR MAÇLAR →</a>
   <div class="refresh-bar"><div class="refresh-fill" id="refreshFill"></div></div>
-</header>
+{% endblock %}
+
+{% block extra_style %}
+<style>
+  .tabs{
+    display:flex; gap:3px; margin:16px 16px 0; background:var(--navy); border:1px solid var(--navy-line);
+    border-radius:12px; padding:4px;
+  }
+  .tabs button{
+    flex:1; padding:11px 6px; background:transparent; border:none; color:var(--chalk-dim);
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12px; letter-spacing:0.02em;
+    border-radius:8px; cursor:pointer; transition:background .15s, color .15s;
+  }
+  .tabs button.active{ background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; }
+
+  section.panel{ display:none; padding:14px 16px 4px; }
+  section.panel.active{ display:block; animation:fadein .25s ease; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:translateY(0);} }
+
+  .row{ padding:14px 15px; margin-bottom:9px; transition:border-color .15s; }
+  .row-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14.5px; color:var(--chalk); line-height:1.3; }
+  .league{ color:var(--chalk-faint); font-size:10px; margin-top:3px; letter-spacing:0.04em; text-transform:uppercase; }
+
+  .side-badge{
+    background:linear-gradient(135deg, var(--navy-line), #2a3d5c); color:var(--amber-bright);
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:13px;
+    padding:4px 11px; border-radius:8px; white-space:nowrap; min-width:28px; text-align:center;
+  }
+  .mf-badge{
+    color:var(--turf-bright); font-size:9.5px; font-weight:700; margin-top:6px;
+    display:flex; align-items:center; gap:4px; justify-content:flex-end;
+  }
+  .mf-badge .dot{ width:5px; height:5px; border-radius:50%; background:var(--turf-bright); }
+
+  .row-stats{ display:flex; gap:14px; margin-top:11px; font-size:11px; color:var(--chalk-dim); flex-wrap:wrap; }
+  .row-stats b{ color:var(--chalk); font-weight:600; }
+  .time-tag{ font-size:10.5px; color:var(--chalk-faint); white-space:nowrap; margin-left:auto; }
+
+  .edge-track{ height:7px; background:var(--navy-line); border-radius:4px; margin-top:11px; overflow:hidden; }
+  .edge-fill{ height:100%; background:linear-gradient(90deg, var(--amber-dim), var(--amber)); border-radius:4px; }
+  .edge-fill.strong{ background:linear-gradient(90deg, var(--turf-dim), var(--turf-bright)); }
+  .edge-fill.weak{ background:linear-gradient(90deg, #3a3020, #6b5a2e); }
+  .edge-label{ display:flex; justify-content:space-between; font-size:9.5px; color:var(--chalk-faint); margin-top:5px; letter-spacing:0.03em; }
+</style>
+{% endblock %}
+
+{% block content %}
 
 <nav class="tabs">
   <button class="active" data-target="value">VALUE</button>
@@ -147,7 +64,7 @@
 </nav>
 
 <section class="panel active" id="value">
-  <div class="panel-desc">Piyasanın (Admiral+Sansa) Volkano'dan daha yüksek olasılık verdiği taraf — Volkano fiyatı henüz ayarlamamış olabilir.</div>
+  <div class="section-sub" style="margin:0 0 12px;">Piyasanın (Admiral+Sansa) Volkano'dan daha yüksek olasılık verdiği taraf — Volkano fiyatı henüz ayarlamamış olabilir.</div>
   {% if data.value_picks %}
     {% for r in data.value_picks %}
     <div class="row">
@@ -158,13 +75,13 @@
         </div>
         <div style="text-align:right;">
           <span class="side-badge">{{ r.value_side }}</span>
-          {% if r.mf_confirmed %}<div class="mf-badge">● PARA AKIŞI TEYİTLİ</div>{% endif %}
+          {% if r.mf_confirmed %}<div class="mf-badge"><span class="dot"></span>PARA AKIŞI TEYİTLİ</div>{% endif %}
         </div>
       </div>
       <div class="row-stats">
         <span>ORAN <b>{{ r.value_odd }}</b></span>
-        <span>KAZANMA PAYI <b>%{{ r.value_prob }}</b></span>
-        <span>KAYNAK <b>{{ r.src }}</b></span>
+        <span>OLASILIK <b>%{{ r.value_prob }}</b></span>
+        <span>{{ r.src }}</span>
         <span class="time-tag">{{ r.time[11:16] }} UTC</span>
       </div>
       <div class="edge-track"><div class="edge-fill {{ 'strong' if r.value_edge >= 4 else ('weak' if r.value_edge < 2 else '') }}" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
@@ -172,12 +89,12 @@
     </div>
     {% endfor %}
   {% else %}
-    <div class="empty">Şu an eşleşen maç yok — cron bir sonraki döngüde tazeleyecek.</div>
+    <div class="empty">Şu an eşleşen maç yok — bir sonraki döngüde tazelenecek.</div>
   {% endif %}
 </section>
 
 <section class="panel" id="favorite">
-  <div class="panel-desc">Piyasanın favori gördüğü (kazanma payı ≥ %50) ve aynı zamanda Volkano'ya göre değerli olan taraflar.</div>
+  <div class="section-sub" style="margin:0 0 12px;">Piyasanın favori gördüğü (kazanma payı ≥ %50) ve aynı zamanda Volkano'ya göre değerli olan taraflar.</div>
   {% if data.favorite_picks %}
     {% for r in data.favorite_picks %}
     <div class="row">
@@ -190,7 +107,7 @@
       </div>
       <div class="row-stats">
         <span>ORAN <b>{{ r.value_odd }}</b></span>
-        <span>KAZANMA PAYI <b>%{{ r.value_prob }}</b></span>
+        <span>OLASILIK <b>%{{ r.value_prob }}</b></span>
         <span class="time-tag">{{ r.time[11:16] }} UTC</span>
       </div>
       <div class="edge-track"><div class="edge-fill {{ 'strong' if r.value_edge >= 4 else ('weak' if r.value_edge < 2 else '') }}" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
@@ -203,7 +120,7 @@
 </section>
 
 <section class="panel" id="reverse">
-  <div class="panel-desc">Volkano'nun piyasadan daha kısık fiyatladığı taraf — Volkano'nun kendi modeli/trader'ları o sonuca piyasadan daha çok inanıyor.</div>
+  <div class="section-sub" style="margin:0 0 12px;">Volkano'nun piyasadan daha kısık fiyatladığı taraf — Volkano'nun kendi modeli/trader'ları o sonuca piyasadan daha çok inanıyor.</div>
   {% if data.reverse_picks %}
     {% for r in data.reverse_picks %}
     <div class="row">
@@ -228,8 +145,9 @@
   {% endif %}
 </section>
 
-<footer>10 DK'DA BİR TAZELENEN VERİ &middot; YATIRIM TAVSİYESİ DEĞİLDİR</footer>
+{% endblock %}
 
+{% block extra_script %}
 <script>
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -253,6 +171,4 @@
     }
   }, 1000);
 </script>
-
-</body>
-</html>
+{% endblock %}

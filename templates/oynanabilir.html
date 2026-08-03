@@ -1,89 +1,62 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SAHA — Oynanabilir Maçlar</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+{% extends "base.html" %}
+{% block title %}SAHA — Oynanabilir Maçlar{% endblock %}
+{% block page_tag %}FİLTRELİ{% endblock %}
+{% block subtitle %}Geçmiş performansı pozitif çıkan segmentlerdeki güncel maçlar{% endblock %}
+
+{% block meta %}
+  <div class="meta-row">
+    <span>GÜNCELLEME <b style="color:var(--chalk-dim)">{{ generated_at[11:19] }}</b> UTC</span>
+  </div>
+{% endblock %}
+
+{% block extra_style %}
 <style>
-  :root{
-    --navy-deep:#0a1220; --navy:#101c30; --navy-line:#1e2c44;
-    --amber:#f2a93b; --amber-dim:#8a6a2e;
-    --turf:#4fae7a; --turf-dim:#2c5f42;
-    --clay:#d1594a; --clay-dim:#6e332c;
-    --chalk:#eef1f6; --chalk-dim:#8996ac;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0; background:var(--navy-deep); color:var(--chalk);
-    font-family:'JetBrains Mono', monospace; -webkit-font-smoothing:antialiased;
-    padding-bottom:50px;
-  }
-  header{
-    position:sticky; top:0; z-index:10;
-    padding:18px 20px 14px; border-bottom:1px solid var(--navy-line);
-    background:rgba(10,18,32,0.92); backdrop-filter:blur(6px);
-  }
-  .brand{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:22px; }
-  .brand .dot{ color:var(--amber); }
-  .subtitle{ color:var(--chalk-dim); font-size:12px; margin-top:4px; }
-  .meta-row{ margin-top:10px; font-size:11px; color:var(--chalk-dim); }
-  .navlinks{ display:flex; gap:10px; margin-top:10px; }
-  .navlinks a{ color:var(--amber); font-size:11px; text-decoration:none; border:1px solid var(--navy-line); padding:4px 10px; border-radius:6px; }
-
-  h2.section{ font-family:'Space Grotesk', sans-serif; font-size:15px; margin:20px 16px 4px; display:flex; align-items:center; gap:8px; }
-  .section-sub{ color:var(--chalk-dim); font-size:11px; margin:0 16px 12px; line-height:1.5; }
-
-  .row{ background:var(--navy); border:1px solid var(--navy-line); border-radius:12px; padding:13px 14px; margin:0 16px 8px; }
-  .row.playable{ border-color:var(--turf-dim); box-shadow:0 0 0 1px rgba(79,174,122,0.15) inset; }
-  .row-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; }
-  .league{ color:var(--chalk-dim); font-size:10.5px; margin-top:2px; text-transform:uppercase; letter-spacing:0.03em; }
-  .side-badge{ background:var(--navy-line); color:var(--amber); font-weight:700; font-size:13px; padding:3px 9px; border-radius:6px; }
-
-  .seg-tag{ display:inline-block; font-size:9.5px; color:var(--chalk-dim); background:var(--navy-deep); border:1px solid var(--navy-line); padding:2px 7px; border-radius:5px; margin-top:6px; }
-
-  .perf-row{ display:flex; gap:14px; margin-top:9px; font-size:11px; }
-  .perf-item .num{ font-weight:700; font-size:13px; font-family:'Space Grotesk', sans-serif; }
-  .perf-item .lbl{ color:var(--chalk-dim); font-size:9.5px; }
-  .num.pos{ color:var(--turf); }
-  .num.neg{ color:var(--clay); }
-  .num.flat{ color:var(--chalk-dim); }
-
-  .row-stats{ display:flex; gap:14px; margin-top:8px; font-size:11px; color:var(--chalk-dim); flex-wrap:wrap; }
-  .row-stats b{ color:var(--chalk); }
-
-  .collecting-badge{ font-size:9.5px; color:var(--amber); border:1px solid var(--amber-dim); padding:2px 7px; border-radius:5px; }
-
-  .empty{ color:var(--chalk-dim); font-size:12px; text-align:center; padding:24px 16px; }
-  footer{ text-align:center; color:var(--chalk-dim); font-size:10px; margin-top:24px; letter-spacing:0.03em; }
   .overall-card{
-    margin:16px; padding:16px; border-radius:14px;
-    background:linear-gradient(135deg, var(--navy), var(--navy-deep));
+    margin:16px; padding:18px; border-radius:var(--radius);
+    background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
     border:1px solid var(--navy-line);
+    position:relative; overflow:hidden;
   }
-  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14px; color:var(--chalk-dim); letter-spacing:0.03em; margin-bottom:10px; }
-  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; text-align:center; }
-  .overall-num{ font-size:22px; font-weight:700; font-family:'Space Grotesk', sans-serif; }
-  .overall-num.pos{ color:var(--turf); }
+  .overall-card::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(300px 140px at 90% -20%, rgba(242,169,59,0.12), transparent 70%);
+    pointer-events:none;
+  }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; position:relative; }
+  .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf-bright); }
   .overall-num.neg{ color:var(--clay); }
   .overall-num.flat{ color:var(--chalk-dim); }
-  .overall-lbl{ font-size:9.5px; color:var(--chalk-dim); margin-top:3px; letter-spacing:0.03em; }
-  .overall-note{ font-size:10px; color:var(--chalk-dim); margin-top:10px; text-align:center; }
-</style>
-</head>
-<body>
+  .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
+  .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; position:relative; }
 
-<header>
-  <div class="brand">SAHA<span class="dot">·</span><span style="font-size:12px; color:var(--chalk-dim); font-weight:500;">oynanabilir maçlar</span></div>
-  <div class="subtitle">Geçmiş performansı pozitif çıkan segmentlerdeki güncel maçlar</div>
-  <div class="meta-row">SON GÜNCELLEME: {{ generated_at[11:19] }} UTC</div>
-  <div class="navlinks">
-    <a href="/">← canlı liste</a>
-    <a href="/istatistik">strateji karnesi</a>
-  </div>
-</header>
+  .row{ padding:14px 15px; margin:0 16px 9px; }
+  .row.playable{ border-color:var(--turf-dim); box-shadow:0 0 0 1px rgba(79,174,122,0.18) inset; }
+  .row-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14px; }
+  .league{ color:var(--chalk-faint); font-size:10px; margin-top:3px; text-transform:uppercase; letter-spacing:0.04em; }
+  .side-badge{
+    background:linear-gradient(135deg, var(--navy-line), #2a3d5c); color:var(--amber-bright);
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:13px; padding:4px 11px; border-radius:8px;
+  }
+  .seg-tag{
+    display:inline-block; font-size:9.5px; color:var(--chalk-dim); background:var(--navy-deep);
+    border:1px solid var(--navy-line); padding:3px 8px; border-radius:6px; margin-top:7px;
+  }
+  .perf-row{ display:flex; gap:16px; margin-top:11px; padding-top:10px; border-top:1px dashed var(--navy-line); }
+  .perf-item .num{ font-weight:700; font-size:13.5px; font-family:'Space Grotesk', sans-serif; }
+  .perf-item .lbl{ color:var(--chalk-faint); font-size:9px; margin-top:2px; }
+  .num.pos{ color:var(--turf-bright); }
+  .num.neg{ color:var(--clay); }
+  .num.flat{ color:var(--chalk-dim); }
+  .row-stats{ display:flex; gap:14px; margin-top:9px; font-size:10.5px; color:var(--chalk-dim); flex-wrap:wrap; }
+  .row-stats b{ color:var(--chalk); }
+  .collecting-badge{ font-size:9.5px; color:var(--amber); border:1px solid var(--amber-dim); padding:3px 8px; border-radius:6px; display:inline-block; margin-top:9px; }
+</style>
+{% endblock %}
+
+{% block content %}
 
 <div class="overall-card">
   <div class="overall-title">OYNANABİLİR LİSTENİN TOPLAM PERFORMANSI</div>
@@ -126,7 +99,7 @@
       <span>ORAN <b>{{ c.odd }}</b></span>
       <span>OLASILIK <b>%{{ c.prob }}</b></span>
       <span>EDGE <b>%{{ c.edge }}</b></span>
-      <span>{{ c.time[11:16] }} UTC</span>
+      <span style="margin-left:auto;">{{ c.time[11:16] }} UTC</span>
     </div>
     <div class="perf-row">
       <div class="perf-item"><div class="num pos">%{{ c.perf.win_rate }}</div><div class="lbl">SEGMENT KAZANMA</div></div>
@@ -157,7 +130,7 @@
       <span>ORAN <b>{{ c.odd }}</b></span>
       <span>OLASILIK <b>%{{ c.prob }}</b></span>
       <span>EDGE <b>%{{ c.edge }}</b></span>
-      <span>{{ c.time[11:16] }} UTC</span>
+      <span style="margin-left:auto;">{{ c.time[11:16] }} UTC</span>
     </div>
     {% if c.perf %}
     <div class="perf-row">
@@ -176,7 +149,4 @@
   <div class="empty">Liste boş.</div>
 {% endif %}
 
-<footer>SEGMENT PERFORMANSI ZAMANLA GÜNCELLENİR &middot; YATIRIM TAVSİYESİ DEĞİLDİR</footer>
-
-</body>
-</html>
+{% endblock %}
