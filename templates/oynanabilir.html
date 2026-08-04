@@ -47,6 +47,7 @@
   .meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:4px; line-height:1.6; }
   .meta b{ color:var(--chalk-dim); font-weight:600; }
   .row-right{ text-align:right; flex-shrink:0; }
+  .perf-title{ font-size:8px; color:var(--chalk-faint); letter-spacing:0.04em; margin-bottom:2px; }
   .perf-badge{ font-size:14px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
   .perf-badge.pos{ color:var(--turf-bright); }
   .perf-badge.neg{ color:var(--clay); }
@@ -93,11 +94,12 @@
   <div class="row playable">
     <div class="row-left">
       <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
-      <div class="meta">{{ c.league }} &middot; {{ c.perf.label }} &middot; oran <b>{{ c.odd }}</b> &middot; olasılık <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
+      <div class="meta">{{ c.league }} &middot; {{ c.perf.label }} &middot; oran <b>{{ c.odd }}</b> &middot; <u>maçın olasılığı</u> <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
     </div>
     <div class="row-right">
-      <div class="perf-badge pos">%{{ c.perf.win_rate }}</div>
-      <div class="perf-sub">{{ '+' if c.perf.roi_pct > 0 else '' }}%{{ c.perf.roi_pct }} ROI &middot; <span style="color:{{ 'var(--turf-bright)' if c.perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if c.perf.roi_units > 0 else '' }}{{ c.perf.roi_units }} birim</span> &middot; n={{ c.perf.staked }}</div>
+      <div class="perf-title">SEGMENT GEÇMİŞİ (n={{ c.perf.staked }})</div>
+      <div class="perf-badge pos">%{{ c.perf.win_rate }} kazanma</div>
+      <div class="perf-sub">{{ '+' if c.perf.roi_pct > 0 else '' }}%{{ c.perf.roi_pct }} ROI &middot; <span style="color:{{ 'var(--turf-bright)' if c.perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if c.perf.roi_units > 0 else '' }}{{ '%.2f'|format(c.perf.roi_units) }} birim</span></div>
     </div>
   </div>
   {% endfor %}
@@ -113,12 +115,13 @@
   <div class="row">
     <div class="row-left">
       <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
-      <div class="meta">{{ c.league }} &middot; {{ c.perf.label if c.perf else 'segment yok' }} &middot; oran <b>{{ c.odd }}</b> &middot; olasılık <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
+      <div class="meta">{{ c.league }} &middot; {{ c.perf.label if c.perf else 'segment yok' }} &middot; oran <b>{{ c.odd }}</b> &middot; <u>maçın olasılığı</u> <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
     </div>
     <div class="row-right">
       {% if c.perf and c.perf.win_rate is not none %}
-        <div class="perf-badge flat">%{{ c.perf.win_rate }}</div>
-        <div class="perf-sub">{{ c.perf.staked }}/5 &middot; <span style="color:{{ 'var(--turf-bright)' if c.perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if c.perf.roi_units > 0 else '' }}{{ c.perf.roi_units }} birim</span></div>
+        <div class="perf-title">ŞİMDİLİK (n={{ c.perf.staked }}/5)</div>
+        <div class="perf-badge flat">%{{ c.perf.win_rate }} kazanma</div>
+        <div class="perf-sub"><span style="color:{{ 'var(--turf-bright)' if c.perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if c.perf.roi_units > 0 else '' }}{{ '%.2f'|format(c.perf.roi_units) }} birim</span></div>
       {% else %}
         <span class="collecting-badge">İZLEMEDE</span>
       {% endif %}

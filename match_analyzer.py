@@ -232,6 +232,7 @@ def get_segment_performance() -> dict:
         s["staked"] = staked
         s["win_rate"] = round(100 * s["won"] / staked, 1) if staked else None
         s["roi_pct"] = round(100 * s["roi_units"] / staked, 1) if staked else None
+        s["roi_units"] = round(s["roi_units"], 2)
         s["label"] = SEGMENT_LABELS.get(seg, seg)
     return perf
 
