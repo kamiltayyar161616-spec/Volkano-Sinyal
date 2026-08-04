@@ -416,6 +416,52 @@ def get_dropping_odds(window_hours=12) -> list:
     return results
 
 
+def record_dropping_snapshot(dropping: list) -> None:
+    """Şu an düşen oran listesindeki sinyalleri picks tablosuna (drop_<kaynak> kategorisiyle)
+    kaydeder — böylece mevcut sonuç-kontrol mekanizması (results_checker) bunları da otomatik çözer."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows = [
+            (f"drop_{r['source']}", r["home"], r["away"], r["league"], r["time"],
+             r["side"], r["current_odd"], r["drop_pct"], None, 0, now_iso)
+            for r in dropping
+        ]
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_dropping_performance() -> dict:
+    """drop_* kategorilerindeki (VolcanoBet/Admiral/Sansa düşen oran sinyalleri) toplam performansı döner."""
+    conn = _get_conn()
+    try:
+        resolved = conn.execute("""
+            SELECT result, odd FROM picks WHERE category LIKE 'drop_%' AND result IN ('won','lost')
+        """).fetchall()
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM picks WHERE category LIKE 'drop_%' AND result='pending'
+        """).fetchone()[0]
+    finally:
+        conn.close()
+
+    won = sum(1 for r, _ in resolved if r == "won")
+    lost = sum(1 for r, _ in resolved if r == "lost")
+    roi_units = sum((odd - 1) for r, odd in resolved if r == "won" and odd) - lost
+    staked = won + lost
+    return {
+        "won": won, "lost": lost, "staked": staked, "pending": pending,
+        "win_rate": round(100 * won / staked, 1) if staked else None,
+        "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
+        "roi_units": round(roi_units, 2),
+    }
+
+
 def get_analysis():
     """Tüm hesaplamayı yapar, dict döner: {generated_at, value_picks, reverse_picks, favorite_picks, total_matched}"""
     now = datetime.now(timezone.utc)

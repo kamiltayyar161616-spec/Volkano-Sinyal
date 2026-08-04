@@ -5,6 +5,26 @@
 
 {% block extra_style %}
 <style>
+  .overall-card{
+    margin:16px; padding:18px; border-radius:var(--radius);
+    background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
+    border:1px solid var(--navy-line);
+    position:relative; overflow:hidden;
+  }
+  .overall-card::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(300px 140px at 90% -20%, rgba(79,174,122,0.10), transparent 70%);
+    pointer-events:none;
+  }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; position:relative; }
+  .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf-bright); }
+  .overall-num.neg{ color:var(--clay); }
+  .overall-num.flat{ color:var(--chalk-dim); }
+  .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
+  .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; position:relative; }
+
   .row{
     display:flex; justify-content:space-between; align-items:center; gap:10px;
     padding:11px 14px; margin:0 16px 6px;
@@ -35,6 +55,29 @@
 
 {% block content %}
 
+<div class="overall-card">
+  <div class="overall-title">DÜŞEN ORAN SİNYALLERİNİN GEÇMİŞ PERFORMANSI</div>
+  {% if perf.staked and perf.staked > 0 %}
+    <div class="overall-grid">
+      <div>
+        <div class="overall-num {{ 'pos' if perf.win_rate >= 50 else 'neg' }}">%{{ perf.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if perf.roi_pct > 0 else 'neg' }}">{{ '+' if perf.roi_pct > 0 else '' }}%{{ perf.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ perf.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ perf.won }} kazandı / {{ perf.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if perf.roi_units > 0 else '' }}{{ '%.2f'|format(perf.roi_units) }} birim</b> &middot; {{ perf.pending }} bekliyor</div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ perf.pending }} sinyal beklemede).</div>
+  {% endif %}
+</div>
+
 <h2 class="section">📉 DÜŞEN ORANLAR ({{ dropping|length }})</h2>
 <div class="section-sub">Açılış oranından güncel orana göre en az %5 düşüş yaşayan, henüz oynanmamış maçlar — düşüş ne kadar büyükse para o tarafa o kadar hızlı akıyor demektir.</div>
 
@@ -47,7 +90,7 @@
         <span class="side-chip">{{ r.side }}</span>
         <span class="src-chip {{ r.source }}">{{ {'volcano':'VOLKANO','admiral':'ADMIRAL','sansa':'SANSA'}[r.source] }}</span>
       </div>
-      <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ r.opening_odd }}</span> → güncel <b>{{ r.current_odd }}</b> &middot; {{ r.time[11:16] }} UTC</div>
+      <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time[11:16] }} UTC</div>
     </div>
     <div class="row-right">
       <div class="drop-num">-%{{ r.drop_pct }}</div>

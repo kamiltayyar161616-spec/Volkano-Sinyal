@@ -5,7 +5,7 @@ from flask import Flask, render_template, jsonify
 
 from match_analyzer import (
     get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
-    record_odds_tracking, get_dropping_odds,
+    record_odds_tracking, get_dropping_odds, record_dropping_snapshot, get_dropping_performance,
 )
 from results_checker import check_pending_results
 
@@ -31,7 +31,8 @@ def oynanabilir():
 @app.route("/dusen-oranlar")
 def dusen_oranlar():
     dropping = get_dropping_odds()
-    return render_template("dusen_oranlar.html", dropping=dropping, active_page="dusen")
+    perf = get_dropping_performance()
+    return render_template("dusen_oranlar.html", dropping=dropping, perf=perf, active_page="dusen")
 
 
 @app.route("/istatistik")
@@ -68,6 +69,7 @@ def _background_loop():
             data = get_analysis()
             record_snapshot(data)
             record_odds_tracking()
+            record_dropping_snapshot(get_dropping_odds())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 
