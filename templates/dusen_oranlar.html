@@ -5,6 +5,21 @@
 
 {% block extra_style %}
 <style>
+  .tabs{
+    display:flex; gap:3px; margin:16px 16px 0; background:var(--navy); border:1px solid var(--navy-line);
+    border-radius:12px; padding:4px;
+  }
+  .tabs button{
+    flex:1; padding:11px 6px; background:transparent; border:none; color:var(--chalk-dim);
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12px; letter-spacing:0.02em;
+    border-radius:8px; cursor:pointer;
+  }
+  .tabs button.active{ background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; }
+
+  section.panel{ display:none; padding-top:4px; }
+  section.panel.active{ display:block; animation:fadein .25s ease; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:translateY(0);} }
+
   .overall-card{
     margin:16px; padding:18px; border-radius:var(--radius);
     background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
@@ -37,13 +52,6 @@
     display:inline-block; margin-left:6px; font-size:11px; font-weight:700; color:var(--amber-bright);
     background:var(--navy-line); padding:1px 7px; border-radius:5px; vertical-align:middle;
   }
-  .src-chip{
-    display:inline-block; margin-left:6px; font-size:9px; font-weight:700; letter-spacing:0.03em;
-    padding:2px 7px; border-radius:5px; vertical-align:middle;
-  }
-  .src-chip.volcano{ background:var(--clay-dim); color:#ffb3a8; }
-  .src-chip.admiral{ background:var(--turf-dim); color:var(--turf-bright); }
-  .src-chip.sansa{ background:#2a3d5c; color:#a8c4f0; }
   .meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:4px; line-height:1.6; }
   .meta b{ color:var(--chalk-dim); font-weight:600; }
   .meta .strike{ text-decoration:line-through; color:var(--chalk-faint); }
@@ -55,53 +63,78 @@
 
 {% block content %}
 
-<div class="overall-card">
-  <div class="overall-title">DÜŞEN ORAN SİNYALLERİNİN GEÇMİŞ PERFORMANSI</div>
-  {% if perf.staked and perf.staked > 0 %}
-    <div class="overall-grid">
-      <div>
-        <div class="overall-num {{ 'pos' if perf.win_rate >= 50 else 'neg' }}">%{{ perf.win_rate }}</div>
-        <div class="overall-lbl">KAZANMA ORANI</div>
-      </div>
-      <div>
-        <div class="overall-num {{ 'pos' if perf.roi_pct > 0 else 'neg' }}">{{ '+' if perf.roi_pct > 0 else '' }}%{{ perf.roi_pct }}</div>
-        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
-      </div>
-      <div>
-        <div class="overall-num flat">{{ perf.staked }}</div>
-        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
-      </div>
-    </div>
-    <div class="overall-note">{{ perf.won }} kazandı / {{ perf.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if perf.roi_units > 0 else '' }}{{ '%.2f'|format(perf.roi_units) }} birim</b> &middot; {{ perf.pending }} bekliyor</div>
-  {% else %}
-    <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ perf.pending }} sinyal beklemede).</div>
-  {% endif %}
-</div>
+{% set src_labels = {'admiral':'ADMIRAL','sansa':'SANSA','volcano':'VOLKANO'} %}
 
-<h2 class="section">📉 DÜŞEN ORANLAR ({{ dropping|length }})</h2>
-<div class="section-sub">Açılış oranından güncel orana göre en az %5 düşüş yaşayan, henüz oynanmamış maçlar — düşüş ne kadar büyükse para o tarafa o kadar hızlı akıyor demektir.</div>
+<nav class="tabs">
+  <button class="active" data-target="admiral">ADMIRAL</button>
+  <button data-target="sansa">SANSA</button>
+  <button data-target="volcano">VOLKANO</button>
+</nav>
 
-{% if dropping %}
-  {% for r in dropping %}
-  <div class="row">
-    <div class="row-left">
-      <div class="teams">
-        {{ r.home }} — {{ r.away }}
-        <span class="side-chip">{{ r.side }}</span>
-        <span class="src-chip {{ r.source }}">{{ {'volcano':'VOLKANO','admiral':'ADMIRAL','sansa':'SANSA'}[r.source] }}</span>
+{% for src in ['admiral', 'sansa', 'volcano'] %}
+{% set perf = perf_by_source[src] %}
+{% set src_rows = dropping|selectattr('source', 'equalto', src)|list %}
+<section class="panel {{ 'active' if src == 'admiral' else '' }}" id="{{ src }}">
+
+  <div class="overall-card">
+    <div class="overall-title">{{ src_labels[src] }} DÜŞEN ORAN SİNYALLERİNİN GEÇMİŞ PERFORMANSI</div>
+    {% if perf.staked and perf.staked > 0 %}
+      <div class="overall-grid">
+        <div>
+          <div class="overall-num {{ 'pos' if perf.win_rate >= 50 else 'neg' }}">%{{ perf.win_rate }}</div>
+          <div class="overall-lbl">KAZANMA ORANI</div>
+        </div>
+        <div>
+          <div class="overall-num {{ 'pos' if perf.roi_pct > 0 else 'neg' }}">{{ '+' if perf.roi_pct > 0 else '' }}%{{ perf.roi_pct }}</div>
+          <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+        </div>
+        <div>
+          <div class="overall-num flat">{{ perf.staked }}</div>
+          <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+        </div>
       </div>
-      <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time[11:16] }} UTC</div>
-    </div>
-    <div class="row-right">
-      <div class="drop-num">-%{{ r.drop_pct }}</div>
-      <div class="drop-sub">düşüş</div>
-    </div>
+      <div class="overall-note">{{ perf.won }} kazandı / {{ perf.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if perf.roi_units > 0 else '' }}{{ '%.2f'|format(perf.roi_units) }} birim</b> &middot; {{ perf.pending }} bekliyor</div>
+    {% else %}
+      <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ perf.pending }} sinyal beklemede).</div>
+    {% endif %}
   </div>
-  {% endfor %}
-{% else %}
-  <div class="empty">Şu an eşiği (%5) geçen bir düşüş yok — sistem her 5 dakikada bir tazeleniyor, biraz zaman içinde burada görünmeye başlayacak.</div>
-{% endif %}
 
+  <h2 class="section">📉 {{ src_labels[src] }} DÜŞEN ORANLAR ({{ src_rows|length }})</h2>
+  <div class="section-sub">Açılış oranından güncel orana göre en az %5 düşüş yaşayan, henüz oynanmamış maçlar.</div>
+
+  {% if src_rows %}
+    {% for r in src_rows %}
+    <div class="row">
+      <div class="row-left">
+        <div class="teams">{{ r.home }} — {{ r.away }}<span class="side-chip">{{ r.side }}</span></div>
+        <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time[11:16] }} UTC</div>
+      </div>
+      <div class="row-right">
+        <div class="drop-num">-%{{ r.drop_pct }}</div>
+        <div class="drop-sub">düşüş</div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Şu an {{ src_labels[src] }}'da eşiği (%5) geçen bir düşüş yok.</div>
+  {% endif %}
+
+</section>
+{% endfor %}
+
+{% endblock %}
+
+{% block extra_script %}
+<script>
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('section.panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.target).classList.add('active');
+    });
+  });
+</script>
 {% endblock %}
 
 {% block footer %}AÇILIŞ = SİSTEMİN O MAÇI İLK GÖRDÜĞÜ AN <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

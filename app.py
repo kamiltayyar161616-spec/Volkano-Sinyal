@@ -31,8 +31,12 @@ def oynanabilir():
 @app.route("/dusen-oranlar")
 def dusen_oranlar():
     dropping = get_dropping_odds()
-    perf = get_dropping_performance()
-    return render_template("dusen_oranlar.html", dropping=dropping, perf=perf, active_page="dusen")
+    perf_by_source = {
+        "admiral": get_dropping_performance("admiral"),
+        "sansa": get_dropping_performance("sansa"),
+        "volcano": get_dropping_performance("volcano"),
+    }
+    return render_template("dusen_oranlar.html", dropping=dropping, perf_by_source=perf_by_source, active_page="dusen")
 
 
 @app.route("/istatistik")

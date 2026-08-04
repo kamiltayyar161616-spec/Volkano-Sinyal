@@ -437,16 +437,26 @@ def record_dropping_snapshot(dropping: list) -> None:
         conn.close()
 
 
-def get_dropping_performance() -> dict:
-    """drop_* kategorilerindeki (VolcanoBet/Admiral/Sansa düşen oran sinyalleri) toplam performansı döner."""
+def get_dropping_performance(source: str = None) -> dict:
+    """drop_* kategorilerindeki (VolcanoBet/Admiral/Sansa düşen oran sinyalleri) toplam performansı döner.
+    source verilirse (volcano/admiral/sansa) sadece o kaynağa filtreler."""
     conn = _get_conn()
     try:
-        resolved = conn.execute("""
-            SELECT result, odd FROM picks WHERE category LIKE 'drop_%' AND result IN ('won','lost')
-        """).fetchall()
-        pending = conn.execute("""
-            SELECT COUNT(*) FROM picks WHERE category LIKE 'drop_%' AND result='pending'
-        """).fetchone()[0]
+        category_filter = f"drop_{source}" if source else None
+        if category_filter:
+            resolved = conn.execute("""
+                SELECT result, odd FROM picks WHERE category=? AND result IN ('won','lost')
+            """, (category_filter,)).fetchall()
+            pending = conn.execute("""
+                SELECT COUNT(*) FROM picks WHERE category=? AND result='pending'
+            """, (category_filter,)).fetchone()[0]
+        else:
+            resolved = conn.execute("""
+                SELECT result, odd FROM picks WHERE category LIKE 'drop_%' AND result IN ('won','lost')
+            """).fetchall()
+            pending = conn.execute("""
+                SELECT COUNT(*) FROM picks WHERE category LIKE 'drop_%' AND result='pending'
+            """).fetchone()[0]
     finally:
         conn.close()
 
