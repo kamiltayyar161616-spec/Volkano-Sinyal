@@ -308,16 +308,16 @@ DROP_THRESHOLD_PCT = 5.0
 
 
 def _load_source_matches(source: str):
-    """Kaynağa göre ham maç listesini ve oran alanının adını döner."""
+    """Kaynağa göre ham maç listesini, oran alanının adını ve saat alanının adını döner."""
     if source == "volcano":
-        return _load_json(VOLCANO_FILE, []), "current_odds"
+        return _load_json(VOLCANO_FILE, []), "current_odds", "match_time"
     if source == "admiral":
-        return _load_json(ADMIRAL_FILE, []), "odds"
+        return _load_json(ADMIRAL_FILE, []), "odds", "match_time"
     if source == "sansa":
         raw = _load_json(SANSA_FILE, {"matches": []})
         matches = raw.get("matches", []) if isinstance(raw, dict) else raw
-        return matches, "odds"
-    return [], "odds"
+        return matches, "odds", "time"
+    return [], "odds", "match_time"
 
 
 def record_odds_tracking() -> None:
@@ -326,11 +326,13 @@ def record_odds_tracking() -> None:
     conn = _get_conn()
     try:
         for source in ("volcano", "admiral", "sansa"):
-            matches, odds_key = _load_source_matches(source)
+            matches, odds_key, time_key = _load_source_matches(source)
             for ev in matches:
+                if source == "sansa" and ev.get("sport") not in (None, "Football"):
+                    continue
                 home = ev.get("home_team")
                 away = ev.get("away_team")
-                match_time = ev.get("match_time")
+                match_time = ev.get(time_key)
                 odds = ev.get(odds_key) or {}
                 o1, ox, o2 = odds.get("1"), odds.get("X"), odds.get("2")
                 if not home or not away or not match_time or o1 is None:
