@@ -458,6 +458,14 @@ ODDS_TIERS = [
 ]
 
 
+def get_tier_label(odd: float) -> str:
+    """Bir oranın hangi ODDS_TIERS kovasına düştüğünü döner."""
+    for label, lo, hi in ODDS_TIERS:
+        if lo <= odd < hi:
+            return label
+    return None
+
+
 def get_dropping_performance_by_tier() -> dict:
     """Tüm kaynaklardaki (Volkano+Admiral+Sansa) düşen oran sinyallerini, sinyal anındaki
     orana göre aralıklara bölüp her aralığın kazanma oranı ve ROI'sini hesaplar."""

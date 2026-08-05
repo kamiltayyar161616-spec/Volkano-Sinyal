@@ -139,6 +139,15 @@
       <div class="row-left">
         <div class="teams">{{ r.home }} — {{ r.away }}<span class="side-chip">{{ r.side }}</span></div>
         <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time[11:16] }} UTC</div>
+        {% if r.tier_perf and r.tier_perf.staked > 0 %}
+        <div class="meta" style="margin-top:5px;">
+          <span style="color:var(--chalk-dim);">{{ r.tier_label }} kovası:</span>
+          <span style="color:{{ 'var(--turf-bright)' if r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else 'var(--clay)' }}; font-weight:700;">
+            %{{ r.tier_perf.win_rate }} kazanma &middot; {{ '+' if r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else '' }}%{{ r.tier_perf.roi_pct }} ROI
+          </span>
+          <span style="color:var(--chalk-faint);">(n={{ r.tier_perf.staked }})</span>
+        </div>
+        {% endif %}
       </div>
       <div class="row-right">
         <div class="drop-num">-%{{ r.drop_pct }}</div>
