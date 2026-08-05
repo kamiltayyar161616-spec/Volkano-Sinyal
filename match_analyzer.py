@@ -182,7 +182,19 @@ def get_recent_picks(limit=60) -> list:
         conn.close()
 
 
-SEGMENT_MIN_SAMPLE = 5
+SEGMENT_MIN_SAMPLE = 15         # daha güvenilir olması için 5'ten 15'e çıkarıldı
+SEGMENT_MIN_WIN_RATE = 50.0      # artık sadece ROI pozitif değil, kazanma oranı da en az %50 olmalı
+
+
+def _segment_qualifies(perf: dict) -> bool:
+    """Bir segmentin 'oynanabilir' sayılması için: yeterli örneklem + en az %50 kazanma + pozitif ROI."""
+    if not perf or not perf.get("staked") or perf["staked"] < SEGMENT_MIN_SAMPLE:
+        return False
+    if perf.get("win_rate") is None or perf["win_rate"] < SEGMENT_MIN_WIN_RATE:
+        return False
+    if not perf.get("roi_pct") or perf["roi_pct"] <= 0:
+        return False
+    return True
 
 
 def _segment_for(category, mf_confirmed, prob):
@@ -272,10 +284,7 @@ def get_playable_picks(analysis: dict) -> dict:
             dedup[key] = c
     all_candidates = list(dedup.values())
 
-    playable = [
-        c for c in all_candidates
-        if c["perf"] and c["perf"]["staked"] >= SEGMENT_MIN_SAMPLE and c["perf"]["roi_pct"] and c["perf"]["roi_pct"] > 0
-    ]
+    playable = [c for c in all_candidates if _segment_qualifies(c["perf"])]
     playable.sort(key=lambda c: -c["perf"]["roi_pct"])
 
     playable_keys = {(c["home"], c["away"], c["time"]) for c in playable}
@@ -283,10 +292,7 @@ def get_playable_picks(analysis: dict) -> dict:
     collecting.sort(key=lambda c: -(c["edge"] or 0))
 
     # "Oynanabilir" statüsüne giren segmentlerin TOPLAM (ağırlıklı) performansı
-    qualifying_segments = {
-        seg for seg, p in perf.items()
-        if p["staked"] >= SEGMENT_MIN_SAMPLE and p["roi_pct"] and p["roi_pct"] > 0
-    }
+    qualifying_segments = {seg for seg, p in perf.items() if _segment_qualifies(p)}
     overall_won = sum(perf[s]["won"] for s in qualifying_segments)
     overall_lost = sum(perf[s]["lost"] for s in qualifying_segments)
     overall_roi_units = sum(perf[s]["roi_units"] for s in qualifying_segments)

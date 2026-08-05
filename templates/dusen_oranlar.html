@@ -32,6 +32,9 @@
     pointer-events:none;
   }
   .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .quality-badge{ display:inline-block; font-size:10px; font-weight:700; padding:4px 10px; border-radius:7px; margin-top:10px; position:relative; }
+  .quality-badge.good{ background:var(--turf-dim); color:var(--turf-bright); }
+  .quality-badge.bad{ background:var(--clay-dim); color:#ffb3a8; }
   .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; position:relative; }
   .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
   .overall-num.pos{ color:var(--turf-bright); }
@@ -94,6 +97,13 @@
         </div>
       </div>
       <div class="overall-note">{{ perf.won }} kazandı / {{ perf.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if perf.roi_units > 0 else '' }}{{ '%.2f'|format(perf.roi_units) }} birim</b> &middot; {{ perf.pending }} bekliyor</div>
+      {% if perf.staked >= 15 %}
+        {% if perf.win_rate >= 50 and perf.roi_pct > 0 %}
+          <div style="text-align:center;"><span class="quality-badge good">✓ GÜVENİLİR KAYNAK</span></div>
+        {% elif perf.roi_pct <= 0 %}
+          <div style="text-align:center;"><span class="quality-badge bad">⚠ ZAYIF PERFORMANS — DİKKATLİ OL</span></div>
+        {% endif %}
+      {% endif %}
     {% else %}
       <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ perf.pending }} sinyal beklemede).</div>
     {% endif %}
