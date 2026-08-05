@@ -6,6 +6,7 @@ from flask import Flask, render_template, jsonify
 from match_analyzer import (
     get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
     record_odds_tracking, get_dropping_odds, record_dropping_snapshot, get_dropping_performance,
+    get_dropping_performance_by_tier,
 )
 from results_checker import check_pending_results
 
@@ -36,7 +37,9 @@ def dusen_oranlar():
         "sansa": get_dropping_performance("sansa"),
         "volcano": get_dropping_performance("volcano"),
     }
-    return render_template("dusen_oranlar.html", dropping=dropping, perf_by_source=perf_by_source, active_page="dusen")
+    tier_perf = get_dropping_performance_by_tier()
+    return render_template("dusen_oranlar.html", dropping=dropping, perf_by_source=perf_by_source,
+                            tier_perf=tier_perf, active_page="dusen")
 
 
 @app.route("/istatistik")

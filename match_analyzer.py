@@ -445,6 +445,48 @@ def record_dropping_snapshot(dropping: list) -> None:
         conn.close()
 
 
+ODDS_TIERS = [
+    ("1.99 ve altı", 0.0, 2.0),
+    ("2.00 - 2.99", 2.0, 3.0),
+    ("3.00 - 3.99", 3.0, 4.0),
+    ("4.00 ve üzeri", 4.0, float("inf")),
+]
+
+
+def get_dropping_performance_by_tier() -> dict:
+    """Tüm kaynaklardaki (Volkano+Admiral+Sansa) düşen oran sinyallerini, sinyal anındaki
+    orana göre aralıklara bölüp her aralığın kazanma oranı ve ROI'sini hesaplar."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT result, odd FROM picks WHERE category LIKE 'drop_%' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+
+    result = {}
+    for label, lo, hi in ODDS_TIERS:
+        won = lost = 0
+        roi_units = 0.0
+        for r, odd in rows:
+            if odd is None or not (lo <= odd < hi):
+                continue
+            if r == "won":
+                won += 1
+                roi_units += (odd - 1)
+            else:
+                lost += 1
+                roi_units -= 1
+        staked = won + lost
+        result[label] = {
+            "won": won, "lost": lost, "staked": staked,
+            "win_rate": round(100 * won / staked, 1) if staked else None,
+            "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
+            "roi_units": round(roi_units, 2),
+        }
+    return result
+
+
 def get_dropping_performance(source: str = None) -> dict:
     """drop_* kategorilerindeki (VolcanoBet/Admiral/Sansa düşen oran sinyalleri) toplam performansı döner.
     source verilirse (volcano/admiral/sansa) sadece o kaynağa filtreler."""

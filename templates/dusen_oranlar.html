@@ -68,6 +68,27 @@
 
 {% set src_labels = {'admiral':'ADMIRAL','sansa':'SANSA','volcano':'VOLKANO'} %}
 
+<h2 class="section">📐 ORAN ARALIĞINA GÖRE PERFORMANS</h2>
+<div class="section-sub">Tüm kaynaklar birleşik — düşüş yüzdesi kadar, sinyal anındaki oranın kendisi de önemli. Düşük oranlı (favori) düşüşler genelde daha güvenilir olabilir.</div>
+<div style="margin:0 16px 20px; display:flex; flex-direction:column; gap:8px;">
+  {% for label, t in tier_perf.items() %}
+  <div class="row" style="cursor:default;">
+    <div class="row-left">
+      <div class="teams">{{ label }}</div>
+      <div class="meta">{{ t.staked }} sonuçlanan sinyal &middot; {{ t.won }} kazandı / {{ t.lost }} kaybetti</div>
+    </div>
+    <div class="row-right">
+      {% if t.staked > 0 %}
+        <div class="drop-num" style="color:{{ 'var(--turf-bright)' if t.roi_pct and t.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if t.roi_pct and t.roi_pct > 0 else '' }}%{{ t.roi_pct }}</div>
+        <div class="drop-sub">ROI &middot; %{{ t.win_rate }} kazanma</div>
+      {% else %}
+        <div class="drop-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
 <nav class="tabs">
   <button class="active" data-target="admiral">ADMIRAL</button>
   <button data-target="sansa">SANSA</button>
