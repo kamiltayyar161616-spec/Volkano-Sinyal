@@ -89,9 +89,11 @@ def check_pending_results() -> dict:
         for pid, home, away, match_time in pending:
             try:
                 dt = datetime.fromisoformat(str(match_time).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if now - dt < timedelta(hours=CHECK_AFTER_HOURS):
+                    continue
             except Exception:
-                continue
-            if now - dt < timedelta(hours=CHECK_AFTER_HOURS):
                 continue
             date_key = dt.strftime("%Y-%m-%d")
             by_date.setdefault(date_key, []).append((pid, home, away, dt))
