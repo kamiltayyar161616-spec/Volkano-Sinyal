@@ -6,7 +6,7 @@ from flask import Flask, render_template, jsonify
 from match_analyzer import (
     get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
     record_odds_tracking, get_dropping_odds, record_dropping_snapshot, get_dropping_performance,
-    get_dropping_performance_by_tier, get_tier_label,
+    get_dropping_performance_by_tier, get_tier_label, split_dropping_by_tier_quality,
 )
 from results_checker import check_pending_results
 
@@ -38,11 +38,9 @@ def dusen_oranlar():
         "volcano": get_dropping_performance("volcano"),
     }
     tier_perf = get_dropping_performance_by_tier()
-    for r in dropping:
-        r["tier_label"] = get_tier_label(r["current_odd"])
-        r["tier_perf"] = tier_perf.get(r["tier_label"])
-    return render_template("dusen_oranlar.html", dropping=dropping, perf_by_source=perf_by_source,
-                            tier_perf=tier_perf, active_page="dusen")
+    playable, watching = split_dropping_by_tier_quality(dropping, tier_perf)
+    return render_template("dusen_oranlar.html", playable=playable, watching=watching,
+                            perf_by_source=perf_by_source, tier_perf=tier_perf, active_page="dusen")
 
 
 @app.route("/istatistik")

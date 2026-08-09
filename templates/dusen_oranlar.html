@@ -49,6 +49,7 @@
     background:linear-gradient(165deg, var(--navy-soft), var(--navy));
     border:1px solid var(--navy-line); border-radius:10px;
   }
+  .row.playable{ border-color:var(--turf-dim); }
   .row-left{ min-width:0; flex:1; }
   .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; color:var(--chalk); }
   .teams .side-chip{
@@ -95,9 +96,34 @@
   <button data-target="volcano">VOLKANO</button>
 </nav>
 
+{% macro render_row(r) %}
+    <div class="row {{ 'playable' if r.tier_perf and r.tier_perf.staked and r.tier_perf.win_rate and r.tier_perf.win_rate >= 50 and r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else '' }}">
+      <div class="row-left">
+        <div class="teams">{{ r.home }} — {{ r.away }}<span class="side-chip">{{ r.side }}</span></div>
+        <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time[11:16] }} UTC</div>
+        {% if r.tier_perf and r.tier_perf.staked > 0 %}
+        <div class="meta" style="margin-top:5px;">
+          <span style="color:var(--chalk-dim);">{{ r.tier_label }} kovası:</span>
+          <span style="color:{{ 'var(--turf-bright)' if r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else 'var(--clay)' }}; font-weight:700;">
+            %{{ r.tier_perf.win_rate }} kazanma &middot; {{ '+' if r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else '' }}%{{ r.tier_perf.roi_pct }} ROI
+          </span>
+          <span style="color:var(--chalk-faint);">(n={{ r.tier_perf.staked }})</span>
+        </div>
+        {% else %}
+        <div class="meta" style="margin-top:5px; color:var(--chalk-faint);">{{ r.tier_label }} kovası &middot; henüz yeterli veri yok</div>
+        {% endif %}
+      </div>
+      <div class="row-right">
+        <div class="drop-num">-%{{ r.drop_pct }}</div>
+        <div class="drop-sub">düşüş</div>
+      </div>
+    </div>
+{% endmacro %}
+
 {% for src in ['admiral', 'sansa', 'volcano'] %}
 {% set perf = perf_by_source[src] %}
-{% set src_rows = dropping|selectattr('source', 'equalto', src)|list %}
+{% set src_playable = playable|selectattr('source', 'equalto', src)|list %}
+{% set src_watching = watching|selectattr('source', 'equalto', src)|list %}
 <section class="panel {{ 'active' if src == 'admiral' else '' }}" id="{{ src }}">
 
   <div class="overall-card">
@@ -130,31 +156,18 @@
     {% endif %}
   </div>
 
-  <h2 class="section">📉 {{ src_labels[src] }} DÜŞEN ORANLAR ({{ src_rows|length }})</h2>
-  <div class="section-sub">Açılış oranından güncel orana göre en az %5 düşüş yaşayan, henüz oynanmamış maçlar.</div>
+  <h2 class="section">✅ {{ src_labels[src] }} OYNANABİLİR ({{ src_playable|length }})</h2>
+  <div class="section-sub">Düştüğü oran kovası tarihsel olarak güvenilir (n≥15, kazanma≥%50, ROI pozitif) çıkan sinyaller.</div>
+  {% if src_playable %}
+    {% for r in src_playable %}{{ render_row(r) }}{% endfor %}
+  {% else %}
+    <div class="empty">{{ src_labels[src] }}'da şu an güvenilir kovaya düşen bir sinyal yok.</div>
+  {% endif %}
 
-  {% if src_rows %}
-    {% for r in src_rows %}
-    <div class="row">
-      <div class="row-left">
-        <div class="teams">{{ r.home }} — {{ r.away }}<span class="side-chip">{{ r.side }}</span></div>
-        <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time[11:16] }} UTC</div>
-        {% if r.tier_perf and r.tier_perf.staked > 0 %}
-        <div class="meta" style="margin-top:5px;">
-          <span style="color:var(--chalk-dim);">{{ r.tier_label }} kovası:</span>
-          <span style="color:{{ 'var(--turf-bright)' if r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else 'var(--clay)' }}; font-weight:700;">
-            %{{ r.tier_perf.win_rate }} kazanma &middot; {{ '+' if r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else '' }}%{{ r.tier_perf.roi_pct }} ROI
-          </span>
-          <span style="color:var(--chalk-faint);">(n={{ r.tier_perf.staked }})</span>
-        </div>
-        {% endif %}
-      </div>
-      <div class="row-right">
-        <div class="drop-num">-%{{ r.drop_pct }}</div>
-        <div class="drop-sub">düşüş</div>
-      </div>
-    </div>
-    {% endfor %}
+  <h2 class="section">⏳ {{ src_labels[src] }} İZLEMEDE ({{ src_watching|length }})</h2>
+  <div class="section-sub">Kovası henüz kanıtlanmamış (az örneklem) ya da geçmişte zayıf performans göstermiş sinyaller.</div>
+  {% if src_watching %}
+    {% for r in src_watching %}{{ render_row(r) }}{% endfor %}
   {% else %}
     <div class="empty">Şu an {{ src_labels[src] }}'da eşiği (%5) geçen bir düşüş yok.</div>
   {% endif %}

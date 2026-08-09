@@ -500,6 +500,22 @@ def get_dropping_performance_by_tier() -> dict:
     return result
 
 
+def split_dropping_by_tier_quality(dropping: list, tier_perf: dict) -> tuple:
+    """Düşen oran listesini, sinyalin düştüğü kovanın geçmiş performansına göre
+    'oynanabilir' (kova güvenilir: n>=15, kazanma>=%50, ROI>0) ve 'izlemede' diye ikiye ayırır."""
+    playable, watching = [], []
+    for r in dropping:
+        r["tier_label"] = get_tier_label(r["current_odd"])
+        r["tier_perf"] = tier_perf.get(r["tier_label"])
+        if _segment_qualifies(r["tier_perf"]):
+            playable.append(r)
+        else:
+            watching.append(r)
+    playable.sort(key=lambda r: -(r["tier_perf"]["roi_pct"] or 0))
+    watching.sort(key=lambda r: -r["drop_pct"])
+    return playable, watching
+
+
 def get_dropping_performance(source: str = None) -> dict:
     """drop_* kategorilerindeki (VolcanoBet/Admiral/Sansa düşen oran sinyalleri) toplam performansı döner.
     source verilirse (volcano/admiral/sansa) sadece o kaynağa filtreler."""
