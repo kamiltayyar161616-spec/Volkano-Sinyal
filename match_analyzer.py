@@ -19,6 +19,11 @@ VOLCANO_FILE = "/root/volcanobet/volcanobet.json"
 MONEY_FLOW_FILE = "/root/volcanobet/volcanobet_money_flow.json"
 ADMIRAL_FILE = "/root/monsure/admiralbet.json"
 SANSA_FILE = "/root/monsure/sansabet_odds.json"
+SBBET_FILE = "/root/monsure/sbbet.json"
+HATBET_FILE = "/root/monsure/hatbet_odds.json"
+PREMIER_FILE = "/root/monsure/premier.json"
+SOCCERBET_FILE = "/root/monsure/soccerbet.json"
+MAXBET_FILE = "/root/monsure/maxbet.json"
 
 WINDOW_HOURS = 12
 FAVORITE_PROB_THRESHOLD = 50.0  # "kazanacak" filtresi için piyasa olasılık eşiği
@@ -313,33 +318,84 @@ def get_playable_picks(analysis: dict) -> dict:
 DROP_THRESHOLD_PCT = 5.0
 
 
-def _load_source_matches(source: str):
-    """Kaynağa göre ham maç listesini, oran alanının adını ve saat alanının adını döner."""
+ALL_SOURCES = ("volcano", "admiral", "sansa", "sbbet", "hatbet", "premier", "soccerbet", "maxbet")
+
+
+def _wrap(raw, key=None):
+    """Bazi kaynaklar {'matches':[...]} sarmali kullanir, bazilari duz liste -- ikisini de normalize eder."""
+    if key and isinstance(raw, dict):
+        return raw.get(key, [])
+    return raw if isinstance(raw, list) else []
+
+
+def _load_source_matches(source: str) -> list:
+    """Her kaynagi ortak formata (home_team, away_team, match_time, league, odds:{1,X,2}) cevirip doner."""
+    normalized = []
+
     if source == "volcano":
-        return _load_json(VOLCANO_FILE, []), "current_odds", "match_time"
-    if source == "admiral":
-        return _load_json(ADMIRAL_FILE, []), "odds", "match_time"
-    if source == "sansa":
-        raw = _load_json(SANSA_FILE, {"matches": []})
-        matches = raw.get("matches", []) if isinstance(raw, dict) else raw
-        return matches, "odds", "time"
-    return [], "odds", "match_time"
+        for e in _load_json(VOLCANO_FILE, []):
+            odds = e.get("current_odds") or {}
+            normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
+                                "match_time": e.get("match_time"), "league": e.get("league"), "odds": odds})
+
+    elif source == "admiral":
+        for e in _load_json(ADMIRAL_FILE, []):
+            normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
+                                "match_time": e.get("match_time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+
+    elif source == "sansa":
+        for e in _wrap(_load_json(SANSA_FILE, {"matches": []}), "matches"):
+            if e.get("sport") not in (None, "Football"):
+                continue
+            normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
+                                "match_time": e.get("time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+
+    elif source == "sbbet":
+        for e in _wrap(_load_json(SBBET_FILE, {"matches": []}), "matches"):
+            normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
+                                "match_time": e.get("time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+
+    elif source == "hatbet":
+        for e in _wrap(_load_json(HATBET_FILE, {"matches": []}), "matches"):
+            normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
+                                "match_time": e.get("time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+
+    elif source == "premier":
+        for e in _wrap(_load_json(PREMIER_FILE, []), None):
+            normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
+                                "match_time": e.get("match_time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+
+    elif source == "soccerbet":
+        for e in _wrap(_load_json(SOCCERBET_FILE, {"matches": []}), "matches"):
+            o = e.get("odds") or {}
+            normalized.append({"home_team": e.get("home"), "away_team": e.get("away"),
+                                "match_time": e.get("kickOff"), "league": e.get("league"),
+                                "odds": {"1": o.get("home"), "X": o.get("draw"), "2": o.get("away")}})
+
+    elif source == "maxbet":
+        for e in _wrap(_load_json(MAXBET_FILE, []), None):
+            o = e.get("odds") or {}
+            mt = e.get("start_time")
+            if mt and mt.endswith(" UTC"):
+                mt = mt[:-4].replace(" ", "T") + ":00Z"
+            normalized.append({"home_team": e.get("team1"), "away_team": e.get("team2"),
+                                "match_time": mt, "league": e.get("competition"),
+                                "odds": {"1": o.get("home"), "X": o.get("draw"), "2": o.get("away")}})
+
+    return normalized
 
 
 def record_odds_tracking() -> None:
-    """Her kaynaktaki (Volkano/Admiral/Sansa) maçların açılış/güncel oranını kaydeder/günceller."""
+    """Her kaynaktaki maclarin acilis/guncel oranini kaydeder/gunceller."""
     now_iso = datetime.now(timezone.utc).isoformat()
     conn = _get_conn()
     try:
-        for source in ("volcano", "admiral", "sansa"):
-            matches, odds_key, time_key = _load_source_matches(source)
-            for ev in matches:
-                if source == "sansa" and ev.get("sport") not in (None, "Football"):
-                    continue
+        for source in ALL_SOURCES:
+            for ev in _load_source_matches(source):
                 home = ev.get("home_team")
                 away = ev.get("away_team")
-                match_time = ev.get(time_key)
-                odds = ev.get(odds_key) or {}
+                match_time = ev.get("match_time")
+                odds = ev.get("odds") or {}
                 o1, ox, o2 = odds.get("1"), odds.get("X"), odds.get("2")
                 if not home or not away or not match_time or o1 is None:
                     continue

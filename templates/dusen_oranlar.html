@@ -7,12 +7,12 @@
 <style>
   .tabs{
     display:flex; gap:3px; margin:16px 16px 0; background:var(--navy); border:1px solid var(--navy-line);
-    border-radius:12px; padding:4px;
+    border-radius:12px; padding:4px; overflow-x:auto; -webkit-overflow-scrolling:touch;
   }
   .tabs button{
-    flex:1; padding:11px 6px; background:transparent; border:none; color:var(--chalk-dim);
-    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12px; letter-spacing:0.02em;
-    border-radius:8px; cursor:pointer;
+    flex:0 0 auto; padding:11px 12px; background:transparent; border:none; color:var(--chalk-dim);
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:11.5px; letter-spacing:0.02em;
+    border-radius:8px; cursor:pointer; white-space:nowrap;
   }
   .tabs button.active{ background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; }
 
@@ -67,7 +67,7 @@
 
 {% block content %}
 
-{% set src_labels = {'admiral':'ADMIRAL','sansa':'SANSA','volcano':'VOLKANO'} %}
+{% set src_labels = {'admiral':'ADMIRAL','sansa':'SANSA','volcano':'VOLKANO','sbbet':'SBBET','hatbet':'HATBET','premier':'PREMIER','soccerbet':'SOCCERBET','maxbet':'MAXBET'} %}
 
 <h2 class="section">📐 ORAN ARALIĞINA GÖRE PERFORMANS</h2>
 <div class="section-sub">Tüm kaynaklar birleşik — düşüş yüzdesi kadar, sinyal anındaki oranın kendisi de önemli. Düşük oranlı (favori) düşüşler genelde daha güvenilir olabilir.</div>
@@ -94,6 +94,11 @@
   <button class="active" data-target="admiral">ADMIRAL</button>
   <button data-target="sansa">SANSA</button>
   <button data-target="volcano">VOLKANO</button>
+  <button data-target="sbbet">SBBET</button>
+  <button data-target="hatbet">HATBET</button>
+  <button data-target="premier">PREMIER</button>
+  <button data-target="soccerbet">SOCCERBET</button>
+  <button data-target="maxbet">MAXBET</button>
 </nav>
 
 {% macro render_row(r) %}
@@ -120,7 +125,7 @@
     </div>
 {% endmacro %}
 
-{% for src in ['admiral', 'sansa', 'volcano'] %}
+{% for src in ['admiral', 'sansa', 'volcano', 'sbbet', 'hatbet', 'premier', 'soccerbet', 'maxbet'] %}
 {% set perf = perf_by_source[src] %}
 {% set src_playable = playable|selectattr('source', 'equalto', src)|list %}
 {% set src_watching = watching|selectattr('source', 'equalto', src)|list %}

@@ -6,7 +6,7 @@ from flask import Flask, render_template, jsonify
 from match_analyzer import (
     get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
     record_odds_tracking, get_dropping_odds, record_dropping_snapshot, get_dropping_performance,
-    get_dropping_performance_by_tier, get_tier_label, split_dropping_by_tier_quality,
+    get_dropping_performance_by_tier, get_tier_label, split_dropping_by_tier_quality, ALL_SOURCES,
 )
 from results_checker import check_pending_results
 
@@ -32,11 +32,7 @@ def oynanabilir():
 @app.route("/dusen-oranlar")
 def dusen_oranlar():
     dropping = get_dropping_odds()
-    perf_by_source = {
-        "admiral": get_dropping_performance("admiral"),
-        "sansa": get_dropping_performance("sansa"),
-        "volcano": get_dropping_performance("volcano"),
-    }
+    perf_by_source = {src: get_dropping_performance(src) for src in ALL_SOURCES}
     tier_perf = get_dropping_performance_by_tier()
     playable, watching = split_dropping_by_tier_quality(dropping, tier_perf)
     return render_template("dusen_oranlar.html", playable=playable, watching=watching,
