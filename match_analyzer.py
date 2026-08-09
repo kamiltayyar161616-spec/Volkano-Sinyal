@@ -101,9 +101,17 @@ def _get_conn():
             result TEXT DEFAULT 'pending',
             final_score TEXT,
             checked_at TEXT,
+            source_count INTEGER,
+            sources TEXT,
             UNIQUE(category, home, away, match_time)
         )
     """)
+    # Mevcut (VPS'te zaten var olan) picks.db'lerde bu sutunlar olmayabilir -- sessizce ekle.
+    for col_def in ("source_count INTEGER", "sources TEXT"):
+        try:
+            conn.execute(f"ALTER TABLE picks ADD COLUMN {col_def}")
+        except sqlite3.OperationalError:
+            pass  # zaten var
     conn.execute("""
         CREATE TABLE IF NOT EXISTS odds_tracking (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -569,6 +577,196 @@ def split_dropping_by_tier_quality(dropping: list, tier_perf: dict) -> tuple:
             watching.append(r)
     playable.sort(key=lambda r: -(r["tier_perf"]["roi_pct"] or 0))
     watching.sort(key=lambda r: -r["drop_pct"])
+    return playable, watching
+
+
+# ---------------------------------------------------------------------------
+# ORTAK DÜŞENLER (konsensüs) — aynı maçın aynı tarafı birden fazla kaynakta
+# aynı anda düşerse, bu tek-kaynaklı sinyalden daha güçlü olabilir.
+# ---------------------------------------------------------------------------
+
+CONSENSUS_MIN_SOURCES = 2
+
+
+def get_consensus_drops(min_sources: int = CONSENSUS_MIN_SOURCES) -> list:
+    """Güncel düşen oran sinyallerini kaynaklar arası eşleştirip (bulanık isim eşleşmesiyle),
+    aynı maç+tarafta en az min_sources kaynağın hemfikir olduğu sinyalleri döner."""
+    drops = get_dropping_odds()
+    groups = []
+
+    for d in drops:
+        h_n, a_n = _norm(d["home"]), _norm(d["away"])
+        placed = False
+        for g in groups:
+            if g["side"] != d["side"]:
+                continue
+            if h_n == g["h_n"] and a_n == g["a_n"]:
+                g["items"].append(d)
+                placed = True
+                break
+            if (difflib.SequenceMatcher(None, h_n, g["h_n"]).ratio() > 0.82 and
+                    difflib.SequenceMatcher(None, a_n, g["a_n"]).ratio() > 0.82):
+                g["items"].append(d)
+                placed = True
+                break
+        if not placed:
+            groups.append({"h_n": h_n, "a_n": a_n, "side": d["side"], "home": d["home"],
+                            "away": d["away"], "league": d["league"], "time": d["time"], "items": [d]})
+
+    consensus = []
+    for g in groups:
+        sources = sorted(set(i["source"] for i in g["items"]))
+        if len(sources) < min_sources:
+            continue
+        avg_odd = round(sum(i["current_odd"] for i in g["items"]) / len(g["items"]), 3)
+        avg_drop = round(sum(i["drop_pct"] for i in g["items"]) / len(g["items"]), 2)
+        consensus.append({
+            "home": g["home"], "away": g["away"], "league": g["league"], "time": g["time"],
+            "side": g["side"], "sources": sources, "source_count": len(sources),
+            "avg_odd": avg_odd, "avg_drop_pct": avg_drop,
+        })
+
+    consensus.sort(key=lambda c: (-c["source_count"], -c["avg_drop_pct"]))
+    return consensus
+
+
+def record_consensus_snapshot(consensus: list) -> None:
+    """Şu an ortak düşen sinyalleri picks tablosuna (category='consensus') kaydeder."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows = [
+            ("consensus", c["home"], c["away"], c["league"], c["time"], c["side"], c["avg_odd"],
+             c["avg_drop_pct"], None, 0, now_iso, c["source_count"], ",".join(c["sources"]))
+            for c in consensus
+        ]
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed,
+             first_seen, source_count, sources)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, rows)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_consensus_performance() -> dict:
+    """Tüm ortak düşen sinyallerinin toplam (birleşik) performansı."""
+    conn = _get_conn()
+    try:
+        resolved = conn.execute("""
+            SELECT result, odd FROM picks WHERE category='consensus' AND result IN ('won','lost')
+        """).fetchall()
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM picks WHERE category='consensus' AND result='pending'
+        """).fetchone()[0]
+    finally:
+        conn.close()
+    won = sum(1 for r, _ in resolved if r == "won")
+    lost = sum(1 for r, _ in resolved if r == "lost")
+    roi_units = sum((odd - 1) for r, odd in resolved if r == "won" and odd) - lost
+    staked = won + lost
+    return {
+        "won": won, "lost": lost, "staked": staked, "pending": pending,
+        "win_rate": round(100 * won / staked, 1) if staked else None,
+        "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
+        "roi_units": round(roi_units, 2),
+    }
+
+
+def get_consensus_performance_by_source_count() -> dict:
+    """2 kaynak / 3 kaynak / 4+ kaynak hemfikir olduğunda performans nasıl değişiyor?"""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT source_count, result, odd FROM picks WHERE category='consensus' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    buckets = {"2 kaynak": (2, 2), "3 kaynak": (3, 3), "4+ kaynak": (4, 999)}
+    result = {}
+    for label, (lo, hi) in buckets.items():
+        won = lost = 0
+        roi_units = 0.0
+        for sc, r, odd in rows:
+            if sc is None or not (lo <= sc <= hi):
+                continue
+            if r == "won":
+                won += 1
+                roi_units += (odd - 1) if odd else 0
+            else:
+                lost += 1
+                roi_units -= 1
+        staked = won + lost
+        result[label] = {
+            "won": won, "lost": lost, "staked": staked,
+            "win_rate": round(100 * won / staked, 1) if staked else None,
+            "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
+            "roi_units": round(roi_units, 2),
+        }
+    return result
+
+
+def _consensus_combo_stats() -> dict:
+    """Her (kaynak-kombinasyonu × oran-kovası) ikilisinin geçmiş performansını hesaplar."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT sources, odd, result FROM picks WHERE category='consensus' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+
+    groups = {}
+    for sources, odd, result in rows:
+        tier = get_tier_label(odd) if odd else "Bilinmiyor"
+        key = f"{sources} · {tier}"
+        g = groups.setdefault(key, {"sources": sources, "tier": tier, "won": 0, "lost": 0, "roi_units": 0.0})
+        if result == "won":
+            g["won"] += 1
+            g["roi_units"] += (odd - 1) if odd else 0
+        else:
+            g["lost"] += 1
+            g["roi_units"] -= 1
+
+    stats = {}
+    for key, g in groups.items():
+        staked = g["won"] + g["lost"]
+        stats[key] = {
+            "sources": g["sources"], "tier": g["tier"], "won": g["won"], "lost": g["lost"], "staked": staked,
+            "win_rate": round(100 * g["won"] / staked, 1) if staked else None,
+            "roi_pct": round(100 * g["roi_units"] / staked, 1) if staked else None,
+            "roi_units": round(g["roi_units"], 2),
+        }
+    return stats
+
+
+def get_consensus_combo_breakdown(min_sample: int = 3) -> list:
+    """Hangi kaynak kombinasyonu + oran bandı ikilisi gerçekten kazandırıyor? (görüntüleme için, min örneklem filtreli)"""
+    stats = _consensus_combo_stats()
+    result_list = [v for v in stats.values() if v["staked"] >= min_sample]
+    result_list.sort(key=lambda r: -(r["roi_pct"] if r["roi_pct"] is not None else -999))
+    return result_list
+
+
+def split_consensus_by_quality(consensus: list) -> tuple:
+    """Güncel ortak düşen sinyalleri, kendi (kaynak-kombinasyonu × kova) geçmişine göre
+    'oynanabilir' / 'izlemede' diye ayırır."""
+    combo_stats = _consensus_combo_stats()
+    playable, watching = [], []
+    for c in consensus:
+        tier = get_tier_label(c["avg_odd"])
+        combo_key = f"{','.join(c['sources'])} · {tier}"
+        perf = combo_stats.get(combo_key)
+        c["combo_label"] = combo_key
+        c["combo_perf"] = perf
+        if _segment_qualifies(perf):
+            playable.append(c)
+        else:
+            watching.append(c)
+    playable.sort(key=lambda c: -(c["combo_perf"]["roi_pct"] or 0))
+    watching.sort(key=lambda c: (-c["source_count"], -c["avg_drop_pct"]))
     return playable, watching
 
 

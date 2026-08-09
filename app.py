@@ -7,6 +7,8 @@ from match_analyzer import (
     get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
     record_odds_tracking, get_dropping_odds, record_dropping_snapshot, get_dropping_performance,
     get_dropping_performance_by_tier, get_tier_label, split_dropping_by_tier_quality, ALL_SOURCES,
+    get_consensus_drops, record_consensus_snapshot, get_consensus_performance,
+    get_consensus_performance_by_source_count, get_consensus_combo_breakdown, split_consensus_by_quality,
 )
 from results_checker import check_pending_results
 
@@ -37,6 +39,18 @@ def dusen_oranlar():
     playable, watching = split_dropping_by_tier_quality(dropping, tier_perf)
     return render_template("dusen_oranlar.html", playable=playable, watching=watching,
                             perf_by_source=perf_by_source, tier_perf=tier_perf, active_page="dusen")
+
+
+@app.route("/ortak-dusenler")
+def ortak_dusenler():
+    consensus = get_consensus_drops()
+    overall = get_consensus_performance()
+    by_count = get_consensus_performance_by_source_count()
+    combo_breakdown = get_consensus_combo_breakdown()
+    playable, watching = split_consensus_by_quality(consensus)
+    return render_template("ortak_dusenler.html", playable=playable, watching=watching,
+                            overall=overall, by_count=by_count, combo_breakdown=combo_breakdown,
+                            active_page="ortak")
 
 
 @app.route("/istatistik")
@@ -74,6 +88,7 @@ def _background_loop():
             record_snapshot(data)
             record_odds_tracking()
             record_dropping_snapshot(get_dropping_odds())
+            record_consensus_snapshot(get_consensus_drops())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 
