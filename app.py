@@ -11,7 +11,7 @@ from match_analyzer import (
     get_consensus_performance_by_source_count, get_consensus_combo_breakdown, split_consensus_by_quality,
     get_dropping_performance_by_league_tier, get_dropping_performance_by_freshness,
     get_consensus_performance_by_league_tier, get_consensus_performance_by_freshness,
-    get_gunun_ozeti,
+    get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
 )
 from results_checker import check_pending_results
 
@@ -68,7 +68,10 @@ def ortak_dusenler():
 @app.route("/gunun-ozeti")
 def gunun_ozeti():
     items = get_gunun_ozeti()
-    return render_template("gunun_ozeti.html", items=items, active_page="ozet")
+    overall = get_ozet_performance()
+    overall_7d = get_ozet_performance(days=7)
+    return render_template("gunun_ozeti.html", items=items, overall=overall,
+                            overall_7d=overall_7d, active_page="ozet")
 
 
 @app.route("/istatistik")
@@ -107,6 +110,7 @@ def _background_loop():
             record_odds_tracking()
             record_dropping_snapshot(get_dropping_odds())
             record_consensus_snapshot(get_consensus_drops())
+            record_ozet_snapshot(get_gunun_ozeti())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 

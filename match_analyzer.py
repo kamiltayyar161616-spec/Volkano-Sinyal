@@ -1081,3 +1081,47 @@ def get_gunun_ozeti(window_hours: int = 24) -> list:
 
     filtered.sort(key=lambda x: -(x["roi_pct"] or 0))
     return filtered
+
+
+def record_ozet_snapshot(items: list) -> None:
+    """Gunun Ozeti'nde gosterilen sinyalleri ayri bir kategoride (category='ozet') kaydeder,
+    boylece 'ozet sayfasinin kendi tavsiyeleri gercekte ne kadar tutuyor' ayrica olculebilir."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows = [
+            ("ozet", it["home"], it["away"], it["league"], it["time"], it["side"], it["odd"],
+             it.get("roi_pct"), it.get("win_rate"), int(bool(it.get("is_major"))), now_iso)
+            for it in items if it.get("odd") is not None
+        ]
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_ozet_performance(days: int = None) -> dict:
+    """Ozet sayfasinda onerilen sinyallerin kendi toplam (ve istenirse son N gunluk) performansi."""
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='ozet' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='ozet' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
