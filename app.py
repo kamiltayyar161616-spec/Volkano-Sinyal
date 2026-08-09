@@ -9,6 +9,9 @@ from match_analyzer import (
     get_dropping_performance_by_tier, get_tier_label, split_dropping_by_tier_quality, ALL_SOURCES,
     get_consensus_drops, record_consensus_snapshot, get_consensus_performance,
     get_consensus_performance_by_source_count, get_consensus_combo_breakdown, split_consensus_by_quality,
+    get_dropping_performance_by_league_tier, get_dropping_performance_by_freshness,
+    get_consensus_performance_by_league_tier, get_consensus_performance_by_freshness,
+    get_gunun_ozeti,
 )
 from results_checker import check_pending_results
 
@@ -35,22 +38,37 @@ def oynanabilir():
 def dusen_oranlar():
     dropping = get_dropping_odds()
     perf_by_source = {src: get_dropping_performance(src) for src in ALL_SOURCES}
+    perf_by_source_7d = {src: get_dropping_performance(src, days=7) for src in ALL_SOURCES}
     tier_perf = get_dropping_performance_by_tier()
     playable, watching = split_dropping_by_tier_quality(dropping, tier_perf)
+    league_tier_perf = get_dropping_performance_by_league_tier()
+    freshness_perf = get_dropping_performance_by_freshness()
     return render_template("dusen_oranlar.html", playable=playable, watching=watching,
-                            perf_by_source=perf_by_source, tier_perf=tier_perf, active_page="dusen")
+                            perf_by_source=perf_by_source, perf_by_source_7d=perf_by_source_7d,
+                            tier_perf=tier_perf, league_tier_perf=league_tier_perf,
+                            freshness_perf=freshness_perf, active_page="dusen")
 
 
 @app.route("/ortak-dusenler")
 def ortak_dusenler():
     consensus = get_consensus_drops()
     overall = get_consensus_performance()
+    overall_7d = get_consensus_performance(days=7)
     by_count = get_consensus_performance_by_source_count()
     combo_breakdown = get_consensus_combo_breakdown()
+    league_tier_perf = get_consensus_performance_by_league_tier()
+    freshness_perf = get_consensus_performance_by_freshness()
     playable, watching = split_consensus_by_quality(consensus)
     return render_template("ortak_dusenler.html", playable=playable, watching=watching,
-                            overall=overall, by_count=by_count, combo_breakdown=combo_breakdown,
-                            active_page="ortak")
+                            overall=overall, overall_7d=overall_7d, by_count=by_count,
+                            combo_breakdown=combo_breakdown, league_tier_perf=league_tier_perf,
+                            freshness_perf=freshness_perf, active_page="ortak")
+
+
+@app.route("/gunun-ozeti")
+def gunun_ozeti():
+    items = get_gunun_ozeti()
+    return render_template("gunun_ozeti.html", items=items, active_page="ozet")
 
 
 @app.route("/istatistik")

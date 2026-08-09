@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Günün Özeti{% endblock %}
+{% block page_tag %}ÖZET{% endblock %}
+{% block subtitle %}Value/Favori+Value/Ters, Düşen Oran (8 kaynak) ve Ortak Düşenler'deki TÜM güvenilir sinyaller — kendi geçmiş ROI'lerine göre sıralı{% endblock %}
+
+{% block extra_style %}
+<style>
+  .row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:12px 14px; margin:0 16px 8px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--turf-dim); border-radius:10px;
+  }
+  .row-left{ min-width:0; flex:1; }
+  .type-tag{
+    display:inline-block; font-size:9px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:2px 7px; border-radius:5px; letter-spacing:0.02em;
+  }
+  .major-tag{
+    display:inline-block; font-size:9px; font-weight:700; color:#241a06;
+    background:var(--amber-bright); padding:2px 7px; border-radius:5px; margin-left:4px;
+  }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; color:var(--chalk); margin-top:5px; }
+  .teams .side-chip{
+    display:inline-block; margin-left:6px; font-size:11px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:1px 7px; border-radius:5px; vertical-align:middle;
+  }
+  .meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:5px; line-height:1.6; }
+  .meta b{ color:var(--chalk-dim); font-weight:600; }
+  .row-right{ text-align:right; flex-shrink:0; }
+  .perf-num{ font-size:16px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--turf-bright); }
+  .perf-sub{ font-size:9px; color:var(--chalk-faint); margin-top:2px; }
+  .count-banner{
+    margin:16px; padding:16px; border-radius:var(--radius); text-align:center;
+    background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
+    border:1px solid var(--navy-line);
+  }
+  .count-banner .num{ font-size:30px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--amber-bright); }
+  .count-banner .lbl{ font-size:10px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="count-banner">
+  <div class="num">{{ items|length }}</div>
+  <div class="lbl">ÖNÜMÜZDEKİ 24 SAATTE GÜVENİLİR SİNYAL &middot; ROI'YE GÖRE SIRALI</div>
+</div>
+
+{% if items %}
+  {% for it in items %}
+  <div class="row">
+    <div class="row-left">
+      <span class="type-tag">{{ it.type }}</span>
+      {% if it.is_major %}<span class="major-tag">BÜYÜK LİG</span>{% endif %}
+      <div class="teams">{{ it.home }} — {{ it.away }}<span class="side-chip">{{ it.side }}</span></div>
+      <div class="meta">{{ it.league }} &middot; oran <b>{{ '%.2f'|format(it.odd) if it.odd else '?' }}</b> &middot; {{ it.time[11:16] }} UTC</div>
+    </div>
+    <div class="row-right">
+      <div class="perf-num" style="color:{{ 'var(--turf-bright)' if it.roi_pct and it.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if it.roi_pct and it.roi_pct > 0 else '' }}%{{ it.roi_pct }}</div>
+      <div class="perf-sub">%{{ it.win_rate }} kazanma &middot; n={{ it.sample }}</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an önümüzdeki 24 saatte güvenilir statüye giren bir sinyal yok — diğer sekmelerdeki "veri toplanıyor" listeleri büyüdükçe burası dolacak.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block footer %}TÜM SEKMELERDEKİ "OYNANABİLİR" SİNYALLERİN BİRLEŞİMİ <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

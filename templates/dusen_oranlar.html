@@ -90,6 +90,48 @@
   {% endfor %}
 </div>
 
+<h2 class="section">🏆 BÜYÜK LİG vs DİĞER LİGLER</h2>
+<div class="section-sub">Verimli/büyük liglerde (Premier League, La Liga, Şampiyonlar Ligi vb.) düşen oranlar tenha liglere göre daha mı güvenilir?</div>
+<div style="margin:0 16px 20px; display:flex; flex-direction:column; gap:8px;">
+  {% for label, t in league_tier_perf.items() %}
+  <div class="row" style="cursor:default;">
+    <div class="row-left">
+      <div class="teams">{{ label }}</div>
+      <div class="meta">{{ t.staked }} sonuçlanan sinyal &middot; {{ t.won }} kazandı / {{ t.lost }} kaybetti</div>
+    </div>
+    <div class="row-right">
+      {% if t.staked > 0 %}
+        <div class="drop-num" style="color:{{ 'var(--turf-bright)' if t.roi_pct and t.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if t.roi_pct and t.roi_pct > 0 else '' }}%{{ t.roi_pct }}</div>
+        <div class="drop-sub">ROI &middot; %{{ t.win_rate }} kazanma</div>
+      {% else %}
+        <div class="drop-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="section">⏱️ SİNYAL TAZELİĞİ</h2>
+<div class="section-sub">Sinyal, maç başlamadan kaç saat önce yakalanmış — erken mi yakalamak daha iyi, yoksa kickoff'a yakın mı?</div>
+<div style="margin:0 16px 20px; display:flex; flex-direction:column; gap:8px;">
+  {% for label, t in freshness_perf.items() %}
+  <div class="row" style="cursor:default;">
+    <div class="row-left">
+      <div class="teams">{{ label }}</div>
+      <div class="meta">{{ t.staked }} sonuçlanan sinyal &middot; {{ t.won }} kazandı / {{ t.lost }} kaybetti</div>
+    </div>
+    <div class="row-right">
+      {% if t.staked > 0 %}
+        <div class="drop-num" style="color:{{ 'var(--turf-bright)' if t.roi_pct and t.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if t.roi_pct and t.roi_pct > 0 else '' }}%{{ t.roi_pct }}</div>
+        <div class="drop-sub">ROI &middot; %{{ t.win_rate }} kazanma</div>
+      {% else %}
+        <div class="drop-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
 <nav class="tabs">
   <button class="active" data-target="admiral">ADMIRAL</button>
   <button data-target="sansa">SANSA</button>
@@ -149,6 +191,17 @@
         </div>
       </div>
       <div class="overall-note">{{ perf.won }} kazandı / {{ perf.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if perf.roi_units > 0 else 'var(--clay)' }};">{{ '+' if perf.roi_units > 0 else '' }}{{ '%.2f'|format(perf.roi_units) }} birim</b> &middot; {{ perf.pending }} bekliyor</div>
+      {% set p7 = perf_by_source_7d[src] %}
+      <div class="overall-note" style="border-top:1px dashed var(--navy-line); padding-top:10px; margin-top:10px;">
+        <span style="color:var(--chalk-dim); font-weight:700;">SON 7 GÜN:</span>
+        {% if p7.staked and p7.staked > 0 %}
+          <span style="color:{{ 'var(--turf-bright)' if p7.win_rate >= 50 else 'var(--clay)' }};">%{{ p7.win_rate }} kazanma</span> &middot;
+          <span style="color:{{ 'var(--turf-bright)' if p7.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if p7.roi_pct > 0 else '' }}%{{ p7.roi_pct }} ROI</span>
+          (n={{ p7.staked }})
+        {% else %}
+          <span style="color:var(--chalk-faint);">henüz veri yok</span>
+        {% endif %}
+      </div>
       {% if perf.staked >= 15 %}
         {% if perf.win_rate >= 50 and perf.roi_pct > 0 %}
           <div style="text-align:center;"><span class="quality-badge good">✓ GÜVENİLİR KAYNAK</span></div>

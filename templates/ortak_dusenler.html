@@ -83,9 +83,49 @@
       </div>
     </div>
     <div class="overall-note">{{ overall.won }} kazandı / {{ overall.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if overall.roi_units > 0 else 'var(--clay)' }};">{{ '+' if overall.roi_units > 0 else '' }}{{ '%.2f'|format(overall.roi_units) }} birim</b> &middot; {{ overall.pending }} bekliyor</div>
+    <div class="overall-note" style="border-top:1px dashed var(--navy-line); padding-top:10px; margin-top:10px;">
+      <span style="color:var(--chalk-dim); font-weight:700;">SON 7 GÜN:</span>
+      {% if overall_7d.staked and overall_7d.staked > 0 %}
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.win_rate >= 50 else 'var(--clay)' }};">%{{ overall_7d.win_rate }} kazanma</span> &middot;
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if overall_7d.roi_pct > 0 else '' }}%{{ overall_7d.roi_pct }} ROI</span>
+        (n={{ overall_7d.staked }})
+      {% else %}
+        <span style="color:var(--chalk-faint);">henüz veri yok</span>
+      {% endif %}
+    </div>
   {% else %}
     <div class="overall-note">Henüz sonuçlanmış bir ortak sinyal yok — veri biriktikçe burada görünecek ({{ overall.pending }} bekliyor).</div>
   {% endif %}
+</div>
+
+<h2 class="section">🏆 BÜYÜK LİG vs DİĞER LİGLER</h2>
+<div class="count-grid" style="grid-template-columns:repeat(2,1fr);">
+  {% for label, t in league_tier_perf.items() %}
+  <div class="count-card">
+    <div class="count-title">{{ label }}</div>
+    {% if t.staked > 0 %}
+      <div class="count-num" style="color:{{ 'var(--turf-bright)' if t.roi_pct and t.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if t.roi_pct and t.roi_pct > 0 else '' }}%{{ t.roi_pct }}</div>
+      <div class="count-sub">%{{ t.win_rate }} kazanma &middot; n={{ t.staked }}</div>
+    {% else %}
+      <div class="count-sub">veri yok</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="section">⏱️ SİNYAL TAZELİĞİ</h2>
+<div class="count-grid">
+  {% for label, t in freshness_perf.items() %}
+  <div class="count-card">
+    <div class="count-title">{{ label }}</div>
+    {% if t.staked > 0 %}
+      <div class="count-num" style="color:{{ 'var(--turf-bright)' if t.roi_pct and t.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if t.roi_pct and t.roi_pct > 0 else '' }}%{{ t.roi_pct }}</div>
+      <div class="count-sub">%{{ t.win_rate }} kazanma &middot; n={{ t.staked }}</div>
+    {% else %}
+      <div class="count-sub">veri yok</div>
+    {% endif %}
+  </div>
+  {% endfor %}
 </div>
 
 <h2 class="section">🔢 KAÇ KAYNAK HEMFİKİR OLURSA DAHA İYİ?</h2>

@@ -509,6 +509,84 @@ def record_dropping_snapshot(dropping: list) -> None:
         conn.close()
 
 
+# Büyük/verimli lig göstergeleri (çok dilli - kaynaklar Sırpça/Hırvatça/İngilizce/Türkçe karışık isim kullanıyor)
+MAJOR_LEAGUE_KEYWORDS = [
+    "premier league", "premiership", "championship",
+    "la liga", "laliga", "primera division", "primera división",
+    "serie a", "seria a",
+    "bundesliga",
+    "ligue 1",
+    "eredivisie",
+    "primeira liga",
+    "süper lig", "super lig", "superlig",
+    "jupiler",
+    "champions league", "liga campiona", "liga sampiona", "liga šampiona",
+    "europa league", "liga evrope", "liga evropa",
+    "conference league", "konferencijska",
+    "brasileirao", "brasileirão", "brazil 1", "brazil-1",
+    "argentina 1", "argentina - argentina 1",
+    "liga mx", "meksiko 1", "mexico 1", "meksika 1",
+    "world cup", "svetsko", "dünya kupası",
+    " euro ", "avrupa şampiyonası",
+    "copa america", "copa américa",
+    "copa libertadores", "copa sudamericana",
+    " mls ", "major league soccer",
+]
+
+
+def is_major_league(league: str) -> bool:
+    """Lig ismi büyük/verimli bir lig ile eşleşiyor mu (kaba, çok-dilli anahtar kelime kontrolü)."""
+    if not league:
+        return False
+    name = f" {league.lower()} "
+    return any(kw in name for kw in MAJOR_LEAGUE_KEYWORDS)
+
+
+def _hours_before_kickoff(first_seen: str, match_time: str):
+    """Sinyal, maç başlamadan kaç saat önce yakalanmış?"""
+    try:
+        fs = datetime.fromisoformat(str(first_seen).replace("Z", "+00:00"))
+        mt = datetime.fromisoformat(str(match_time).replace("Z", "+00:00"))
+        if fs.tzinfo is None:
+            fs = fs.replace(tzinfo=timezone.utc)
+        if mt.tzinfo is None:
+            mt = mt.replace(tzinfo=timezone.utc)
+        return (mt - fs).total_seconds() / 3600
+    except Exception:
+        return None
+
+
+FRESHNESS_TIERS = [
+    ("0-2 saat kala", 0, 2),
+    ("2-6 saat kala", 2, 6),
+    ("6-12 saat kala", 6, 12),
+    ("12+ saat kala", 12, float("inf")),
+]
+
+
+def _freshness_label(hours):
+    if hours is None:
+        return None
+    for label, lo, hi in FRESHNESS_TIERS:
+        if lo <= hours < hi:
+            return label
+    return None
+
+
+def _perf_from_rows(rows) -> dict:
+    """[(result, odd), ...] listesinden won/lost/staked/win_rate/roi_pct/roi_units hesaplar."""
+    won = sum(1 for r, _ in rows if r == "won")
+    lost = sum(1 for r, _ in rows if r == "lost")
+    roi_units = sum((odd - 1) for r, odd in rows if r == "won" and odd) - lost
+    staked = won + lost
+    return {
+        "won": won, "lost": lost, "staked": staked,
+        "win_rate": round(100 * won / staked, 1) if staked else None,
+        "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
+        "roi_units": round(roi_units, 2),
+    }
+
+
 ODDS_TIERS = [
     ("1.05 altı", 0.0, 1.05),
     ("1.05 - 1.49", 1.05, 1.50),
@@ -651,28 +729,56 @@ def record_consensus_snapshot(consensus: list) -> None:
         conn.close()
 
 
-def get_consensus_performance() -> dict:
-    """Tüm ortak düşen sinyallerinin toplam (birleşik) performansı."""
+def get_consensus_performance(days: int = None) -> dict:
+    """Tüm ortak düşen sinyallerinin toplam (birleşik) performansı. days verilirse son N güne filtreler."""
     conn = _get_conn()
     try:
-        resolved = conn.execute("""
-            SELECT result, odd FROM picks WHERE category='consensus' AND result IN ('won','lost')
-        """).fetchall()
-        pending = conn.execute("""
-            SELECT COUNT(*) FROM picks WHERE category='consensus' AND result='pending'
-        """).fetchone()[0]
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='consensus' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='consensus' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
     finally:
         conn.close()
-    won = sum(1 for r, _ in resolved if r == "won")
-    lost = sum(1 for r, _ in resolved if r == "lost")
-    roi_units = sum((odd - 1) for r, odd in resolved if r == "won" and odd) - lost
-    staked = won + lost
-    return {
-        "won": won, "lost": lost, "staked": staked, "pending": pending,
-        "win_rate": round(100 * won / staked, 1) if staked else None,
-        "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
-        "roi_units": round(roi_units, 2),
-    }
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
+
+
+def get_consensus_performance_by_league_tier() -> dict:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT league, result, odd FROM picks WHERE category='consensus' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    major_rows = [(r, o) for lg, r, o in rows if is_major_league(lg)]
+    minor_rows = [(r, o) for lg, r, o in rows if not is_major_league(lg)]
+    return {"Büyük Lig": _perf_from_rows(major_rows), "Diğer Ligler": _perf_from_rows(minor_rows)}
+
+
+def get_consensus_performance_by_freshness() -> dict:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT first_seen, match_time, result, odd FROM picks WHERE category='consensus' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    buckets = {label: [] for label, _, _ in FRESHNESS_TIERS}
+    for fs, mt, r, o in rows:
+        label = _freshness_label(_hours_before_kickoff(fs, mt))
+        if label:
+            buckets[label].append((r, o))
+    return {label: _perf_from_rows(rows_) for label, rows_ in buckets.items()}
 
 
 def get_consensus_performance_by_source_count() -> dict:
@@ -770,39 +876,73 @@ def split_consensus_by_quality(consensus: list) -> tuple:
     return playable, watching
 
 
-def get_dropping_performance(source: str = None) -> dict:
-    """drop_* kategorilerindeki (VolcanoBet/Admiral/Sansa düşen oran sinyalleri) toplam performansı döner.
-    source verilirse (volcano/admiral/sansa) sadece o kaynağa filtreler."""
+def get_dropping_performance(source: str = None, days: int = None) -> dict:
+    """drop_* kategorilerindeki düşen oran sinyallerinin toplam performansı.
+    source verilirse (volcano/admiral/sansa/...) sadece o kaynağa, days verilirse
+    (örn. 7) sadece son N gün içinde oynanan maçlara filtreler."""
     conn = _get_conn()
     try:
         category_filter = f"drop_{source}" if source else None
-        if category_filter:
-            resolved = conn.execute("""
-                SELECT result, odd FROM picks WHERE category=? AND result IN ('won','lost')
-            """, (category_filter,)).fetchall()
-            pending = conn.execute("""
-                SELECT COUNT(*) FROM picks WHERE category=? AND result='pending'
-            """, (category_filter,)).fetchone()[0]
-        else:
-            resolved = conn.execute("""
-                SELECT result, odd FROM picks WHERE category LIKE 'drop_%' AND result IN ('won','lost')
-            """).fetchall()
-            pending = conn.execute("""
-                SELECT COUNT(*) FROM picks WHERE category LIKE 'drop_%' AND result='pending'
-            """).fetchone()[0]
+        cat_sql = "category=?" if category_filter else "category LIKE 'drop_%'"
+        params = [category_filter] if category_filter else []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE {cat_sql} AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE {cat_sql} AND result='pending'{date_sql}
+        """, params).fetchone()[0]
     finally:
         conn.close()
 
-    won = sum(1 for r, _ in resolved if r == "won")
-    lost = sum(1 for r, _ in resolved if r == "lost")
-    roi_units = sum((odd - 1) for r, odd in resolved if r == "won" and odd) - lost
-    staked = won + lost
-    return {
-        "won": won, "lost": lost, "staked": staked, "pending": pending,
-        "win_rate": round(100 * won / staked, 1) if staked else None,
-        "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
-        "roi_units": round(roi_units, 2),
-    }
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
+
+
+def get_dropping_performance_by_league_tier(source: str = None) -> dict:
+    """Büyük lig vs diğer liglerde düşen oran sinyalleri nasıl performans gösteriyor?"""
+    conn = _get_conn()
+    try:
+        category_filter = f"drop_{source}" if source else None
+        cat_sql = "category=?" if category_filter else "category LIKE 'drop_%'"
+        params = [category_filter] if category_filter else []
+        rows = conn.execute(f"""
+            SELECT league, result, odd FROM picks WHERE {cat_sql} AND result IN ('won','lost')
+        """, params).fetchall()
+    finally:
+        conn.close()
+
+    major_rows = [(r, o) for lg, r, o in rows if is_major_league(lg)]
+    minor_rows = [(r, o) for lg, r, o in rows if not is_major_league(lg)]
+    return {"Büyük Lig": _perf_from_rows(major_rows), "Diğer Ligler": _perf_from_rows(minor_rows)}
+
+
+def get_dropping_performance_by_freshness(source: str = None) -> dict:
+    """Sinyal, maça kaç saat kala yakalanmışsa (first_seen vs match_time) performans nasıl değişiyor?"""
+    conn = _get_conn()
+    try:
+        category_filter = f"drop_{source}" if source else None
+        cat_sql = "category=?" if category_filter else "category LIKE 'drop_%'"
+        params = [category_filter] if category_filter else []
+        rows = conn.execute(f"""
+            SELECT first_seen, match_time, result, odd FROM picks WHERE {cat_sql} AND result IN ('won','lost')
+        """, params).fetchall()
+    finally:
+        conn.close()
+
+    buckets = {label: [] for label, _, _ in FRESHNESS_TIERS}
+    for fs, mt, r, o in rows:
+        hrs = _hours_before_kickoff(fs, mt)
+        label = _freshness_label(hrs)
+        if label:
+            buckets[label].append((r, o))
+    return {label: _perf_from_rows(rows_) for label, rows_ in buckets.items()}
 
 
 def get_analysis():
@@ -884,3 +1024,60 @@ def get_analysis():
         "reverse_picks": reverse_picks[:25],
         "favorite_picks": favorite_picks[:25],
     }
+
+
+def get_gunun_ozeti(window_hours: int = 24) -> list:
+    """Value/Favori+Value/Ters, Dusen Oran (8 kaynak) ve Ortak Dusenler'deki TUM 'oynanabilir'
+    (gecmisi kanitlanmis) sinyalleri tek listede birlestirir, kendi ROI'lerine gore siralar."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+    items = []
+
+    # 1) Value / Favori+Value / Ters
+    analysis = get_analysis()
+    seg_playable = get_playable_picks(analysis)
+    for c in seg_playable["playable"]:
+        items.append({
+            "type": c["perf"]["label"], "home": c["home"], "away": c["away"],
+            "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
+            "win_rate": c["perf"]["win_rate"], "roi_pct": c["perf"]["roi_pct"], "sample": c["perf"]["staked"],
+            "is_major": is_major_league(c["league"]),
+        })
+
+    # 2) Dusen Oran (tum kaynaklar)
+    dropping = get_dropping_odds()
+    tier_perf = get_dropping_performance_by_tier()
+    d_playable, _ = split_dropping_by_tier_quality(dropping, tier_perf)
+    for r in d_playable:
+        items.append({
+            "type": f"Düşen Oran ({r['source'].upper()})", "home": r["home"], "away": r["away"],
+            "league": r["league"], "time": r["time"], "side": r["side"], "odd": r["current_odd"],
+            "win_rate": r["tier_perf"]["win_rate"], "roi_pct": r["tier_perf"]["roi_pct"], "sample": r["tier_perf"]["staked"],
+            "is_major": is_major_league(r["league"]),
+        })
+
+    # 3) Ortak Dusenler
+    consensus = get_consensus_drops()
+    c_playable, _ = split_consensus_by_quality(consensus)
+    for c in c_playable:
+        items.append({
+            "type": "Ortak Düşen", "home": c["home"], "away": c["away"],
+            "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["avg_odd"],
+            "win_rate": c["combo_perf"]["win_rate"], "roi_pct": c["combo_perf"]["roi_pct"], "sample": c["combo_perf"]["staked"],
+            "is_major": is_major_league(c["league"]),
+        })
+
+    filtered = []
+    for it in items:
+        try:
+            dt = datetime.fromisoformat(str(it["time"]).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if now <= dt <= window_end:
+            it["time_parsed"] = dt
+            filtered.append(it)
+
+    filtered.sort(key=lambda x: -(x["roi_pct"] or 0))
+    return filtered
