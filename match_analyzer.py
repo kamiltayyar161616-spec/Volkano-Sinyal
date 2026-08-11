@@ -197,11 +197,12 @@ def get_recent_picks(limit=60) -> list:
 
 SEGMENT_MIN_SAMPLE = 15         # daha güvenilir olması için 5'ten 15'e çıkarıldı
 SEGMENT_MIN_WIN_RATE = 50.0      # artık sadece ROI pozitif değil, kazanma oranı da en az %50 olmalı
+CONSENSUS_MIN_SAMPLE = 8         # Ortak Düşenler doğası gereği çok daha seyrek veri üretiyor -- 15 asla dolmuyordu
 
 
-def _segment_qualifies(perf: dict) -> bool:
+def _segment_qualifies(perf: dict, min_sample: int = SEGMENT_MIN_SAMPLE) -> bool:
     """Bir segmentin 'oynanabilir' sayılması için: yeterli örneklem + en az %50 kazanma + pozitif ROI."""
-    if not perf or not perf.get("staked") or perf["staked"] < SEGMENT_MIN_SAMPLE:
+    if not perf or not perf.get("staked") or perf["staked"] < min_sample:
         return False
     if perf.get("win_rate") is None or perf["win_rate"] < SEGMENT_MIN_WIN_RATE:
         return False
@@ -909,7 +910,7 @@ def split_consensus_by_quality(consensus: list) -> tuple:
         perf = count_tier_stats.get(key)
         c["combo_label"] = f"{','.join(c['sources'])} · {tier}"
         c["combo_perf"] = perf
-        if _segment_qualifies(perf):
+        if _segment_qualifies(perf, min_sample=CONSENSUS_MIN_SAMPLE):
             playable.append(c)
         else:
             watching.append(c)
