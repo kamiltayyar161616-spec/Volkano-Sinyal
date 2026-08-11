@@ -202,7 +202,14 @@
       </div>
       <div class="meta">{{ c.league }} &middot; ort. oran <b>{{ '%.2f'|format(c.avg_odd) }}</b> &middot; {{ c.time[11:16] }} UTC</div>
       {% if c.combo_perf %}
-      <div class="meta" style="margin-top:5px; color:var(--chalk-faint);">{{ c.combo_label }} &middot; şimdilik n={{ c.combo_perf.staked }}</div>
+      <div class="meta" style="margin-top:5px; color:var(--chalk-faint);">{{ c.combo_label }}</div>
+      <div class="meta" style="margin-top:3px;">
+        <span style="color:var(--chalk-dim); font-weight:700;">ŞİMDİLİK:</span>
+        <span style="color:{{ 'var(--turf-bright)' if c.combo_perf.roi_pct and c.combo_perf.roi_pct > 0 else 'var(--clay)' }};">
+          %{{ c.combo_perf.win_rate }} kazanma &middot; {{ '+' if c.combo_perf.roi_pct and c.combo_perf.roi_pct > 0 else '' }}%{{ c.combo_perf.roi_pct }} ROI
+        </span>
+        <span style="color:var(--chalk-faint);">(n={{ c.combo_perf.staked }}/8)</span>
+      </div>
       {% else %}
       <div class="meta" style="margin-top:5px; color:var(--chalk-faint);">Bu kombinasyon henüz hiç sonuçlanmadı</div>
       {% endif %}
