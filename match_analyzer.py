@@ -848,8 +848,49 @@ def _consensus_combo_stats() -> dict:
     return stats
 
 
+def _consensus_count_tier_stats() -> dict:
+    """Her ('kac kaynak' x oran-kovasi) ikilisinin gecmis performansi -- tam kombinasyondan cok
+    daha kaba bir gruplama, bu yuzden cok daha hizli yeterli orneklemeye ulasir."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT source_count, odd, result FROM picks WHERE category='consensus' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+
+    def _count_label(sc):
+        if sc is None:
+            return "Bilinmiyor"
+        return "2 kaynak" if sc == 2 else ("3 kaynak" if sc == 3 else "4+ kaynak")
+
+    groups = {}
+    for sc, odd, result in rows:
+        count_label = _count_label(sc)
+        tier = get_tier_label(odd) if odd else "Bilinmiyor"
+        key = f"{count_label} · {tier}"
+        g = groups.setdefault(key, {"count_label": count_label, "tier": tier, "won": 0, "lost": 0, "roi_units": 0.0})
+        if result == "won":
+            g["won"] += 1
+            g["roi_units"] += (odd - 1) if odd else 0
+        else:
+            g["lost"] += 1
+            g["roi_units"] -= 1
+
+    stats = {}
+    for key, g in groups.items():
+        staked = g["won"] + g["lost"]
+        stats[key] = {
+            "count_label": g["count_label"], "tier": g["tier"], "won": g["won"], "lost": g["lost"], "staked": staked,
+            "win_rate": round(100 * g["won"] / staked, 1) if staked else None,
+            "roi_pct": round(100 * g["roi_units"] / staked, 1) if staked else None,
+            "roi_units": round(g["roi_units"], 2),
+        }
+    return stats
+
+
 def get_consensus_combo_breakdown(min_sample: int = 3) -> list:
-    """Hangi kaynak kombinasyonu + oran bandı ikilisi gerçekten kazandırıyor? (görüntüleme için, min örneklem filtreli)"""
+    """Hangi TAM kaynak kombinasyonu + oran bandi ikilisi gercekten kazandiriyor? (bilgi amacli, min orneklem filtreli)"""
     stats = _consensus_combo_stats()
     result_list = [v for v in stats.values() if v["staked"] >= min_sample]
     result_list.sort(key=lambda r: -(r["roi_pct"] if r["roi_pct"] is not None else -999))
@@ -857,15 +898,16 @@ def get_consensus_combo_breakdown(min_sample: int = 3) -> list:
 
 
 def split_consensus_by_quality(consensus: list) -> tuple:
-    """Güncel ortak düşen sinyalleri, kendi (kaynak-kombinasyonu × kova) geçmişine göre
-    'oynanabilir' / 'izlemede' diye ayırır."""
-    combo_stats = _consensus_combo_stats()
+    """Guncel ortak dusen sinyalleri, 'kac kaynak + oran bandi' (kaba, cabuk dolan) gecmisine gore
+    'oynanabilir' / 'izlemede' diye ayirir. Tam kombinasyon ismi ayrica gosterim icin saklanir."""
+    count_tier_stats = _consensus_count_tier_stats()
     playable, watching = [], []
     for c in consensus:
         tier = get_tier_label(c["avg_odd"])
-        combo_key = f"{','.join(c['sources'])} · {tier}"
-        perf = combo_stats.get(combo_key)
-        c["combo_label"] = combo_key
+        count_label = "2 kaynak" if c["source_count"] == 2 else ("3 kaynak" if c["source_count"] == 3 else "4+ kaynak")
+        key = f"{count_label} · {tier}"
+        perf = count_tier_stats.get(key)
+        c["combo_label"] = f"{','.join(c['sources'])} · {tier}"
         c["combo_perf"] = perf
         if _segment_qualifies(perf):
             playable.append(c)
