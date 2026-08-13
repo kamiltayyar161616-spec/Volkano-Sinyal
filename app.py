@@ -12,6 +12,7 @@ from match_analyzer import (
     get_dropping_performance_by_league_tier, get_dropping_performance_by_freshness,
     get_consensus_performance_by_league_tier, get_consensus_performance_by_freshness,
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
+    record_kupon_fill, get_kupon_active, get_kupon_performance,
 )
 from results_checker import check_pending_results
 
@@ -74,6 +75,15 @@ def gunun_ozeti():
                             overall_7d=overall_7d, active_page="ozet")
 
 
+@app.route("/kupon")
+def kupon():
+    active = get_kupon_active()
+    overall = get_kupon_performance()
+    overall_7d = get_kupon_performance(days=7)
+    return render_template("kupon.html", active=active, overall=overall,
+                            overall_7d=overall_7d, active_page="kupon")
+
+
 @app.route("/istatistik")
 def istatistik():
     stats = get_stats()
@@ -111,6 +121,7 @@ def _background_loop():
             record_dropping_snapshot(get_dropping_odds())
             record_consensus_snapshot(get_consensus_drops())
             record_ozet_snapshot(get_gunun_ozeti())
+            record_kupon_fill()
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 

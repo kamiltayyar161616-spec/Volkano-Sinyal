@@ -1168,3 +1168,144 @@ def get_ozet_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+# ---------------------------------------------------------------------------
+# KUPON — her zaman 10 aktif maclik, sadece kanitlanmis karli havuzlardan
+# beslenen, otomatik yenilenen sabit kupon.
+# ---------------------------------------------------------------------------
+
+KUPON_SIZE = 10
+KUPON_WINDOW_HOURS = 48
+KUPON_MIN_VOLCANO_SAMPLE = 10
+
+
+def _kupon_candidate_pool() -> list:
+    """Sadece kanitlanmis karli havuzlardan (Favori+Value, Value+para akisi teyitli,
+    sadece Volkano dusen oranlari, 2-3 kaynakli Ortak Dusenler) aday cikartir, ROI'ye gore siralar."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=KUPON_WINDOW_HOURS)
+
+    def in_window(t):
+        try:
+            dt = datetime.fromisoformat(str(t).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return now <= dt <= window_end
+        except Exception:
+            return False
+
+    pool = []
+
+    # 1) Favori+Value ve Value+para akisi teyitli
+    analysis = get_analysis()
+    pl = get_playable_picks(analysis)
+    for c in pl["playable"]:
+        if c["segment"] in ("favori_value", "value_mf") and in_window(c["time"]):
+            pool.append({
+                "type": c["perf"]["label"], "home": c["home"], "away": c["away"],
+                "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
+                "win_rate": c["perf"]["win_rate"], "roi_pct": c["perf"]["roi_pct"], "sample": c["perf"]["staked"],
+            })
+
+    # 2) Sadece Volkano dusen oranlari (genel Volkano performansi kanitliysa)
+    vperf = get_dropping_performance("volcano")
+    if vperf["staked"] and vperf["staked"] >= KUPON_MIN_VOLCANO_SAMPLE and vperf["win_rate"] and vperf["win_rate"] >= 50 and vperf["roi_pct"] and vperf["roi_pct"] > 0:
+        for r in get_dropping_odds():
+            if r["source"] == "volcano" and in_window(r["time"]):
+                pool.append({
+                    "type": "Volkano Düşen Oran", "home": r["home"], "away": r["away"],
+                    "league": r["league"], "time": r["time"], "side": r["side"], "odd": r["current_odd"],
+                    "win_rate": vperf["win_rate"], "roi_pct": vperf["roi_pct"], "sample": vperf["staked"],
+                })
+
+    # 3) Sadece 2-3 kaynakli Ortak Dusenler
+    count_tier = _consensus_count_tier_stats()
+    for c in get_consensus_drops():
+        if c["source_count"] not in (2, 3) or not in_window(c["time"]):
+            continue
+        tier = get_tier_label(c["avg_odd"])
+        count_label = "2 kaynak" if c["source_count"] == 2 else "3 kaynak"
+        key = f"{count_label} · {tier}"
+        perf = count_tier.get(key)
+        if _segment_qualifies(perf, min_sample=CONSENSUS_MIN_SAMPLE):
+            pool.append({
+                "type": f"Ortak ({','.join(c['sources'])})", "home": c["home"], "away": c["away"],
+                "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["avg_odd"],
+                "win_rate": perf["win_rate"], "roi_pct": perf["roi_pct"], "sample": perf["staked"],
+            })
+
+    pool.sort(key=lambda x: -(x["roi_pct"] or 0))
+    return pool
+
+
+def get_kupon_active(limit: int = KUPON_SIZE) -> list:
+    """Su an aktif (henuz sonuclanmamis, maci gelecekte olan) kupon maclarini doner."""
+    conn = _get_conn()
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        rows = conn.execute("""
+            SELECT id, home, away, league, match_time, side, odd, edge, prob, first_seen
+            FROM picks WHERE category='kupon' AND result='pending' AND match_time > ?
+            ORDER BY first_seen ASC LIMIT ?
+        """, (now_iso, limit)).fetchall()
+    finally:
+        conn.close()
+    cols = ["id", "home", "away", "league", "match_time", "side", "odd", "roi_pct", "win_rate", "first_seen"]
+    return [dict(zip(cols, row)) for row in rows]
+
+
+def record_kupon_fill() -> None:
+    """Kuponda bos slot varsa (aktif < KUPON_SIZE), kalite havuzundaki en iyi adaylarla doldurur."""
+    active = get_kupon_active(limit=1000)
+    if len(active) >= KUPON_SIZE:
+        return
+    needed = KUPON_SIZE - len(active)
+
+    conn = _get_conn()
+    try:
+        already = conn.execute("SELECT home, away, match_time FROM picks WHERE category='kupon'").fetchall()
+        already_set = {(h, a, mt) for h, a, mt in already}
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        added = 0
+        for c in _kupon_candidate_pool():
+            key = (c["home"], c["away"], c["time"])
+            if key in already_set:
+                continue
+            conn.execute("""
+                INSERT OR IGNORE INTO picks
+                (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+                VALUES ('kupon',?,?,?,?,?,?,?,?,0,?)
+            """, (c["home"], c["away"], c["league"], c["time"], c["side"], c["odd"],
+                  c.get("roi_pct"), c.get("win_rate"), now_iso))
+            already_set.add(key)
+            added += 1
+            if added >= needed:
+                break
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_kupon_performance(days: int = None) -> dict:
+    """Kuponun (gecmiste eklenmis TUM secimlerinin, aktif olsun olmasin) toplam performansi."""
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='kupon' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='kupon' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf

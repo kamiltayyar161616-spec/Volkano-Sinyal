@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Kupon{% endblock %}
+{% block page_tag %}KUPON{% endblock %}
+{% block subtitle %}Her zaman en fazla 10 aktif maç — sadece kanıtlanmış kârlı havuzlardan (Favori+Value, Value+para akışı teyitli, Volkano düşen oranlar, 2-3 kaynaklı Ortak Düşenler) besleniyor{% endblock %}
+
+{% block extra_style %}
+<style>
+  .overall-card{
+    margin:16px; padding:18px; border-radius:var(--radius);
+    background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
+    border:1px solid var(--navy-line); position:relative; overflow:hidden;
+  }
+  .overall-card::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(300px 140px at 90% -20%, rgba(242,169,59,0.10), transparent 70%);
+    pointer-events:none;
+  }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; position:relative; }
+  .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf-bright); }
+  .overall-num.neg{ color:var(--clay); }
+  .overall-num.flat{ color:var(--chalk-dim); }
+  .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
+  .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; position:relative; }
+
+  .slot-banner{
+    margin:0 16px 16px; padding:12px; border-radius:10px; text-align:center;
+    background:var(--navy); border:1px solid var(--navy-line);
+  }
+  .slot-banner .num{ font-size:20px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--amber-bright); }
+  .slot-banner .lbl{ font-size:9.5px; color:var(--chalk-faint); margin-top:2px; }
+
+  .kupon-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:12px 14px; margin:0 16px 8px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--turf-dim); border-radius:10px;
+  }
+  .kupon-num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:50%; background:var(--navy-line); color:var(--amber-bright);
+    font-size:11px; font-weight:800; font-family:'Space Grotesk', sans-serif; flex-shrink:0; margin-right:8px;
+  }
+  .kupon-left{ display:flex; align-items:flex-start; min-width:0; flex:1; }
+  .kupon-body{ min-width:0; }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; color:var(--chalk); }
+  .teams .side-chip{
+    display:inline-block; margin-left:6px; font-size:11px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:1px 7px; border-radius:5px; vertical-align:middle;
+  }
+  .meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:4px; line-height:1.6; }
+  .meta b{ color:var(--chalk-dim); font-weight:600; }
+  .type-tag{
+    display:inline-block; font-size:8.5px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:2px 6px; border-radius:5px; margin-top:5px;
+  }
+  .row-right{ text-align:right; flex-shrink:0; }
+  .perf-num{ font-size:15px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--turf-bright); }
+  .perf-sub{ font-size:9px; color:var(--chalk-faint); margin-top:2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="overall-card">
+  <div class="overall-title">KUPONUN KENDİ GEÇMİŞ PERFORMANSI</div>
+  {% if overall.staked and overall.staked > 0 %}
+    <div class="overall-grid">
+      <div>
+        <div class="overall-num {{ 'pos' if overall.win_rate >= 50 else 'neg' }}">%{{ overall.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if overall.roi_pct > 0 else 'neg' }}">{{ '+' if overall.roi_pct > 0 else '' }}%{{ overall.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ overall.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN MAÇ</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ overall.won }} kazandı / {{ overall.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if overall.roi_units > 0 else 'var(--clay)' }};">{{ '+' if overall.roi_units > 0 else '' }}{{ '%.2f'|format(overall.roi_units) }} birim</b></div>
+    <div class="overall-note" style="border-top:1px dashed var(--navy-line); padding-top:10px; margin-top:10px;">
+      <span style="color:var(--chalk-dim); font-weight:700;">SON 7 GÜN:</span>
+      {% if overall_7d.staked and overall_7d.staked > 0 %}
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.win_rate >= 50 else 'var(--clay)' }};">%{{ overall_7d.win_rate }} kazanma</span> &middot;
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if overall_7d.roi_pct > 0 else '' }}%{{ overall_7d.roi_pct }} ROI</span>
+        (n={{ overall_7d.staked }})
+      {% else %}
+        <span style="color:var(--chalk-faint);">henüz veri yok</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış bir kupon maçı yok — maçlar oynandıkça burada kazanma oranı ve ROI görünecek.</div>
+  {% endif %}
+</div>
+
+<div class="slot-banner">
+  <div class="num">{{ active|length }} / 10</div>
+  <div class="lbl">DOLU SLOT — YETERLİ ADAY YOKSA 10'UN ALTINDA KALIR</div>
+</div>
+
+<h2 class="section">🎫 AKTİF KUPON</h2>
+<div class="section-sub">Bir maç sonuçlanınca otomatik listeden düşer, yerine kalite havuzundan yeni bir aday gelir.</div>
+
+{% if active %}
+  {% for c in active %}
+  <div class="kupon-row">
+    <div class="kupon-left">
+      <span class="kupon-num">{{ loop.index }}</span>
+      <div class="kupon-body">
+        <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
+        <div class="meta">{{ c.league }} &middot; oran <b>{{ '%.2f'|format(c.odd) if c.odd else '?' }}</b> &middot; {{ c.match_time[11:16] }} UTC</div>
+      </div>
+    </div>
+    <div class="row-right">
+      <div class="perf-num" style="color:{{ 'var(--turf-bright)' if c.roi_pct and c.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if c.roi_pct and c.roi_pct > 0 else '' }}%{{ c.roi_pct }}</div>
+      <div class="perf-sub">%{{ c.win_rate }} kazanma</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an kalite kriterlerine uyan aktif maç yok — havuz doldukça burası dolacak.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block footer %}SADECE FAVORİ+VALUE / VALUE+PARA AKIŞI TEYİTLİ / VOLKANO DÜŞEN ORAN / 2-3 KAYNAKLI ORTAK DÜŞENLER <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}
