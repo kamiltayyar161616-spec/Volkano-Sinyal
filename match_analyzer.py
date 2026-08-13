@@ -1240,19 +1240,36 @@ def _kupon_candidate_pool() -> list:
 
 
 def get_kupon_active(limit: int = KUPON_SIZE) -> list:
-    """Su an aktif (henuz sonuclanmamis, maci gelecekte olan) kupon maclarini doner."""
+    """Su an aktif (henuz kickoff'u gelmemis, sonucu 'pending' olan) kupon maclarini doner.
+    Kickoff karsilastirmasi bilerek SQL string karsilastirmasi DEGIL, Python'da datetime olarak
+    yapiliyor -- kaynaklar farkli saat formati (Z'li/Z'siz/bosluklu) kullandigi icin string
+    karsilastirmasi bazen yanlis sonuc veriyordu (mac kickoff'u gectigi halde dusmuyordu)."""
     conn = _get_conn()
     try:
-        now_iso = datetime.now(timezone.utc).isoformat()
         rows = conn.execute("""
             SELECT id, home, away, league, match_time, side, odd, edge, prob, first_seen
-            FROM picks WHERE category='kupon' AND result='pending' AND match_time > ?
-            ORDER BY first_seen ASC LIMIT ?
-        """, (now_iso, limit)).fetchall()
+            FROM picks WHERE category='kupon' AND result='pending'
+            ORDER BY first_seen ASC
+        """).fetchall()
     finally:
         conn.close()
+
     cols = ["id", "home", "away", "league", "match_time", "side", "odd", "roi_pct", "win_rate", "first_seen"]
-    return [dict(zip(cols, row)) for row in rows]
+    now = datetime.now(timezone.utc)
+    active = []
+    for row in rows:
+        d = dict(zip(cols, row))
+        try:
+            dt = datetime.fromisoformat(str(d["match_time"]).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue  # tarih parse edilemiyorsa guvenli tarafta kal, listeye alma
+        if dt > now:
+            active.append(d)
+        if len(active) >= limit:
+            break
+    return active
 
 
 def record_kupon_fill() -> None:
