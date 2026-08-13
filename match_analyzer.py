@@ -364,40 +364,40 @@ def _load_source_matches(source: str) -> list:
         for e in _load_json(VOLCANO_FILE, []):
             odds = e.get("current_odds") or {}
             normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
-                                "match_time": e.get("match_time"), "league": e.get("league"), "odds": odds})
+                                "match_time": e.get("match_time"), "league": e.get("league") or "Bilinmeyen Lig", "odds": odds})
 
     elif source == "admiral":
         for e in _load_json(ADMIRAL_FILE, []):
             normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
-                                "match_time": e.get("match_time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+                                "match_time": e.get("match_time"), "league": e.get("league") or "Bilinmeyen Lig", "odds": e.get("odds") or {}})
 
     elif source == "sansa":
         for e in _wrap(_load_json(SANSA_FILE, {"matches": []}), "matches"):
             if e.get("sport") not in (None, "Football"):
                 continue
             normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
-                                "match_time": e.get("time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+                                "match_time": e.get("time"), "league": e.get("league") or "Bilinmeyen Lig", "odds": e.get("odds") or {}})
 
     elif source == "sbbet":
         for e in _wrap(_load_json(SBBET_FILE, {"matches": []}), "matches"):
             normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
-                                "match_time": e.get("time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+                                "match_time": e.get("time"), "league": e.get("league") or "Bilinmeyen Lig", "odds": e.get("odds") or {}})
 
     elif source == "hatbet":
         for e in _wrap(_load_json(HATBET_FILE, {"matches": []}), "matches"):
             normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
-                                "match_time": e.get("time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+                                "match_time": e.get("time"), "league": e.get("league") or "Bilinmeyen Lig", "odds": e.get("odds") or {}})
 
     elif source == "premier":
         for e in _wrap(_load_json(PREMIER_FILE, []), None):
             normalized.append({"home_team": e.get("home_team"), "away_team": e.get("away_team"),
-                                "match_time": e.get("match_time"), "league": e.get("league"), "odds": e.get("odds") or {}})
+                                "match_time": e.get("match_time"), "league": e.get("league") or "Bilinmeyen Lig", "odds": e.get("odds") or {}})
 
     elif source == "soccerbet":
         for e in _wrap(_load_json(SOCCERBET_FILE, {"matches": []}), "matches"):
             o = e.get("odds") or {}
             normalized.append({"home_team": e.get("home"), "away_team": e.get("away"),
-                                "match_time": e.get("kickOff"), "league": e.get("league"),
+                                "match_time": e.get("kickOff"), "league": e.get("league") or "Bilinmeyen Lig",
                                 "odds": {"1": o.get("home"), "X": o.get("draw"), "2": o.get("away")}})
 
     elif source == "maxbet":
@@ -407,7 +407,7 @@ def _load_source_matches(source: str) -> list:
             if mt and mt.endswith(" UTC"):
                 mt = mt[:-4].replace(" ", "T") + ":00Z"
             normalized.append({"home_team": e.get("team1"), "away_team": e.get("team2"),
-                                "match_time": mt, "league": e.get("competition"),
+                                "match_time": mt, "league": e.get("competition") or "Bilinmeyen Lig",
                                 "odds": {"1": o.get("home"), "X": o.get("draw"), "2": o.get("away")}})
 
     return normalized
