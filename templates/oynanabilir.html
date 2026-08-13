@@ -94,7 +94,7 @@
   <div class="row playable">
     <div class="row-left">
       <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
-      <div class="meta">{{ c.league }} &middot; {{ c.perf.label }} &middot; oran <b>{{ c.odd }}</b> &middot; <u>maçın olasılığı</u> <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
+      <div class="meta">{{ c.league }} &middot; {{ c.perf.label }} &middot; oran <b>{{ c.odd }}</b> &middot; <u>maçın olasılığı</u> <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time | localtime }}</div>
     </div>
     <div class="row-right">
       <div class="perf-title">SEGMENT GEÇMİŞİ (n={{ c.perf.staked }})</div>
@@ -115,7 +115,7 @@
   <div class="row">
     <div class="row-left">
       <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
-      <div class="meta">{{ c.league }} &middot; {{ c.perf.label if c.perf else 'segment yok' }} &middot; oran <b>{{ c.odd }}</b> &middot; <u>maçın olasılığı</u> <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time[11:16] }} UTC</div>
+      <div class="meta">{{ c.league }} &middot; {{ c.perf.label if c.perf else 'segment yok' }} &middot; oran <b>{{ c.odd }}</b> &middot; <u>maçın olasılığı</u> <b>%{{ c.prob }}</b> &middot; edge <b>%{{ c.edge }}</b> &middot; {{ c.time | localtime }}</div>
     </div>
     <div class="row-right">
       {% if c.perf and c.perf.win_rate is not none %}

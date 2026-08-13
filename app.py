@@ -13,10 +13,12 @@ from match_analyzer import (
     get_consensus_performance_by_league_tier, get_consensus_performance_by_freshness,
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
+    to_local_str,
 )
 from results_checker import check_pending_results
 
 app = Flask(__name__)
+app.jinja_env.filters["localtime"] = to_local_str
 
 RECORD_INTERVAL_SEC = 300      # her 5 dakikada bir yeni pick'leri kaydet
 RESULT_CHECK_INTERVAL_SEC = 900  # her 15 dakikada bir sonuçları kontrol et

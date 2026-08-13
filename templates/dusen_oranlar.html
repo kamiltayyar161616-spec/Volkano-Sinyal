@@ -147,7 +147,7 @@
     <div class="row {{ 'playable' if r.tier_perf and r.tier_perf.staked and r.tier_perf.win_rate and r.tier_perf.win_rate >= 50 and r.tier_perf.roi_pct and r.tier_perf.roi_pct > 0 else '' }}">
       <div class="row-left">
         <div class="teams">{{ r.home }} — {{ r.away }}<span class="side-chip">{{ r.side }}</span></div>
-        <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time[11:16] }} UTC</div>
+        <div class="meta">{{ r.league }} &middot; açılış <span class="strike">{{ '%.2f'|format(r.opening_odd) }}</span> → güncel <b>{{ '%.2f'|format(r.current_odd) }}</b> &middot; {{ r.time | localtime }}</div>
         {% if r.tier_perf and r.tier_perf.staked > 0 %}
         <div class="meta" style="margin-top:5px;">
           <span style="color:var(--chalk-dim);">{{ r.tier_label }} kovası:</span>

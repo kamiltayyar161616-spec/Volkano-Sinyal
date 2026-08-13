@@ -111,7 +111,7 @@
       <span class="kupon-num">{{ loop.index }}</span>
       <div class="kupon-body">
         <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
-        <div class="meta">{{ c.league }} &middot; oran <b>{{ '%.2f'|format(c.odd) if c.odd else '?' }}</b> &middot; {{ c.match_time[11:16] }} UTC</div>
+        <div class="meta">{{ c.league }} &middot; oran <b>{{ '%.2f'|format(c.odd) if c.odd else '?' }}</b> &middot; {{ c.match_time | localtime }}</div>
       </div>
     </div>
     <div class="row-right">

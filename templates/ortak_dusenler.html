@@ -172,7 +172,7 @@
       <div class="src-tags">
         {% for s in c.sources %}<span class="src-tag">{{ s.upper() }}</span>{% endfor %}
       </div>
-      <div class="meta">{{ c.league }} &middot; ort. oran <b>{{ '%.2f'|format(c.avg_odd) }}</b> &middot; {{ c.time[11:16] }} UTC</div>
+      <div class="meta">{{ c.league }} &middot; ort. oran <b>{{ '%.2f'|format(c.avg_odd) }}</b> &middot; {{ c.time | localtime }}</div>
       <div class="meta" style="margin-top:5px;">
         <span style="color:{{ 'var(--turf-bright)' if c.combo_perf.roi_pct and c.combo_perf.roi_pct > 0 else 'var(--clay)' }}; font-weight:700;">
           %{{ c.combo_perf.win_rate }} kazanma &middot; {{ '+' if c.combo_perf.roi_pct and c.combo_perf.roi_pct > 0 else '' }}%{{ c.combo_perf.roi_pct }} ROI
@@ -200,7 +200,7 @@
       <div class="src-tags">
         {% for s in c.sources %}<span class="src-tag">{{ s.upper() }}</span>{% endfor %}
       </div>
-      <div class="meta">{{ c.league }} &middot; ort. oran <b>{{ '%.2f'|format(c.avg_odd) }}</b> &middot; {{ c.time[11:16] }} UTC</div>
+      <div class="meta">{{ c.league }} &middot; ort. oran <b>{{ '%.2f'|format(c.avg_odd) }}</b> &middot; {{ c.time | localtime }}</div>
       {% if c.combo_perf %}
       <div class="meta" style="margin-top:5px; color:var(--chalk-faint);">{{ c.combo_label }}</div>
       <div class="meta" style="margin-top:3px;">

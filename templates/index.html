@@ -82,7 +82,7 @@
         <span>ORAN <b>{{ r.value_odd }}</b></span>
         <span>OLASILIK <b>%{{ r.value_prob }}</b></span>
         <span>{{ r.src }}</span>
-        <span class="time-tag">{{ r.time[11:16] }} UTC</span>
+        <span class="time-tag">{{ r.time | localtime }}</span>
       </div>
       <div class="edge-track"><div class="edge-fill {{ 'strong' if r.value_edge >= 4 else ('weak' if r.value_edge < 2 else '') }}" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
       <div class="edge-label"><span>EDGE</span><span>%{{ r.value_edge }}</span></div>
@@ -108,7 +108,7 @@
       <div class="row-stats">
         <span>ORAN <b>{{ r.value_odd }}</b></span>
         <span>OLASILIK <b>%{{ r.value_prob }}</b></span>
-        <span class="time-tag">{{ r.time[11:16] }} UTC</span>
+        <span class="time-tag">{{ r.time | localtime }}</span>
       </div>
       <div class="edge-track"><div class="edge-fill {{ 'strong' if r.value_edge >= 4 else ('weak' if r.value_edge < 2 else '') }}" style="width:{{ (r.value_edge * 18)|round(1) if r.value_edge < 5.5 else 100 }}%;"></div></div>
       <div class="edge-label"><span>EDGE</span><span>%{{ r.value_edge }}</span></div>
@@ -134,7 +134,7 @@
       <div class="row-stats">
         <span>ORAN <b>{{ r.reverse_odd }}</b></span>
         <span>VOLKANO OLASILIK <b>%{{ r.reverse_prob }}</b></span>
-        <span class="time-tag">{{ r.time[11:16] }} UTC</span>
+        <span class="time-tag">{{ r.time | localtime }}</span>
       </div>
       <div class="edge-track"><div class="edge-fill {{ 'strong' if r.reverse_edge >= 4 else ('weak' if r.reverse_edge < 2 else '') }}" style="width:{{ (r.reverse_edge * 18)|round(1) if r.reverse_edge < 5.5 else 100 }}%;"></div></div>
       <div class="edge-label"><span>TERS-EDGE</span><span>%{{ r.reverse_edge }}</span></div>

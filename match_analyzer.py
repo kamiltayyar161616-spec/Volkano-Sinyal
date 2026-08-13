@@ -11,6 +11,25 @@ import re
 import sqlite3
 import difflib
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+# VolcanoBet arayuzuyle ayni saat dilimi (Karadag, CET/CEST - DST'yi otomatik ayarlar)
+LOCAL_TZ = ZoneInfo("Europe/Podgorica")
+
+
+def to_local_str(iso_string) -> str:
+    """Bir ISO zaman damgasini (UTC varsayilarak) VolcanoBet arayuzuyle ayni yerel saate cevirip 'HH:MM' doner."""
+    if not iso_string:
+        return "?"
+    try:
+        dt = datetime.fromisoformat(str(iso_string).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(LOCAL_TZ).strftime("%H:%M")
+    except Exception:
+        s = str(iso_string)
+        return s[11:16] if len(s) >= 16 else "?"
+
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "picks.db")
 

@@ -106,7 +106,7 @@
       <span class="type-tag">{{ it.type }}</span>
       {% if it.is_major %}<span class="major-tag">BÜYÜK LİG</span>{% endif %}
       <div class="teams">{{ it.home }} — {{ it.away }}<span class="side-chip">{{ it.side }}</span></div>
-      <div class="meta">{{ it.league }} &middot; oran <b>{{ '%.2f'|format(it.odd) if it.odd else '?' }}</b> &middot; {{ it.time[11:16] }} UTC</div>
+      <div class="meta">{{ it.league }} &middot; oran <b>{{ '%.2f'|format(it.odd) if it.odd else '?' }}</b> &middot; {{ it.time | localtime }}</div>
     </div>
     <div class="row-right">
       <div class="perf-num" style="color:{{ 'var(--turf-bright)' if it.roi_pct and it.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if it.roi_pct and it.roi_pct > 0 else '' }}%{{ it.roi_pct }}</div>
