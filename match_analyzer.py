@@ -1334,11 +1334,15 @@ def _kupon_candidate_pool() -> list:
                     "win_rate": vperf["win_rate"], "roi_pct": vperf["roi_pct"], "sample": vperf["staked"],
                 })
 
-    # 3) Sadece 2-3 kaynakli Ortak Dusenler
+    # 3) Sadece 2-3 kaynakli Ortak Dusenler -- ARTIK EKSTRA SART: en az 1 "keskin" kaynak
+    #    (kazanan tarafi en isabetli tahmin eden kaynaklardan biri) de hemfikir olmali.
+    sharp_sources = get_sharp_sources()
     count_tier = _consensus_count_tier_stats()
     for c in get_consensus_drops():
         if c["source_count"] not in (2, 3) or not in_window(c["time"]):
             continue
+        if sharp_sources and not any(s in sharp_sources for s in c["sources"]):
+            continue  # hicbir keskin kaynak bu sinyale katilmamis -- atla
         tier = get_tier_label(c["avg_odd"])
         count_label = "2 kaynak" if c["source_count"] == 2 else "3 kaynak"
         key = f"{count_label} · {tier}"
@@ -1611,3 +1615,45 @@ def analyze_source_accuracy() -> dict:
         "leaderboard": leaderboard,
         "range_breakdown": range_breakdown,
     }
+
+
+# ---------------------------------------------------------------------------
+# KESKIN KAYNAK ONAYI -- analyze_source_accuracy() sonucunu 5 dakikada bir
+# arka planda tazeleyip bellekte tutuyoruz (her istekte 1sn'lik hesaplama
+# yapmamak icin). Kupon'un Ortak Dusenler adaylarina ekstra bir dogrulama
+# katmani olarak uygulanir: en az 1 "keskin" kaynagin da hemfikir olmasi sarti.
+# ---------------------------------------------------------------------------
+
+SHARP_SOURCE_MIN_PARTICIPATION = 100  # en az bu kadar mac uzerinden olculmus olmali
+SHARP_SOURCE_MIN_WIN_PCT = 40.0       # liderlik tablosunda en az bu isabet yuzdesi
+
+_source_accuracy_cache = {"leaderboard": [], "sharp_sources": [], "updated_at": None}
+
+
+def record_source_accuracy_cache() -> None:
+    """analyze_source_accuracy() sonucunu bellekte tazeler (arka plan dongusunden cagrilir)."""
+    try:
+        result = analyze_source_accuracy()
+        sharp = [
+            r["source"] for r in result["leaderboard"]
+            if r["total"] >= SHARP_SOURCE_MIN_PARTICIPATION and r["win_pct"] >= SHARP_SOURCE_MIN_WIN_PCT
+        ]
+        _source_accuracy_cache["leaderboard"] = result["leaderboard"]
+        _source_accuracy_cache["sharp_sources"] = sharp
+        _source_accuracy_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+    except Exception:
+        pass  # cache tazeleme basarisiz olursa eski deger kullanilmaya devam eder
+
+
+def get_sharp_sources() -> list:
+    """Kazanan tarafi en isabetli tahmin eden ('keskin') kaynaklarin listesini doner.
+    Cache boşsa (ilk calistirma) canli hesaplar."""
+    if not _source_accuracy_cache["leaderboard"]:
+        record_source_accuracy_cache()
+    return _source_accuracy_cache["sharp_sources"]
+
+
+def get_source_accuracy_leaderboard() -> list:
+    if not _source_accuracy_cache["leaderboard"]:
+        record_source_accuracy_cache()
+    return _source_accuracy_cache["leaderboard"]

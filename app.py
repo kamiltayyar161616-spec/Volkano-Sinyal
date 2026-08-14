@@ -14,7 +14,7 @@ from match_analyzer import (
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
     to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
-    get_reverse_flip_performance,
+    get_reverse_flip_performance, record_source_accuracy_cache, get_source_accuracy_leaderboard,
 )
 from results_checker import check_pending_results
 
@@ -65,11 +65,13 @@ def ortak_dusenler():
     combo_breakdown = get_consensus_combo_breakdown()
     league_tier_perf = get_consensus_performance_by_league_tier()
     freshness_perf = get_consensus_performance_by_freshness()
+    source_leaderboard = get_source_accuracy_leaderboard()
     playable, watching = split_consensus_by_quality(consensus)
     return render_template("ortak_dusenler.html", playable=playable, watching=watching,
                             overall=overall, overall_7d=overall_7d, by_count=by_count,
                             combo_breakdown=combo_breakdown, league_tier_perf=league_tier_perf,
-                            freshness_perf=freshness_perf, active_page="ortak")
+                            freshness_perf=freshness_perf, source_leaderboard=source_leaderboard,
+                            active_page="ortak")
 
 
 @app.route("/gunun-ozeti")
@@ -128,6 +130,7 @@ def _background_loop():
             record_dropping_snapshot(get_dropping_odds())
             record_consensus_snapshot(get_consensus_drops())
             record_ozet_snapshot(get_gunun_ozeti())
+            record_source_accuracy_cache()
             record_kupon_fill()
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
