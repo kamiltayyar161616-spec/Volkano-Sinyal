@@ -1490,3 +1490,80 @@ def get_reverse_flip_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+def analyze_source_accuracy() -> dict:
+    """Sonuclanan (final_score bilinen) her benzersiz mac icin, kaynaklarin KAZANAN tarafa
+    verdigi oranlari karsilastirir. En dusuk (= en 'kendinden emin', en dogru tahmin eden)
+    orani veren kaynak hangisi, ve hangi oran araliginda bu ustunluk daha belirgin?"""
+    conn = _get_conn()
+    try:
+        picks_rows = conn.execute("""
+            SELECT DISTINCT home, away, match_time, final_score
+            FROM picks WHERE final_score IS NOT NULL
+        """).fetchall()
+        odds_rows = conn.execute("""
+            SELECT source, home, away, current_1, current_x, current_2, match_time FROM odds_tracking
+        """).fetchall()
+    finally:
+        conn.close()
+
+    # ayni gercek mac farkli kategori/isim varyasyonuyla tekrar etmesin diye benzersizlestir
+    unique_matches = []
+    for h, a, mt, fs in picks_rows:
+        if any(_same_match(h, a, mt, u[0], u[1], u[2]) for u in unique_matches):
+            continue
+        unique_matches.append((h, a, mt, fs))
+
+    source_wins = {}       # kaynak -> kac macta EN DUSUK orani verdi (en isabetli tahmin)
+    source_totals = {}     # kaynak -> kac macta karsilastirmaya girebildi (verisi vardi)
+    range_wins = {}        # (kaynak, oran-bandi) -> kac kez o bantta en isabetli oldu
+
+    compared = 0
+    for h, a, mt, fs in unique_matches:
+        try:
+            hg, ag = map(int, fs.split("-"))
+        except Exception:
+            continue
+        actual_side = "1" if hg > ag else ("2" if hg < ag else "X")
+
+        best_per_source = {}
+        for src, oh, oa, o1, ox, o2, omt in odds_rows:
+            if not _same_match(h, a, mt, oh, oa, omt):
+                continue
+            odd = {"1": o1, "X": ox, "2": o2}.get(actual_side)
+            if odd:
+                best_per_source[src] = odd  # ayni kaynaktan tekrar gelirse son deger kalir
+
+        if len(best_per_source) < 2:
+            continue
+        compared += 1
+
+        min_source = min(best_per_source, key=best_per_source.get)
+        min_odd = best_per_source[min_source]
+
+        for src in best_per_source:
+            source_totals[src] = source_totals.get(src, 0) + 1
+        source_wins[min_source] = source_wins.get(min_source, 0) + 1
+
+        tier = get_tier_label(min_odd)
+        range_wins[(min_source, tier)] = range_wins.get((min_source, tier), 0) + 1
+
+    leaderboard = []
+    for src, total in source_totals.items():
+        wins = source_wins.get(src, 0)
+        leaderboard.append({
+            "source": src, "wins": wins, "total": total,
+            "win_pct": round(100 * wins / total, 1) if total else 0,
+        })
+    leaderboard.sort(key=lambda x: -x["win_pct"])
+
+    range_breakdown = {}
+    for (src, tier), n in range_wins.items():
+        range_breakdown.setdefault(src, {})[tier] = n
+
+    return {
+        "compared_matches": compared,
+        "leaderboard": leaderboard,
+        "range_breakdown": range_breakdown,
+    }
