@@ -94,6 +94,30 @@
   {% endif %}
 </div>
 
+<div class="overall-card" style="border-color:var(--amber);">
+  <div class="overall-title">🧪 DENEYSEL: TERS'İN TERSİ (reverse_underdog flip)</div>
+  <div class="overall-note" style="margin-top:0;">Sisteme hiç önerilmiyor, sadece pasif izleniyor — "ters" sinyalinin tersini gerçek piyasa oranıyla oynasaydık ne olurdu?</div>
+  {% if reverse_flip.staked and reverse_flip.staked > 0 %}
+    <div class="overall-grid" style="margin-top:12px;">
+      <div>
+        <div class="overall-num {{ 'pos' if reverse_flip.win_rate >= 50 else 'neg' }}">%{{ reverse_flip.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if reverse_flip.roi_pct > 0 else 'neg' }}">{{ '+' if reverse_flip.roi_pct > 0 else '' }}%{{ reverse_flip.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ reverse_flip.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ reverse_flip.won }} kazandı / {{ reverse_flip.lost }} kaybetti &middot; {{ reverse_flip.pending }} bekliyor</div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış veri yok — {{ reverse_flip.pending }} sinyal beklemede, veri birikince burada gerçek ROI görünecek.</div>
+  {% endif %}
+</div>
+
 <div class="count-banner">
   <div class="num">{{ items|length }}</div>
   <div class="lbl">ÖNÜMÜZDEKİ 24 SAATTE GÜVENİLİR SİNYAL &middot; ROI'YE GÖRE SIRALI</div>

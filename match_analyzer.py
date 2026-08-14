@@ -168,6 +168,16 @@ def record_snapshot(analysis: dict) -> None:
             rows.append(("reverse", r["home"], r["away"], r["league"], r["time"],
                           r["reverse_side"], r["reverse_odd"], r["reverse_edge"], r["reverse_prob"],
                           0, now_iso))
+            # reverse_underdog (prob<50) alt kumesi icin, flip taraf 1/2 ise (X flip edilemez),
+            # gercek flip oranini kaydedip pasif olarak izliyoruz -- reverse_favori zaten kotu
+            # cikti (flip test edildi, %14.7 kazanma), o yuzden ona hic dokunmuyoruz.
+            if r["reverse_prob"] < 50 and r["reverse_side"] in ("1", "2"):
+                flip_side = "2" if r["reverse_side"] == "1" else "1"
+                flip_odd = r.get("reverse_flip_odd")
+                if flip_odd is not None:
+                    rows.append(("reverse_flip", r["home"], r["away"], r["league"], r["time"],
+                                  flip_side, flip_odd, r["reverse_edge"], r["reverse_prob"],
+                                  0, now_iso))
         conn.executemany("""
             INSERT OR IGNORE INTO picks
             (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
@@ -1137,6 +1147,8 @@ def get_analysis():
         mfe = mf_map.get((ev["home_team"], ev["away_team"]))
         mf_side = mfe["money_flow_side"] if mfe else None
 
+        rev_flip_side = "2" if rev_side == "1" else ("1" if rev_side == "2" else None)
+
         results.append({
             "league": ev["league"],
             "home": ev["home_team"],
@@ -1152,6 +1164,7 @@ def get_analysis():
             "reverse_edge": round(rev_edges[rev_side] * 100, 2),
             "reverse_odd": ev["current_odds"].get(rev_side),
             "reverse_prob": round(vp.get(rev_side, 0) * 100, 1),
+            "reverse_flip_odd": ev["current_odds"].get(rev_flip_side) if rev_flip_side else None,
         })
 
     value_picks = sorted(results, key=lambda r: -r["value_edge"])
@@ -1446,6 +1459,31 @@ def get_kupon_performance(days: int = None) -> dict:
         """, params).fetchall()
         pending = conn.execute(f"""
             SELECT COUNT(*) FROM picks WHERE category='kupon' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
+
+
+def get_reverse_flip_performance(days: int = None) -> dict:
+    """DENEYSEL: 'reverse_underdog' sinyalinin TERSINI (flip taraf, gercek piyasa oraniyla)
+    pasif olarak izliyoruz -- henuz siteye 'oynanabilir' olarak onerilmiyor, sadece kendi
+    gercek performansini olcuyoruz. reverse_favori flip edilmiyor (test edildi, kotu cikti)."""
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='reverse_flip' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='reverse_flip' AND result='pending'{date_sql}
         """, params).fetchone()[0]
     finally:
         conn.close()

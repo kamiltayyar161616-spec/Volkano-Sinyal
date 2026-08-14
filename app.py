@@ -14,6 +14,7 @@ from match_analyzer import (
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
     to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
+    get_reverse_flip_performance,
 )
 from results_checker import check_pending_results
 
@@ -76,8 +77,9 @@ def gunun_ozeti():
     items = get_gunun_ozeti()
     overall = get_ozet_performance()
     overall_7d = get_ozet_performance(days=7)
+    reverse_flip = get_reverse_flip_performance()
     return render_template("gunun_ozeti.html", items=items, overall=overall,
-                            overall_7d=overall_7d, active_page="ozet")
+                            overall_7d=overall_7d, reverse_flip=reverse_flip, active_page="ozet")
 
 
 @app.route("/kupon")
