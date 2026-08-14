@@ -1508,9 +1508,10 @@ def analyze_source_accuracy() -> dict:
     verdigi oranlari karsilastirir. En dusuk (= en 'kendinden emin', en dogru tahmin eden)
     orani veren kaynak hangisi, ve hangi oran araliginda bu ustunluk daha belirgin?
 
-    NOT: Performans icin tum karsilastirmalar önce tarihe (YYYY-MM-DD) gore on-gruplaniyor --
-    binlerce satiri feed_size^2 bulanik karsilastirmadan kurtarir, sadece ayni/yakin gundeki
-    satirlar birbiriyle kiyaslanir."""
+    PERFORMANS: Once TAM (normalize edilmis) anahtar ile O(1) sozluk aramasi denenir --
+    coğu mac boyle cozulur. SADECE tam eslesme bulunamayan (nadir, farkli yazim) durumlarda
+    o gunun havuzuyla sinirli bulanik (difflib) aramaya dusulur. Boylece binlerce satirlik
+    veri saniyeler icinde islenir, eskisi gibi O(n^2) bulanik karsilastirmaya girmez."""
     conn = _get_conn()
     try:
         picks_rows = conn.execute("""
@@ -1523,50 +1524,60 @@ def analyze_source_accuracy() -> dict:
     finally:
         conn.close()
 
-    # odds_rows'u gune gore on-index'le (bir gun sonrasini da ekle, gece yarisi tasmalari icin)
-    odds_by_date = {}
-    for row in odds_rows:
-        src, oh, oa, o1, ox, o2, omt = row
-        odds_by_date.setdefault(_date_bucket(omt), []).append(row)
+    # 1) TAM anahtar index (hizli yol): (gun, norm_home, norm_away) -> [(kaynak, o1, ox, o2), ...]
+    odds_exact = {}
+    odds_by_date = {}  # bulanik fallback icin, sadece o gunun havuzu
+    for src, oh, oa, o1, ox, o2, omt in odds_rows:
+        dk = _date_bucket(omt)
+        odds_exact.setdefault((dk, _norm(oh), _norm(oa)), []).append((src, o1, ox, o2))
+        odds_by_date.setdefault(dk, []).append((src, oh, oa, o1, ox, o2, omt))
 
-    # picks_rows'u da gune gore grupla, benzersizlestirmeyi SADECE ayni gun icinde yap (hizli)
-    picks_by_date = {}
-    for h, a, mt, fs in picks_rows:
-        picks_by_date.setdefault(_date_bucket(mt), []).append((h, a, mt, fs))
-
+    # 2) picks tekilleştirme -- TAM anahtar ile (difflib yok, cok daha hizli)
+    seen = set()
     unique_matches = []
-    for date_key, items in picks_by_date.items():
-        day_uniques = []
-        for h, a, mt, fs in items:
-            if any(_same_match(h, a, mt, u[0], u[1], u[2]) for u in day_uniques):
-                continue
-            day_uniques.append((h, a, mt, fs))
-        unique_matches.extend(day_uniques)
+    for h, a, mt, fs in picks_rows:
+        dk = _date_bucket(mt)
+        key = (dk, _norm(h), _norm(a))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_matches.append((h, a, mt, fs, dk, key))
 
     source_wins = {}       # kaynak -> kac macta EN DUSUK orani verdi (en isabetli tahmin)
     source_totals = {}     # kaynak -> kac macta karsilastirmaya girebildi (verisi vardi)
     range_wins = {}        # (kaynak, oran-bandi) -> kac kez o bantta en isabetli oldu
 
     compared = 0
-    for h, a, mt, fs in unique_matches:
+    for h, a, mt, fs, dk, key in unique_matches:
         try:
             hg, ag = map(int, fs.split("-"))
         except Exception:
             continue
         actual_side = "1" if hg > ag else ("2" if hg < ag else "X")
 
-        date_key = _date_bucket(mt)
-        next_key = (datetime.strptime(date_key, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        prev_key = (datetime.strptime(date_key, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-        candidate_odds = odds_by_date.get(date_key, []) + odds_by_date.get(next_key, []) + odds_by_date.get(prev_key, [])
+        next_dk = (datetime.strptime(dk, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        prev_dk = (datetime.strptime(dk, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        # once TAM eslesme (O(1), coğu mac icin yeterli)
+        matched = list(odds_exact.get(key, []))
+        matched += odds_exact.get((next_dk, key[1], key[2]), [])
+        matched += odds_exact.get((prev_dk, key[1], key[2]), [])
 
         best_per_source = {}
-        for src, oh, oa, o1, ox, o2, omt in candidate_odds:
-            if not _same_match(h, a, mt, oh, oa, omt):
-                continue
-            odd = {"1": o1, "X": ox, "2": o2}.get(actual_side)
-            if odd:
-                best_per_source[src] = odd  # ayni kaynaktan tekrar gelirse son deger kalir
+        if matched:
+            for src, o1, ox, o2 in matched:
+                odd = {"1": o1, "X": ox, "2": o2}.get(actual_side)
+                if odd:
+                    best_per_source[src] = odd
+        else:
+            # tam eslesme yok (nadir) -- SADECE bu durumda o gunun havuzunda bulanik ara
+            candidates = odds_by_date.get(dk, []) + odds_by_date.get(next_dk, []) + odds_by_date.get(prev_dk, [])
+            for src, oh, oa, o1, ox, o2, omt in candidates:
+                if not _same_match(h, a, mt, oh, oa, omt):
+                    continue
+                odd = {"1": o1, "X": ox, "2": o2}.get(actual_side)
+                if odd:
+                    best_per_source[src] = odd
 
         if len(best_per_source) < 2:
             continue
