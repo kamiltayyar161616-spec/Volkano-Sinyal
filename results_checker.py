@@ -73,6 +73,30 @@ def _side_from_goals(home_goals, away_goals):
     return "X"
 
 
+def _fuzzy_find_fixture(key, fx_index):
+    """Tam eslesme bulunamayinca dener: once 'biri digerinin alt metni mi' (orn. 'club 1 de marzo'
+    normalize sonrasi '1 de marzo' -> API'de '1 de marzo pilar' icinde tamamen geciyor), sonra
+    bulanik benzerlik (once %80 idi, cok yakin ama az altinda kalan eslesmeleri kacirdigi icin
+    %72'ye indirildi -- deplasman takimi de ayrica dogrulandigindan yanlis eslesme riski dusuk)."""
+    home_key, away_key = key
+    keys = list(fx_index.keys())
+
+    # 1) alt metin kisayolu: biri digerinin icinde tamamen geciyorsa (bosluklarla sinirli)
+    for h, a in keys:
+        home_ok = home_key == h or f" {home_key} " in f" {h} " or f" {h} " in f" {home_key} "
+        away_ok = away_key == a or f" {away_key} " in f" {a} " or f" {a} " in f" {away_key} "
+        if home_ok and away_ok and home_key and away_key:
+            return fx_index[(h, a)]
+
+    # 2) bulanik benzerlik
+    cand = difflib.get_close_matches(home_key, [k[0] for k in keys], n=5, cutoff=0.72)
+    for c in cand:
+        for k in keys:
+            if k[0] == c and difflib.SequenceMatcher(None, k[1], away_key).ratio() > 0.70:
+                return fx_index[k]
+    return None
+
+
 def check_pending_results() -> dict:
     if not API_KEY:
         return {"checked": 0, "updated": 0, "skipped_no_key": True}
@@ -81,6 +105,13 @@ def check_pending_results() -> dict:
     conn = _get_conn()
     updated = 0
     checked = 0
+    fixtures_cache = {}
+
+    def get_fixtures(date_key):
+        if date_key not in fixtures_cache:
+            fixtures_cache[date_key] = _fetch_fixtures_by_date(date_key)
+        return fixtures_cache[date_key]
+
     try:
         cur = conn.execute("SELECT id, home, away, match_time FROM picks WHERE result = 'pending'")
         pending = cur.fetchall()
@@ -99,7 +130,10 @@ def check_pending_results() -> dict:
             by_date.setdefault(date_key, []).append((pid, home, away, dt))
 
         for date_key, items in by_date.items():
-            fixtures = _fetch_fixtures_by_date(date_key)
+            # AllSportsAPI gece yarisina yakin maclari bazen bir sonraki gune koyuyor --
+            # hem macin kendi tarihini hem bir sonraki gunu birlikte ariyoruz.
+            next_key = (datetime.strptime(date_key, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+            fixtures = get_fixtures(date_key) + get_fixtures(next_key)
             checked += len(items)
             if not fixtures:
                 continue
@@ -117,15 +151,7 @@ def check_pending_results() -> dict:
                 key = (_norm(home), _norm(away))
                 fx = fx_index.get(key)
                 if not fx:
-                    keys = list(fx_index.keys())
-                    cand = difflib.get_close_matches(key[0], [k[0] for k in keys], n=3, cutoff=0.8)
-                    for c in cand:
-                        for k in keys:
-                            if k[0] == c and difflib.SequenceMatcher(None, k[1], key[1]).ratio() > 0.75:
-                                fx = fx_index[k]
-                                break
-                        if fx:
-                            break
+                    fx = _fuzzy_find_fixture(key, fx_index)
                 if not fx:
                     continue
 
