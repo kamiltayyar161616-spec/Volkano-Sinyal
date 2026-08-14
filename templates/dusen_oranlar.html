@@ -5,6 +5,15 @@
 
 {% block extra_style %}
 <style>
+  .combo-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:11px 14px; margin:0 16px 6px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--navy-line); border-radius:10px;
+  }
+  .combo-label{ font-size:11.5px; font-weight:600; color:var(--chalk); }
+  .combo-sub{ font-size:9px; color:var(--chalk-faint); margin-top:3px; }
+  .combo-num{ font-size:15px; font-weight:800; font-family:'Space Grotesk', sans-serif; text-align:right; }
   .tabs{
     display:flex; gap:3px; margin:16px 16px 0; background:var(--navy); border:1px solid var(--navy-line);
     border-radius:12px; padding:4px; overflow-x:auto; -webkit-overflow-scrolling:touch;
@@ -131,6 +140,47 @@
   </div>
   {% endfor %}
 </div>
+
+<h2 class="section">📉 DÜŞÜŞ BÜYÜKLÜĞÜ (KAÇ % DÜŞTÜ)</h2>
+<div class="section-sub">Oranın kendisi kadar, ne kadar düştüğü de önemli — küçük bir düşüş mü, yoksa %30+ gibi sert bir çöküş mü?</div>
+<div style="margin:0 16px 20px; display:flex; flex-direction:column; gap:8px;">
+  {% for label, t in drop_magnitude_perf.items() %}
+  <div class="row" style="cursor:default;">
+    <div class="row-left">
+      <div class="teams">{{ label }} düşüş</div>
+      <div class="meta">{{ t.staked }} sonuçlanan sinyal &middot; {{ t.won }} kazandı / {{ t.lost }} kaybetti</div>
+    </div>
+    <div class="row-right">
+      {% if t.staked > 0 %}
+        <div class="drop-num" style="color:{{ 'var(--turf-bright)' if t.roi_pct and t.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if t.roi_pct and t.roi_pct > 0 else '' }}%{{ t.roi_pct }}</div>
+        <div class="drop-sub">ROI &middot; %{{ t.win_rate }} kazanma</div>
+      {% else %}
+        <div class="drop-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="section">🧮 ÇAPRAZ TABLO (ORAN BANDI × DÜŞÜŞ BÜYÜKLÜĞÜ)</h2>
+<div class="section-sub">İkisi birlikte gerçekte ne kazandırıyor — en az 5 sonuçlanmış sinyali olan hücreler, ROI'ye göre sıralı.</div>
+{% set cross_rows = cross_matrix.items()|selectattr('1.staked', 'ge', 5)|list %}
+{% if cross_rows %}
+  {% for key, t in cross_rows|sort(attribute='1.roi_pct', reverse=true) %}
+  <div class="combo-row">
+    <div>
+      <div class="combo-label">{{ key }}</div>
+      <div class="combo-sub">{{ t.won }} kazandı / {{ t.lost }} kaybetti (n={{ t.staked }})</div>
+    </div>
+    <div>
+      <div class="combo-num" style="color:{{ 'var(--turf-bright)' if t.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if t.roi_pct > 0 else '' }}%{{ t.roi_pct }}</div>
+      <div class="drop-sub">%{{ t.win_rate }} kazanma</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Henüz en az 5 sonuçlanmış sinyali olan bir hücre yok.</div>
+{% endif %}
 
 <nav class="tabs">
   <button class="active" data-target="admiral">ADMIRAL</button>

@@ -628,6 +628,88 @@ def get_tier_label(odd: float) -> str:
     return None
 
 
+DROP_MAGNITUDE_TIERS = [
+    ("5-10%", 5.0, 10.0),
+    ("10-20%", 10.0, 20.0),
+    ("20-30%", 20.0, 30.0),
+    ("30%+", 30.0, float("inf")),
+]
+
+
+def get_dropping_performance_by_drop_magnitude() -> dict:
+    """Sinyalin dustugu yuzde (5-10 / 10-20 / 20-30 / 30+) kendi basina ne kadar guvenilir?
+    (Not: 'edge' kolonu drop_ kategorilerinde dusus yuzdesini tutuyor.)"""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT result, odd, edge FROM picks WHERE category LIKE 'drop_%' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+
+    result = {}
+    for label, lo, hi in DROP_MAGNITUDE_TIERS:
+        won = lost = 0
+        roi_units = 0.0
+        for r, odd, drop_pct in rows:
+            if drop_pct is None or not (lo <= drop_pct < hi):
+                continue
+            if r == "won":
+                won += 1
+                roi_units += (odd - 1) if odd else 0
+            else:
+                lost += 1
+                roi_units -= 1
+        staked = won + lost
+        result[label] = {
+            "won": won, "lost": lost, "staked": staked,
+            "win_rate": round(100 * won / staked, 1) if staked else None,
+            "roi_pct": round(100 * roi_units / staked, 1) if staked else None,
+            "roi_units": round(roi_units, 2),
+        }
+    return result
+
+
+def get_dropping_performance_cross_matrix() -> dict:
+    """Oran bandi x dusus buyuklugu capraz tablosu -- her ikisi de gecerli olan hucrenin
+    kendi performansini gosterir (orn. '1.50-1.99 bandi + %20-30 dusus' -> %X kazanma)."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT result, odd, edge FROM picks WHERE category LIKE 'drop_%' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+
+    matrix = {}
+    for odd_label, odd_lo, odd_hi in ODDS_TIERS:
+        for drop_label, drop_lo, drop_hi in DROP_MAGNITUDE_TIERS:
+            won = lost = 0
+            roi_units = 0.0
+            for r, odd, drop_pct in rows:
+                if odd is None or drop_pct is None:
+                    continue
+                if not (odd_lo <= odd < odd_hi) or not (drop_lo <= drop_pct < drop_hi):
+                    continue
+                if r == "won":
+                    won += 1
+                    roi_units += (odd - 1)
+                else:
+                    lost += 1
+                    roi_units -= 1
+            staked = won + lost
+            if staked == 0:
+                continue
+            key = f"{odd_label} · {drop_label}"
+            matrix[key] = {
+                "won": won, "lost": lost, "staked": staked,
+                "win_rate": round(100 * won / staked, 1),
+                "roi_pct": round(100 * roi_units / staked, 1),
+                "roi_units": round(roi_units, 2),
+            }
+    return matrix
+
+
 def get_dropping_performance_by_tier() -> dict:
     """Tüm kaynaklardaki (Volkano+Admiral+Sansa) düşen oran sinyallerini, sinyal anındaki
     orana göre aralıklara bölüp her aralığın kazanma oranı ve ROI'sini hesaplar."""

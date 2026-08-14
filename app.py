@@ -13,7 +13,7 @@ from match_analyzer import (
     get_consensus_performance_by_league_tier, get_consensus_performance_by_freshness,
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
-    to_local_str,
+    to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
 )
 from results_checker import check_pending_results
 
@@ -46,10 +46,13 @@ def dusen_oranlar():
     playable, watching = split_dropping_by_tier_quality(dropping, tier_perf)
     league_tier_perf = get_dropping_performance_by_league_tier()
     freshness_perf = get_dropping_performance_by_freshness()
+    drop_magnitude_perf = get_dropping_performance_by_drop_magnitude()
+    cross_matrix = get_dropping_performance_cross_matrix()
     return render_template("dusen_oranlar.html", playable=playable, watching=watching,
                             perf_by_source=perf_by_source, perf_by_source_7d=perf_by_source_7d,
                             tier_perf=tier_perf, league_tier_perf=league_tier_perf,
-                            freshness_perf=freshness_perf, active_page="dusen")
+                            freshness_perf=freshness_perf, drop_magnitude_perf=drop_magnitude_perf,
+                            cross_matrix=cross_matrix, active_page="dusen")
 
 
 @app.route("/ortak-dusenler")
