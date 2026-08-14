@@ -1492,10 +1492,25 @@ def get_reverse_flip_performance(days: int = None) -> dict:
     return perf
 
 
+def _date_bucket(mt: str) -> str:
+    """Bir zaman damgasindan sadece YYYY-MM-DD kismini cikarir (hizli on-gruplama icin)."""
+    try:
+        dt = datetime.fromisoformat(str(mt).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        return str(mt)[:10]
+
+
 def analyze_source_accuracy() -> dict:
     """Sonuclanan (final_score bilinen) her benzersiz mac icin, kaynaklarin KAZANAN tarafa
     verdigi oranlari karsilastirir. En dusuk (= en 'kendinden emin', en dogru tahmin eden)
-    orani veren kaynak hangisi, ve hangi oran araliginda bu ustunluk daha belirgin?"""
+    orani veren kaynak hangisi, ve hangi oran araliginda bu ustunluk daha belirgin?
+
+    NOT: Performans icin tum karsilastirmalar önce tarihe (YYYY-MM-DD) gore on-gruplaniyor --
+    binlerce satiri feed_size^2 bulanik karsilastirmadan kurtarir, sadece ayni/yakin gundeki
+    satirlar birbiriyle kiyaslanir."""
     conn = _get_conn()
     try:
         picks_rows = conn.execute("""
@@ -1508,12 +1523,25 @@ def analyze_source_accuracy() -> dict:
     finally:
         conn.close()
 
-    # ayni gercek mac farkli kategori/isim varyasyonuyla tekrar etmesin diye benzersizlestir
-    unique_matches = []
+    # odds_rows'u gune gore on-index'le (bir gun sonrasini da ekle, gece yarisi tasmalari icin)
+    odds_by_date = {}
+    for row in odds_rows:
+        src, oh, oa, o1, ox, o2, omt = row
+        odds_by_date.setdefault(_date_bucket(omt), []).append(row)
+
+    # picks_rows'u da gune gore grupla, benzersizlestirmeyi SADECE ayni gun icinde yap (hizli)
+    picks_by_date = {}
     for h, a, mt, fs in picks_rows:
-        if any(_same_match(h, a, mt, u[0], u[1], u[2]) for u in unique_matches):
-            continue
-        unique_matches.append((h, a, mt, fs))
+        picks_by_date.setdefault(_date_bucket(mt), []).append((h, a, mt, fs))
+
+    unique_matches = []
+    for date_key, items in picks_by_date.items():
+        day_uniques = []
+        for h, a, mt, fs in items:
+            if any(_same_match(h, a, mt, u[0], u[1], u[2]) for u in day_uniques):
+                continue
+            day_uniques.append((h, a, mt, fs))
+        unique_matches.extend(day_uniques)
 
     source_wins = {}       # kaynak -> kac macta EN DUSUK orani verdi (en isabetli tahmin)
     source_totals = {}     # kaynak -> kac macta karsilastirmaya girebildi (verisi vardi)
@@ -1527,8 +1555,13 @@ def analyze_source_accuracy() -> dict:
             continue
         actual_side = "1" if hg > ag else ("2" if hg < ag else "X")
 
+        date_key = _date_bucket(mt)
+        next_key = (datetime.strptime(date_key, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        prev_key = (datetime.strptime(date_key, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        candidate_odds = odds_by_date.get(date_key, []) + odds_by_date.get(next_key, []) + odds_by_date.get(prev_key, [])
+
         best_per_source = {}
-        for src, oh, oa, o1, ox, o2, omt in odds_rows:
+        for src, oh, oa, o1, ox, o2, omt in candidate_odds:
             if not _same_match(h, a, mt, oh, oa, omt):
                 continue
             odd = {"1": o1, "X": ox, "2": o2}.get(actual_side)
