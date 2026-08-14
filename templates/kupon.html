@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Kupon{% endblock %}
 {% block page_tag %}KUPON{% endblock %}
-{% block subtitle %}Her zaman en fazla 10 aktif maç — sadece kanıtlanmış kârlı havuzlardan (Favori+Value, Value+para akışı teyitli, Volkano düşen oranlar, 2-3 kaynaklı Ortak Düşenler) besleniyor{% endblock %}
+{% block subtitle %}Her zaman en fazla 20 aktif maç — sadece %75 ve üzeri kanıtlanmış kazanma oranına sahip havuzlardan (Favori+Value, Value+para akışı teyitli, Volkano düşen oranlar, 2-3 kaynaklı Ortak Düşenler) besleniyor{% endblock %}
 
 {% block extra_style %}
 <style>
@@ -97,8 +97,8 @@
 </div>
 
 <div class="slot-banner">
-  <div class="num">{{ active|length }} / 10</div>
-  <div class="lbl">DOLU SLOT — YETERLİ ADAY YOKSA 10'UN ALTINDA KALIR</div>
+  <div class="num">{{ active|length }} / 20</div>
+  <div class="lbl">DOLU SLOT — YETERLİ ADAY YOKSA 20'NİN ALTINDA KALIR</div>
 </div>
 
 <h2 class="section">🎫 AKTİF KUPON</h2>

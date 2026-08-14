@@ -1194,9 +1194,10 @@ def get_ozet_performance(days: int = None) -> dict:
 # beslenen, otomatik yenilenen sabit kupon.
 # ---------------------------------------------------------------------------
 
-KUPON_SIZE = 10
+KUPON_SIZE = 20
 KUPON_WINDOW_HOURS = 48
 KUPON_MIN_VOLCANO_SAMPLE = 10
+KUPON_MIN_WIN_RATE = 75.0   # kupon icin, diger sayfalardan (esik %50) daha siki -- %75 alti hic girmesin
 
 
 def _kupon_candidate_pool() -> list:
@@ -1253,6 +1254,9 @@ def _kupon_candidate_pool() -> list:
                 "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["avg_odd"],
                 "win_rate": perf["win_rate"], "roi_pct": perf["roi_pct"], "sample": perf["staked"],
             })
+
+    # Kupon icin genel esikten (%50) daha siki: %75 alti kazanma oranina sahip hicbir aday kupona girmesin
+    pool = [p for p in pool if p.get("win_rate") is not None and p["win_rate"] >= KUPON_MIN_WIN_RATE]
 
     pool.sort(key=lambda x: -(x["roi_pct"] or 0))
     return pool
