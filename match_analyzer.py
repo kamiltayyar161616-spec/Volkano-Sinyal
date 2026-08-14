@@ -1291,8 +1291,29 @@ def get_kupon_active(limit: int = KUPON_SIZE) -> list:
     return active
 
 
+def _same_match(a_home, a_away, a_time, b_home, b_away, b_time) -> bool:
+    """Iki kaydin gercekte AYNI mac olup olmadigini bulanik isim + yakin saat karsilastirmasiyla kontrol eder
+    (farkli kaynaklar ayni maci hafif farkli yazimla/saat formatiyla bildirebiliyor)."""
+    if _norm(a_home) != _norm(b_home) or _norm(a_away) != _norm(b_away):
+        if (difflib.SequenceMatcher(None, _norm(a_home), _norm(b_home)).ratio() < 0.82 or
+                difflib.SequenceMatcher(None, _norm(a_away), _norm(b_away)).ratio() < 0.82):
+            return False
+    try:
+        dt_a = datetime.fromisoformat(str(a_time).replace("Z", "+00:00"))
+        dt_b = datetime.fromisoformat(str(b_time).replace("Z", "+00:00"))
+        if dt_a.tzinfo is None:
+            dt_a = dt_a.replace(tzinfo=timezone.utc)
+        if dt_b.tzinfo is None:
+            dt_b = dt_b.replace(tzinfo=timezone.utc)
+        return abs((dt_a - dt_b).total_seconds()) < 6 * 3600
+    except Exception:
+        return a_time == b_time
+
+
 def record_kupon_fill() -> None:
-    """Kuponda bos slot varsa (aktif < KUPON_SIZE), kalite havuzundaki en iyi adaylarla doldurur."""
+    """Kuponda bos slot varsa (aktif < KUPON_SIZE), kalite havuzundaki en iyi adaylarla doldurur.
+    Ayni gercek macin (farkli kaynaklardan hafif farkli isim/saatle) tekrar eklenmemesi icin
+    bulanik eslestirme kullanir."""
     active = get_kupon_active(limit=1000)
     if len(active) >= KUPON_SIZE:
         return
@@ -1301,13 +1322,13 @@ def record_kupon_fill() -> None:
     conn = _get_conn()
     try:
         already = conn.execute("SELECT home, away, match_time FROM picks WHERE category='kupon'").fetchall()
-        already_set = {(h, a, mt) for h, a, mt in already}
+        already_list = list(already)
 
         now_iso = datetime.now(timezone.utc).isoformat()
         added = 0
         for c in _kupon_candidate_pool():
-            key = (c["home"], c["away"], c["time"])
-            if key in already_set:
+            is_dup = any(_same_match(c["home"], c["away"], c["time"], h, a, mt) for h, a, mt in already_list)
+            if is_dup:
                 continue
             conn.execute("""
                 INSERT OR IGNORE INTO picks
@@ -1315,7 +1336,7 @@ def record_kupon_fill() -> None:
                 VALUES ('kupon',?,?,?,?,?,?,?,?,0,?)
             """, (c["home"], c["away"], c["league"], c["time"], c["side"], c["odd"],
                   c.get("roi_pct"), c.get("win_rate"), now_iso))
-            already_set.add(key)
+            already_list.append((c["home"], c["away"], c["time"]))
             added += 1
             if added >= needed:
                 break
