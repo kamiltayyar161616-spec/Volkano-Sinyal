@@ -80,8 +80,11 @@ def gunun_ozeti():
     overall = get_ozet_performance()
     overall_7d = get_ozet_performance(days=7)
     reverse_flip = get_reverse_flip_performance()
+    admiral_dc = get_dropping_performance("admiral_dc")
+    admiral_dc_7d = get_dropping_performance("admiral_dc", days=7)
     return render_template("gunun_ozeti.html", items=items, overall=overall,
-                            overall_7d=overall_7d, reverse_flip=reverse_flip, active_page="ozet")
+                            overall_7d=overall_7d, reverse_flip=reverse_flip,
+                            admiral_dc=admiral_dc, admiral_dc_7d=admiral_dc_7d, active_page="ozet")
 
 
 @app.route("/kupon")

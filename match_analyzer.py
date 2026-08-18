@@ -512,15 +512,39 @@ def get_dropping_odds(window_hours=12) -> list:
             "current_odd": current_map[best_side],
             "drop_pct": best_drop,
             "updated_at": updated_at,
+            "current_1": c1, "current_x": cx, "current_2": c2,
         })
 
     results.sort(key=lambda r: -r["drop_pct"])
     return results
 
 
+DC_FLIP_SOURCES = ("admiral",)  # dusen oranlari kaybettiren, ama ters cevirince (cifte sans) umut vaadeden kaynaklar
+
+
+def _double_chance_odd(o1, ox, o2, exclude_side):
+    """Excluded taraf DISINDAKI iki sonucu kapsayan cifte sans oranini, fair (marjsiz)
+    olasiliklardan yaklasik hesaplar. Orn exclude_side='1' -> 'X2' oranini doner."""
+    try:
+        p1, px, p2 = 1 / o1, 1 / ox, 1 / o2
+        total = p1 + px + p2
+        p1, px, p2 = p1 / total, px / total, p2 / total  # marji (overround) temizle
+        probs = {"1": p1, "X": px, "2": p2}
+        del probs[exclude_side]
+        combined_p = sum(probs.values())
+        if combined_p <= 0:
+            return None
+        return round(1 / combined_p, 3)
+    except Exception:
+        return None
+
+
 def record_dropping_snapshot(dropping: list) -> None:
     """Şu an düşen oran listesindeki sinyalleri picks tablosuna (drop_<kaynak> kategorisiyle)
-    kaydeder — böylece mevcut sonuç-kontrol mekanizması (results_checker) bunları da otomatik çözer."""
+    kaydeder — böylece mevcut sonuç-kontrol mekanizması (results_checker) bunları da otomatik çözer.
+    Ayrıca DC_FLIP_SOURCES'taki kaynaklar için (tek başına kaybettiren, orn. Admiral), sinyalin
+    TERSİ olan çifte şansı gerçek piyasa oranıyla ayrı bir kategoride (drop_<kaynak>_dc) pasif
+    olarak izler -- 'düşenin kazanmaması' bilgisini, tersini oynayarak avantaja çevirebilir miyiz?"""
     now_iso = datetime.now(timezone.utc).isoformat()
     conn = _get_conn()
     try:
@@ -529,6 +553,19 @@ def record_dropping_snapshot(dropping: list) -> None:
              r["side"], r["current_odd"], r["drop_pct"], None, 0, now_iso)
             for r in dropping
         ]
+        for r in dropping:
+            if r["source"] not in DC_FLIP_SOURCES:
+                continue
+            c1, cx, c2 = r.get("current_1"), r.get("current_x"), r.get("current_2")
+            if not (c1 and cx and c2):
+                continue
+            dc_odd = _double_chance_odd(c1, cx, c2, r["side"])
+            if dc_odd is None:
+                continue
+            dc_side = "".join(s for s in ("1", "X", "2") if s != r["side"])
+            rows.append((f"drop_{r['source']}_dc", r["home"], r["away"], r["league"], r["time"],
+                          dc_side, dc_odd, r["drop_pct"], None, 0, now_iso))
+
         conn.executemany("""
             INSERT OR IGNORE INTO picks
             (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
@@ -1289,15 +1326,18 @@ def get_ozet_performance(days: int = None) -> dict:
 # beslenen, otomatik yenilenen sabit kupon.
 # ---------------------------------------------------------------------------
 
-KUPON_SIZE = 20
+KUPON_SIZE = 30
 KUPON_WINDOW_HOURS = 48
 KUPON_MIN_VOLCANO_SAMPLE = 10
-KUPON_MIN_ROI_PCT = 15.0   # kazanma yuzdesi yerine ROI baraji -- dusuk oran/yuksek kazanma/dusuk ROI tuzagina dusmemek icin
+KUPON_MIN_ROI_PCT = 5.0    # 15'ten indirildi -- artik oran<2.00 sert filtresiyle birlikte calisiyor, ikisi birlikte cok siki olmasin diye
+KUPON_MAX_ODD = 2.00        # buyuk veri analizinde bulunan en guclu tek sinyal: 2.00 alti bantlar pozitif, ustu hep negatif
 
 
 def _kupon_candidate_pool() -> list:
     """Sadece kanitlanmis karli havuzlardan (Favori+Value, Value+para akisi teyitli,
-    sadece Volkano dusen oranlari, 2-3 kaynakli Ortak Dusenler) aday cikartir, ROI'ye gore siralar."""
+    sadece Volkano dusen oranlari, 4+ kaynakli Ortak Dusenler) aday cikartir, ROI'ye gore siralar.
+    ARTIK TUM adaylara oran<2.00 sert filtresi uygulaniyor -- 5000+ macliuk analizde bulunan
+    en guclu tek sinyal: 2.00 alti bantlar pozitif, ustu tutarli sekilde negatif cikiyor."""
     now = datetime.now(timezone.utc)
     window_end = now + timedelta(hours=KUPON_WINDOW_HOURS)
 
@@ -1334,18 +1374,17 @@ def _kupon_candidate_pool() -> list:
                     "win_rate": vperf["win_rate"], "roi_pct": vperf["roi_pct"], "sample": vperf["staked"],
                 })
 
-    # 3) Sadece 2-3 kaynakli Ortak Dusenler -- ARTIK EKSTRA SART: en az 1 "keskin" kaynak
-    #    (kazanan tarafi en isabetli tahmin eden kaynaklardan biri) de hemfikir olmali.
+    # 3) 4+ kaynakli Ortak Dusenler -- buyuk veri analizinde TEK pozitif kaynak-sayisi kovasi bu cikti
+    #    (2-3 kaynak artik negatif, 4+ pozitif -- eski varsayimin tersi, veriye gore guncellendi)
     sharp_sources = get_sharp_sources()
     count_tier = _consensus_count_tier_stats()
     for c in get_consensus_drops():
-        if c["source_count"] not in (2, 3) or not in_window(c["time"]):
+        if c["source_count"] < 4 or not in_window(c["time"]):
             continue
         if sharp_sources and not any(s in sharp_sources for s in c["sources"]):
             continue  # hicbir keskin kaynak bu sinyale katilmamis -- atla
         tier = get_tier_label(c["avg_odd"])
-        count_label = "2 kaynak" if c["source_count"] == 2 else "3 kaynak"
-        key = f"{count_label} · {tier}"
+        key = f"4+ kaynak · {tier}"
         perf = count_tier.get(key)
         if _segment_qualifies(perf, min_sample=CONSENSUS_MIN_SAMPLE):
             pool.append({
@@ -1354,24 +1393,26 @@ def _kupon_candidate_pool() -> list:
                 "win_rate": perf["win_rate"], "roi_pct": perf["roi_pct"], "sample": perf["staked"],
             })
 
-    # Kupon icin artik kazanma yuzdesi degil ROI baraji kullaniliyor -- dusuk oran/yuksek kazanma/dusuk ROI tuzagina dusmemek icin
+    # ROI baraji
     pool = [p for p in pool if p.get("roi_pct") is not None and p["roi_pct"] >= KUPON_MIN_ROI_PCT]
+    # ORAN<2.00 sert filtresi -- en guclu tek kanit, tum kupon adaylarina uygulanir
+    pool = [p for p in pool if p.get("odd") is not None and p["odd"] < KUPON_MAX_ODD]
 
     pool.sort(key=lambda x: -(x["roi_pct"] or 0))
     return pool
 
 
 def get_kupon_active(limit: int = KUPON_SIZE) -> list:
-    """Su an aktif (henuz kickoff'u gelmemis, sonucu 'pending' olan) kupon maclarini doner.
-    Kickoff karsilastirmasi bilerek SQL string karsilastirmasi DEGIL, Python'da datetime olarak
-    yapiliyor -- kaynaklar farkli saat formati (Z'li/Z'siz/bosluklu) kullandigi icin string
-    karsilastirmasi bazen yanlis sonuc veriyordu (mac kickoff'u gectigi halde dusmuyordu)."""
+    """Su an aktif (henuz kickoff'u gelmemis, sonucu 'pending' olan) kupon maclarini,
+    BASLAMA SAATINE gore artan sirada (en yakin ustte) doner.
+    Kickoff karsilastirmasi ve siralama bilerek SQL DEGIL, Python'da datetime olarak
+    yapiliyor -- kaynaklar farkli saat formati (Z'li/Z'siz/bosluklu) kullandigi icin
+    string karsilastirmasi/siralamasi bazen yanlis sonuc veriyordu."""
     conn = _get_conn()
     try:
         rows = conn.execute("""
             SELECT id, home, away, league, match_time, side, odd, edge, prob, first_seen
             FROM picks WHERE category='kupon' AND result='pending'
-            ORDER BY first_seen ASC
         """).fetchall()
     finally:
         conn.close()
@@ -1388,10 +1429,13 @@ def get_kupon_active(limit: int = KUPON_SIZE) -> list:
         except Exception:
             continue  # tarih parse edilemiyorsa guvenli tarafta kal, listeye alma
         if dt > now:
+            d["_dt"] = dt
             active.append(d)
-        if len(active) >= limit:
-            break
-    return active
+
+    active.sort(key=lambda d: d["_dt"])  # baslama saati en yakin olan ustte
+    for d in active:
+        del d["_dt"]
+    return active[:limit]
 
 
 def _same_match(a_home, a_away, a_time, b_home, b_away, b_time) -> bool:

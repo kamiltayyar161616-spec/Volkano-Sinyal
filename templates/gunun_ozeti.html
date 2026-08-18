@@ -118,6 +118,40 @@
   {% endif %}
 </div>
 
+<div class="overall-card" style="border-color:var(--amber);">
+  <div class="overall-title">🧪 DENEYSEL: ADMIRAL ÇİFTE ŞANS (drop_admiral_dc)</div>
+  <div class="overall-note" style="margin-top:0;">Sisteme hiç önerilmiyor, sadece pasif izleniyor — Admiral'in düşen oran sinyalinin TERSİNİ, gerçek çifte şans (1X/X2/12) piyasa oranıyla oynasaydık ne olurdu?</div>
+  {% if admiral_dc.staked and admiral_dc.staked > 0 %}
+    <div class="overall-grid" style="margin-top:12px;">
+      <div>
+        <div class="overall-num {{ 'pos' if admiral_dc.win_rate >= 50 else 'neg' }}">%{{ admiral_dc.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if admiral_dc.roi_pct > 0 else 'neg' }}">{{ '+' if admiral_dc.roi_pct > 0 else '' }}%{{ admiral_dc.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ admiral_dc.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ admiral_dc.won }} kazandı / {{ admiral_dc.lost }} kaybetti &middot; {{ admiral_dc.pending }} bekliyor</div>
+    <div class="overall-note" style="border-top:1px dashed var(--navy-line); padding-top:10px; margin-top:10px;">
+      <span style="color:var(--chalk-dim); font-weight:700;">SON 7 GÜN:</span>
+      {% if admiral_dc_7d.staked and admiral_dc_7d.staked > 0 %}
+        <span style="color:{{ 'var(--turf-bright)' if admiral_dc_7d.win_rate >= 50 else 'var(--clay)' }};">%{{ admiral_dc_7d.win_rate }} kazanma</span> &middot;
+        <span style="color:{{ 'var(--turf-bright)' if admiral_dc_7d.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if admiral_dc_7d.roi_pct > 0 else '' }}%{{ admiral_dc_7d.roi_pct }} ROI</span>
+        (n={{ admiral_dc_7d.staked }})
+      {% else %}
+        <span style="color:var(--chalk-faint);">henüz veri yok</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış veri yok — {{ admiral_dc.pending }} sinyal beklemede, veri birikince burada gerçek ROI görünecek.</div>
+  {% endif %}
+</div>
+
 <div class="count-banner">
   <div class="num">{{ items|length }}</div>
   <div class="lbl">ÖNÜMÜZDEKİ 24 SAATTE GÜVENİLİR SİNYAL &middot; ROI'YE GÖRE SIRALI</div>

@@ -174,7 +174,9 @@ def check_pending_results() -> dict:
                 cur2 = conn.execute("SELECT side FROM picks WHERE id=?", (pid,))
                 row = cur2.fetchone()
                 pick_side = row[0] if row else None
-                won = (pick_side == actual_side)
+                # pick_side tek karakter (1/X/2) olabilir VEYA cifte sans (1X/X2/12) olabilir --
+                # 'in' kontrolu ikisini de dogru karsilar (tek karakterde == ile ayni davranir).
+                won = bool(pick_side) and actual_side in pick_side
 
                 conn.execute(
                     "UPDATE picks SET result=?, final_score=?, checked_at=? WHERE id=?",
