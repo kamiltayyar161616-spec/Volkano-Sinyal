@@ -1834,7 +1834,8 @@ def record_vip_kupon(candidates: list) -> int:
 
 
 def get_vip_kupon_active(limit: int = 100) -> list:
-    """Su an aktif VIP Kupon maclarini baslama saatine gore sirali doner."""
+    """Su an aktif VIP Kupon maclarini ORAN FARKINA (edge_pct) gore BUYUKTEN KUCUGE sirali doner --
+    en guclu Volkano teyidi en ustte."""
     conn = _get_conn()
     try:
         rows = conn.execute("""
@@ -1856,11 +1857,8 @@ def get_vip_kupon_active(limit: int = 100) -> list:
         except Exception:
             continue
         if dt > now:
-            d["_dt"] = dt
             active.append(d)
-    active.sort(key=lambda d: d["_dt"])
-    for d in active:
-        del d["_dt"]
+    active.sort(key=lambda d: -(d["edge_pct"] if d["edge_pct"] is not None else 0))
     return active[:limit]
 
 
