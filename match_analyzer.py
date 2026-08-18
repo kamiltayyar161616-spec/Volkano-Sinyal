@@ -1367,8 +1367,12 @@ KUPON_MAX_ODD = 2.00        # buyuk veri analizinde bulunan en guclu tek sinyal:
 def _kupon_candidate_pool() -> list:
     """Sadece kanitlanmis karli havuzlardan (Favori+Value, Value+para akisi teyitli,
     sadece Volkano dusen oranlari, 4+ kaynakli Ortak Dusenler) aday cikartir, ROI'ye gore siralar.
-    ARTIK TUM adaylara oran<2.00 sert filtresi uygulaniyor -- 5000+ macliuk analizde bulunan
-    en guclu tek sinyal: 2.00 alti bantlar pozitif, ustu tutarli sekilde negatif cikiyor."""
+
+    ORAN SINIRI SEGMENT BAZLI: Volkano dusen oran + Ortak Dusenler icin <2.00 (genel dusen-oran
+    analizinden), ama Favori+Value / Value+teyitli icin <3.00 -- bu ikisi Volkano'nun kendi deger
+    tespit motorundan geliyor (dusen-oran mantigindan farkli), ve kendi verilerinde 2.00-2.99 bandi
+    ACIKCA guclu cikti (Favori+Value +%38.2 ROI n=22, Value+teyitli +%21.8 ROI n=16) -- genel <2.00
+    filtresi bu iki segment icin en karli bandini bosuna disariya atiyordu."""
     now = datetime.now(timezone.utc)
     window_end = now + timedelta(hours=KUPON_WINDOW_HOURS)
 
@@ -1383,34 +1387,33 @@ def _kupon_candidate_pool() -> list:
 
     pool = []
 
-    # 1) Favori+Value ve Value+para akisi teyitli
+    # 1) Favori+Value ve Value+para akisi teyitli -- oran<3.00 (kendi veri kanitina gore)
     analysis = get_analysis()
     pl = get_playable_picks(analysis)
     for c in pl["playable"]:
-        if c["segment"] in ("favori_value", "value_mf") and in_window(c["time"]):
+        if c["segment"] in ("favori_value", "value_mf") and in_window(c["time"]) and c["odd"] is not None and c["odd"] < 3.00:
             pool.append({
                 "type": c["perf"]["label"], "home": c["home"], "away": c["away"],
                 "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
                 "win_rate": c["perf"]["win_rate"], "roi_pct": c["perf"]["roi_pct"], "sample": c["perf"]["staked"],
             })
 
-    # 2) Sadece Volkano dusen oranlari (genel Volkano performansi kanitliysa)
+    # 2) Sadece Volkano dusen oranlari -- oran<2.00 (genel dusen-oran analizine gore, degisim yok)
     vperf = get_dropping_performance("volcano")
     if vperf["staked"] and vperf["staked"] >= KUPON_MIN_VOLCANO_SAMPLE and vperf["win_rate"] and vperf["win_rate"] >= 50 and vperf["roi_pct"] and vperf["roi_pct"] > 0:
         for r in get_dropping_odds():
-            if r["source"] == "volcano" and in_window(r["time"]):
+            if r["source"] == "volcano" and in_window(r["time"]) and r["current_odd"] < KUPON_MAX_ODD:
                 pool.append({
                     "type": "Volkano Düşen Oran", "home": r["home"], "away": r["away"],
                     "league": r["league"], "time": r["time"], "side": r["side"], "odd": r["current_odd"],
                     "win_rate": vperf["win_rate"], "roi_pct": vperf["roi_pct"], "sample": vperf["staked"],
                 })
 
-    # 3) 4+ kaynakli Ortak Dusenler -- buyuk veri analizinde TEK pozitif kaynak-sayisi kovasi bu cikti
-    #    (2-3 kaynak artik negatif, 4+ pozitif -- eski varsayimin tersi, veriye gore guncellendi)
+    # 3) 4+ kaynakli Ortak Dusenler -- oran<2.00 (degisim yok, henuz ayrica dogrulanmadi)
     sharp_sources = get_sharp_sources()
     count_tier = _consensus_count_tier_stats()
     for c in get_consensus_drops():
-        if c["source_count"] < 4 or not in_window(c["time"]):
+        if c["source_count"] < 4 or not in_window(c["time"]) or c["avg_odd"] >= KUPON_MAX_ODD:
             continue
         if sharp_sources and not any(s in sharp_sources for s in c["sources"]):
             continue  # hicbir keskin kaynak bu sinyale katilmamis -- atla
@@ -1424,10 +1427,8 @@ def _kupon_candidate_pool() -> list:
                 "win_rate": perf["win_rate"], "roi_pct": perf["roi_pct"], "sample": perf["staked"],
             })
 
-    # ROI baraji
+    # ROI baraji (oran filtreleri artik yukarida her dala ozel uygulandi)
     pool = [p for p in pool if p.get("roi_pct") is not None and p["roi_pct"] >= KUPON_MIN_ROI_PCT]
-    # ORAN<2.00 sert filtresi -- en guclu tek kanit, tum kupon adaylarina uygulanir
-    pool = [p for p in pool if p.get("odd") is not None and p["odd"] < KUPON_MAX_ODD]
 
     pool.sort(key=lambda x: -(x["roi_pct"] or 0))
     return pool
