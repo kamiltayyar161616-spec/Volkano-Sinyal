@@ -68,6 +68,7 @@ declare -A FRESHNESS_CHECK=(
 )
 FRESHNESS_LIMIT_MIN=30
 
+STILL_STALE=()
 for FILE in "${!FRESHNESS_CHECK[@]}"; do
     if [ ! -f "$FILE" ]; then
         continue
@@ -80,10 +81,31 @@ for FILE in "${!FRESHNESS_CHECK[@]}"; do
         if [ "$NEW_AGE" -lt "$AGE_MIN" ]; then
             echo "[$NOW_TS] $FILE basariyla tazelendi" >> "$LOG"
         else
-            echo "[$NOW_TS] UYARI: $FILE hala bayat, elle kontrol gerekebilir" >> "$LOG"
+            echo "[$NOW_TS] UYARI: $FILE hala bayat" >> "$LOG"
+            STILL_STALE+=("$FILE")
         fi
     fi
 done
+
+# --- 5) ESKALASYON: bir kaynak yeniden denemeden sonra hala bayatsa (orn. httpx
+#     "Temporary failure in name resolution" gibi DNS hatalari), systemd-resolved'i
+#     yeniden baslatip o kaynaklari SON BIR KEZ daha dene.
+if [ "${#STILL_STALE[@]}" -gt 0 ]; then
+    echo "[$NOW_TS] ${#STILL_STALE[@]} kaynak hala bayat -> DNS/resolved yeniden baslatiliyor (eskalasyon)" >> "$LOG"
+    systemctl daemon-reload >> "$LOG" 2>&1
+    systemctl restart systemd-resolved >> "$LOG" 2>&1
+    sleep 3
+    for FILE in "${STILL_STALE[@]}"; do
+        echo "[$NOW_TS] $FILE icin DNS restarti sonrasi son bir kez daha deneniyor" >> "$LOG"
+        bash -c "${FRESHNESS_CHECK[$FILE]}" >> "$LOG" 2>&1
+        NEW_AGE2=$(( ($(date +%s) - $(stat -c %Y "$FILE")) / 60 ))
+        if [ "$NEW_AGE2" -lt "$FRESHNESS_LIMIT_MIN" ]; then
+            echo "[$NOW_TS] $FILE DNS restarti sonrasi basariyla tazelendi" >> "$LOG"
+        else
+            echo "[$NOW_TS] KRITIK: $FILE DNS restarti sonrasi da tazelenemedi -- gercek bir sorun olabilir, elle bak" >> "$LOG"
+        fi
+    done
+fi
 
 # log dosyasini sismesin diye son 500 satirla sinirla
 tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
