@@ -1443,13 +1443,13 @@ def get_kupon_active(limit: int = KUPON_SIZE) -> list:
     conn = _get_conn()
     try:
         rows = conn.execute("""
-            SELECT id, home, away, league, match_time, side, odd, edge, prob, first_seen
+            SELECT id, home, away, league, match_time, side, odd, edge, prob, first_seen, sources
             FROM picks WHERE category='kupon' AND result='pending'
         """).fetchall()
     finally:
         conn.close()
 
-    cols = ["id", "home", "away", "league", "match_time", "side", "odd", "roi_pct", "win_rate", "first_seen"]
+    cols = ["id", "home", "away", "league", "match_time", "side", "odd", "roi_pct", "win_rate", "first_seen", "type"]
     now = datetime.now(timezone.utc)
     active = []
     for row in rows:
@@ -1511,10 +1511,10 @@ def record_kupon_fill() -> None:
                 continue
             conn.execute("""
                 INSERT OR IGNORE INTO picks
-                (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
-                VALUES ('kupon',?,?,?,?,?,?,?,?,0,?)
+                (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen, sources)
+                VALUES ('kupon',?,?,?,?,?,?,?,?,0,?,?)
             """, (c["home"], c["away"], c["league"], c["time"], c["side"], c["odd"],
-                  c.get("roi_pct"), c.get("win_rate"), now_iso))
+                  c.get("roi_pct"), c.get("win_rate"), now_iso, c.get("type")))
             already_list.append((c["home"], c["away"], c["time"]))
             added += 1
             if added >= needed:

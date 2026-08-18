@@ -111,6 +111,7 @@
       <span class="kupon-num">{{ loop.index }}</span>
       <div class="kupon-body">
         <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
+        {% if c.type %}<div class="type-tag" style="display:inline-block; font-size:8.5px; font-weight:700; color:var(--amber-bright); background:var(--navy-line); padding:2px 6px; border-radius:5px; margin-top:4px;">{{ c.type.upper() }}</div>{% endif %}
         <div class="meta">{{ c.league }} &middot; oran <b>{{ '%.2f'|format(c.odd) if c.odd else '?' }}</b> &middot; {{ c.match_time | localtime }}</div>
       </div>
     </div>
@@ -126,4 +127,4 @@
 
 {% endblock %}
 
-{% block footer %}SADECE FAVORİ+VALUE / VALUE+PARA AKIŞI TEYİTLİ / VOLKANO DÜŞEN ORAN / 2-3 KAYNAKLI ORTAK DÜŞENLER <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}
+{% block footer %}SADECE FAVORİ+VALUE / VALUE+PARA AKIŞI TEYİTLİ (oran<3.00) / VOLKANO DÜŞEN ORAN / 4+ KAYNAKLI ORTAK DÜŞENLER (oran<2.00) <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}
