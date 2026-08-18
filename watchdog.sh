@@ -55,5 +55,35 @@ if [ "$AVAILABLE_MB" -lt 400 ]; then
     echo "[$NOW_TS] cron yeniden baslatildi" >> "$LOG"
 fi
 
+# --- 4) VERI TAZELIGI: her kaynagin dosyasi 30 dakikadan eskiyse (orn. gecici DNS/ag
+#     kesintisi yuzunden scraper sessizce basarisiz olmus olabilir) uyari bas + bir kez yeniden dene
+declare -A FRESHNESS_CHECK=(
+    ["/root/volcanobet/volcanobet.json"]="cd /root/volcanobet && pkill -f volcanobet_scraper_termux.py; sleep 1; timeout 60 python3 volcanobet_scraper_termux.py"
+    ["/root/monsure/admiralbet.json"]="cd /root/monsure && pkill -f admiralbet_scraper.py; sleep 1; timeout 60 python3 admiralbet_scraper.py"
+    ["/root/monsure/sansabet_odds.json"]="cd /root/monsure && pkill -f sansa_final.py; sleep 1; timeout 60 python3 sansa_final.py"
+    ["/root/monsure/soccerbet.json"]="cd /root/monsure && pkill -f soccerbet_scraper.js; sleep 1; timeout 60 node soccerbet_scraper.js --once"
+    ["/root/monsure/sbbet.json"]="cd /root/monsure && pkill -f sbbet_scraper.js; sleep 1; timeout 60 node sbbet_scraper.js --once"
+    ["/root/monsure/premier.json"]="cd /root/monsure && pkill -f premier_scraper.py; sleep 1; timeout 60 python3 premier_scraper.py"
+    ["/root/monsure/maxbet.json"]="cd /root/monsure && pkill -f maxbet_scraper.py; sleep 1; timeout 60 python3 maxbet_scraper.py"
+)
+FRESHNESS_LIMIT_MIN=30
+
+for FILE in "${!FRESHNESS_CHECK[@]}"; do
+    if [ ! -f "$FILE" ]; then
+        continue
+    fi
+    AGE_MIN=$(( ($(date +%s) - $(stat -c %Y "$FILE")) / 60 ))
+    if [ "$AGE_MIN" -gt "$FRESHNESS_LIMIT_MIN" ]; then
+        echo "[$NOW_TS] BAYAT VERI: $FILE (${AGE_MIN}dk once) -> yeniden deneniyor" >> "$LOG"
+        bash -c "${FRESHNESS_CHECK[$FILE]}" >> "$LOG" 2>&1
+        NEW_AGE=$(( ($(date +%s) - $(stat -c %Y "$FILE")) / 60 ))
+        if [ "$NEW_AGE" -lt "$AGE_MIN" ]; then
+            echo "[$NOW_TS] $FILE basariyla tazelendi" >> "$LOG"
+        else
+            echo "[$NOW_TS] UYARI: $FILE hala bayat, elle kontrol gerekebilir" >> "$LOG"
+        fi
+    fi
+done
+
 # log dosyasini sismesin diye son 500 satirla sinirla
 tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
