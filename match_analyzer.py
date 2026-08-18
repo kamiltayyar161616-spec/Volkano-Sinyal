@@ -1114,6 +1114,37 @@ def get_dropping_performance_by_league_tier(source: str = None) -> dict:
     return {"Büyük Lig": _perf_from_rows(major_rows), "Diğer Ligler": _perf_from_rows(minor_rows)}
 
 
+def get_dropping_performance_by_exact_league(source: str = None, min_sample: int = 5) -> list:
+    """Her LIGIN KENDI (tek tek, isim bazinda) performansini doner -- hangi spesifik ligde
+    dusen oran sinyalleri gercekten kazandiriyor, hangisinde kaybettiriyor. ROI'ye gore sirali,
+    az orneklemli (gurultulu) ligler min_sample ile elenir."""
+    conn = _get_conn()
+    try:
+        category_filter = f"drop_{source}" if source else None
+        cat_sql = "category=?" if category_filter else "category LIKE 'drop_%'"
+        params = [category_filter] if category_filter else []
+        rows = conn.execute(f"""
+            SELECT league, result, odd FROM picks WHERE {cat_sql} AND result IN ('won','lost')
+        """, params).fetchall()
+    finally:
+        conn.close()
+
+    by_league = {}
+    for lg, r, o in rows:
+        lg = lg or "Bilinmeyen Lig"
+        by_league.setdefault(lg, []).append((r, o))
+
+    result_list = []
+    for lg, items in by_league.items():
+        perf = _perf_from_rows(items)
+        if perf["staked"] >= min_sample:
+            perf["league"] = lg
+            result_list.append(perf)
+
+    result_list.sort(key=lambda x: -(x["roi_pct"] if x["roi_pct"] is not None else -999))
+    return result_list
+
+
 def get_dropping_performance_by_freshness(source: str = None) -> dict:
     """Sinyal, maça kaç saat kala yakalanmışsa (first_seen vs match_time) performans nasıl değişiyor?"""
     conn = _get_conn()
