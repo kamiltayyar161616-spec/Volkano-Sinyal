@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}SAHA — VIP Kupon{% endblock %}
+{% block page_tag %}VIP{% endblock %}
+{% block subtitle %}Özet'teki güvenilir sinyaller, Volkano'nun GÜNCEL canlı oranıyla ikinci kez teyit ediliyor — Volkano aynı tarafa daha düşük (daha güvenli) oran veriyorsa VIP sayılır. Elle çalıştırılır.{% endblock %}
+
+{% block extra_style %}
+<style>
+  .overall-card{
+    margin:16px; padding:18px; border-radius:var(--radius);
+    background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
+    border:1px solid var(--navy-line); position:relative; overflow:hidden;
+  }
+  .overall-card::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(300px 140px at 90% -20%, rgba(242,169,59,0.10), transparent 70%);
+    pointer-events:none;
+  }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; position:relative; }
+  .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf-bright); }
+  .overall-num.neg{ color:var(--clay); }
+  .overall-num.flat{ color:var(--chalk-dim); }
+  .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
+  .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; position:relative; }
+
+  .run-btn-wrap{ margin:0 16px 16px; }
+  .run-btn{
+    display:block; width:100%; padding:16px; border:none; border-radius:14px;
+    background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06;
+    font-family:'Space Grotesk', sans-serif; font-weight:800; font-size:15px; letter-spacing:0.02em;
+    cursor:pointer;
+  }
+  .run-btn:active{ opacity:0.85; }
+
+  .added-banner{
+    margin:0 16px 16px; padding:10px; border-radius:10px; text-align:center;
+    background:var(--turf-dim); color:var(--turf-bright); font-size:11.5px; font-weight:700;
+  }
+
+  .slot-banner{
+    margin:0 16px 16px; padding:12px; border-radius:10px; text-align:center;
+    background:var(--navy); border:1px solid var(--navy-line);
+  }
+  .slot-banner .num{ font-size:20px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--amber-bright); }
+  .slot-banner .lbl{ font-size:9.5px; color:var(--chalk-faint); margin-top:2px; }
+
+  .kupon-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:12px 14px; margin:0 16px 8px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--amber); border-radius:10px;
+  }
+  .kupon-num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:50%; background:var(--navy-line); color:var(--amber-bright);
+    font-size:11px; font-weight:800; font-family:'Space Grotesk', sans-serif; flex-shrink:0; margin-right:8px;
+  }
+  .kupon-left{ display:flex; align-items:flex-start; min-width:0; flex:1; }
+  .kupon-body{ min-width:0; }
+  .teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; color:var(--chalk); }
+  .teams .side-chip{
+    display:inline-block; margin-left:6px; font-size:11px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:1px 7px; border-radius:5px; vertical-align:middle;
+  }
+  .meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:4px; line-height:1.6; }
+  .meta b{ color:var(--chalk-dim); font-weight:600; }
+  .type-tag{
+    display:inline-block; font-size:8.5px; font-weight:700; color:var(--amber-bright);
+    background:var(--navy-line); padding:2px 6px; border-radius:5px; margin-top:5px;
+  }
+  .row-right{ text-align:right; flex-shrink:0; }
+  .perf-num{ font-size:15px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--turf-bright); }
+  .perf-sub{ font-size:9px; color:var(--chalk-faint); margin-top:2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="run-btn-wrap">
+  <form method="POST" action="/vip-kupon/calistir">
+    <button type="submit" class="run-btn">▶ ÇALIŞTIR</button>
+  </form>
+</div>
+
+{% if added is not none %}
+<div class="added-banner">
+  {% if added|int > 0 %}✅ {{ added }} yeni VIP maç eklendi{% else %}ℹ️ Şu an Volkano'nun daha düşük oran verdiği yeni bir maç bulunamadı{% endif %}
+</div>
+{% endif %}
+
+<div class="overall-card">
+  <div class="overall-title">VIP KUPONUN KENDİ GEÇMİŞ PERFORMANSI</div>
+  {% if overall.staked and overall.staked > 0 %}
+    <div class="overall-grid">
+      <div>
+        <div class="overall-num {{ 'pos' if overall.win_rate >= 50 else 'neg' }}">%{{ overall.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if overall.roi_pct > 0 else 'neg' }}">{{ '+' if overall.roi_pct > 0 else '' }}%{{ overall.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ overall.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN MAÇ</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ overall.won }} kazandı / {{ overall.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if overall.roi_units > 0 else 'var(--clay)' }};">{{ '+' if overall.roi_units > 0 else '' }}{{ '%.2f'|format(overall.roi_units) }} birim</b></div>
+    <div class="overall-note" style="border-top:1px dashed var(--navy-line); padding-top:10px; margin-top:10px;">
+      <span style="color:var(--chalk-dim); font-weight:700;">SON 7 GÜN:</span>
+      {% if overall_7d.staked and overall_7d.staked > 0 %}
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.win_rate >= 50 else 'var(--clay)' }};">%{{ overall_7d.win_rate }} kazanma</span> &middot;
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if overall_7d.roi_pct > 0 else '' }}%{{ overall_7d.roi_pct }} ROI</span>
+        (n={{ overall_7d.staked }})
+      {% else %}
+        <span style="color:var(--chalk-faint);">henüz veri yok</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış bir VIP maç yok — "Çalıştır"a bastıkça birikecek.</div>
+  {% endif %}
+</div>
+
+<div class="slot-banner">
+  <div class="num">{{ active|length }}</div>
+  <div class="lbl">AKTİF VIP MAÇ — BAŞLAMA SAATİNE GÖRE SIRALI</div>
+</div>
+
+<h2 class="section">💎 AKTİF VIP KUPON</h2>
+<div class="section-sub">Volkano'nun kendi oranı, Özet'te listelenen orandan daha düşük çıktığı için ekstra teyitli sayılıyor.</div>
+
+{% if active %}
+  {% for c in active %}
+  <div class="kupon-row">
+    <div class="kupon-left">
+      <span class="kupon-num">{{ loop.index }}</span>
+      <div class="kupon-body">
+        <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
+        {% if c.type %}<div class="type-tag">{{ c.type.upper() }}</div>{% endif %}
+        <div class="meta">{{ c.league }} &middot; Volkano oranı <b>{{ '%.2f'|format(c.odd) if c.odd else '?' }}</b> &middot; {{ c.match_time | localtime }}</div>
+      </div>
+    </div>
+    <div class="row-right">
+      <div class="perf-num" style="color:var(--turf-bright);">-%{{ c.edge_pct }}</div>
+      <div class="perf-sub">Volkano farkı &middot; %{{ c.win_rate }} kazanma</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an aktif VIP maç yok — "Çalıştır"a basıp yeni tarama yap.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block footer %}VOLKANO'NUN GÜNCEL ORANI, ÖZET'TEKİ ORANDAN DAHA DÜŞÜK ÇIKAN MAÇLAR <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

@@ -1733,3 +1733,154 @@ def get_source_accuracy_leaderboard() -> list:
     if not _source_accuracy_cache["leaderboard"]:
         record_source_accuracy_cache()
     return _source_accuracy_cache["leaderboard"]
+
+
+# ---------------------------------------------------------------------------
+# VIP KUPON -- Ozet'teki guvenilir sinyalleri Volkano'nun GUNCEL canli
+# oranlarina karsi ikinci kez test eder. Volkano ayni tarafa DAHA DUSUK
+# (= daha yuksek guven) oran veriyorsa, bu ekstra bir teyit sayilir.
+# Elle "Calistir" butonuyla tetiklenir, arka planda otomatik calismaz.
+# ---------------------------------------------------------------------------
+
+def _build_volkano_odds_index():
+    """Volkano'nun guncel odds_tracking satirlarini hizli arama icin onceden indeksler
+    (analyze_source_accuracy()'deki ile ayni tam-anahtar-once yaklasimi)."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT home, away, match_time, current_1, current_x, current_2
+            FROM odds_tracking WHERE source='volcano'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    exact = {}
+    by_date = {}
+    for h, a, mt, c1, cx, c2 in rows:
+        dk = _date_bucket(mt)
+        exact[(dk, _norm(h), _norm(a))] = (c1, cx, c2)
+        by_date.setdefault(dk, []).append((h, a, mt, c1, cx, c2))
+    return exact, by_date
+
+
+def _lookup_volkano_odd(home, away, time, side, exact_idx, by_date_idx):
+    dk = _date_bucket(time)
+    nk = (dk, _norm(home), _norm(away))
+    triple = exact_idx.get(nk)
+    if triple is None:
+        try:
+            next_dk = (datetime.strptime(dk, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+            prev_dk = (datetime.strptime(dk, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        except Exception:
+            next_dk = prev_dk = dk
+        triple = exact_idx.get((next_dk, nk[1], nk[2])) or exact_idx.get((prev_dk, nk[1], nk[2]))
+    if triple is None:
+        for h, a, mt, c1, cx, c2 in by_date_idx.get(dk, []):
+            if _same_match(home, away, time, h, a, mt):
+                triple = (c1, cx, c2)
+                break
+    if triple is None:
+        return None
+    c1, cx, c2 = triple
+    return {"1": c1, "X": cx, "2": c2}.get(side)
+
+
+def get_vip_kupon_candidates() -> list:
+    """Ozet'teki (guvenilir) sinyalleri Volkano'nun guncel canli oranlarina karsi test eder --
+    Volkano ayni tarafa DAHA DUSUK oran veriyorsa (= daha yuksek guven), VIP aday olur."""
+    items = get_gunun_ozeti()
+    exact_idx, by_date_idx = _build_volkano_odds_index()
+    candidates = []
+    for it in items:
+        if it.get("odd") is None or it.get("side") is None:
+            continue
+        v_odd = _lookup_volkano_odd(it["home"], it["away"], it["time"], it["side"], exact_idx, by_date_idx)
+        if v_odd is None or v_odd >= it["odd"]:
+            continue
+        c = dict(it)
+        c["listed_odd"] = it["odd"]
+        c["volkano_odd"] = v_odd
+        c["edge_pct"] = round(100 * (it["odd"] - v_odd) / it["odd"], 1)
+        candidates.append(c)
+    candidates.sort(key=lambda x: -x["edge_pct"])
+    return candidates
+
+
+def record_vip_kupon(candidates: list) -> int:
+    """VIP Kupon adaylarini picks tablosuna (category='vip_kupon') kaydeder, kopya eklemez.
+    Kac YENI mac eklendigini doner."""
+    conn = _get_conn()
+    try:
+        already = conn.execute("SELECT home, away, match_time FROM picks WHERE category='vip_kupon'").fetchall()
+        already_list = list(already)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        added = 0
+        for c in candidates:
+            is_dup = any(_same_match(c["home"], c["away"], c["time"], h, a, mt) for h, a, mt in already_list)
+            if is_dup:
+                continue
+            conn.execute("""
+                INSERT OR IGNORE INTO picks
+                (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen, sources)
+                VALUES ('vip_kupon',?,?,?,?,?,?,?,?,0,?,?)
+            """, (c["home"], c["away"], c["league"], c["time"], c["side"], c["volkano_odd"],
+                  c.get("edge_pct"), c.get("win_rate"), now_iso, c.get("type")))
+            already_list.append((c["home"], c["away"], c["time"]))
+            added += 1
+        conn.commit()
+        return added
+    finally:
+        conn.close()
+
+
+def get_vip_kupon_active(limit: int = 100) -> list:
+    """Su an aktif VIP Kupon maclarini baslama saatine gore sirali doner."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT id, home, away, league, match_time, side, odd, edge, prob, first_seen, sources
+            FROM picks WHERE category='vip_kupon' AND result='pending'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    cols = ["id", "home", "away", "league", "match_time", "side", "odd", "edge_pct", "win_rate", "first_seen", "type"]
+    now = datetime.now(timezone.utc)
+    active = []
+    for row in rows:
+        d = dict(zip(cols, row))
+        try:
+            dt = datetime.fromisoformat(str(d["match_time"]).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if dt > now:
+            d["_dt"] = dt
+            active.append(d)
+    active.sort(key=lambda d: d["_dt"])
+    for d in active:
+        del d["_dt"]
+    return active[:limit]
+
+
+def get_vip_kupon_performance(days: int = None) -> dict:
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='vip_kupon' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='vip_kupon' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf

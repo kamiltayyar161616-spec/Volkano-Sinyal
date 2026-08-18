@@ -1,7 +1,7 @@
 import threading
 import time
 
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, redirect, url_for, request
 
 from match_analyzer import (
     get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
@@ -13,6 +13,7 @@ from match_analyzer import (
     get_consensus_performance_by_league_tier, get_consensus_performance_by_freshness,
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
+    get_vip_kupon_candidates, record_vip_kupon, get_vip_kupon_active, get_vip_kupon_performance,
     to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
     get_reverse_flip_performance, record_source_accuracy_cache, get_source_accuracy_leaderboard,
 )
@@ -94,6 +95,23 @@ def kupon():
     overall_7d = get_kupon_performance(days=7)
     return render_template("kupon.html", active=active, overall=overall,
                             overall_7d=overall_7d, active_page="kupon")
+
+
+@app.route("/vip-kupon")
+def vip_kupon():
+    active = get_vip_kupon_active()
+    overall = get_vip_kupon_performance()
+    overall_7d = get_vip_kupon_performance(days=7)
+    added = request.args.get("added")
+    return render_template("vip_kupon.html", active=active, overall=overall,
+                            overall_7d=overall_7d, added=added, active_page="vip")
+
+
+@app.route("/vip-kupon/calistir", methods=["POST"])
+def vip_kupon_calistir():
+    candidates = get_vip_kupon_candidates()
+    added = record_vip_kupon(candidates)
+    return redirect(url_for("vip_kupon", added=added))
 
 
 @app.route("/istatistik")
