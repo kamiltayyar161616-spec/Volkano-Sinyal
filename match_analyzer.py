@@ -1918,9 +1918,10 @@ def get_admiral_volkano_comparison(window_hours: int = 24, sort_by: str = "diff"
         v_by_date.setdefault(dk, []).append((h, a, mt, c1, cx, c2))
 
     def pct_diff(v_odd, a_odd):
+        # Admiral'in orani Volkano'dan YUKSEKSE + , DUSUKSE - gosterir
         if not a_odd or v_odd is None:
             return None
-        return round(100 * (v_odd - a_odd) / a_odd, 1)
+        return round(100 * (a_odd - v_odd) / a_odd, 1)
 
     results = []
     for h, a, lg, mt, ac1, acx, ac2 in admiral_rows:
