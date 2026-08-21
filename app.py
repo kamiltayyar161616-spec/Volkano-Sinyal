@@ -14,6 +14,7 @@ from match_analyzer import (
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
     get_vip_kupon_candidates, record_vip_kupon, get_vip_kupon_active, get_vip_kupon_performance,
+    get_admiral_volkano_comparison,
     to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
     get_reverse_flip_performance, record_source_accuracy_cache, get_source_accuracy_leaderboard,
 )
@@ -95,6 +96,13 @@ def kupon():
     overall_7d = get_kupon_performance(days=7)
     return render_template("kupon.html", active=active, overall=overall,
                             overall_7d=overall_7d, active_page="kupon")
+
+
+@app.route("/karsilastirma")
+def karsilastirma():
+    sort_by = request.args.get("sort", "diff")
+    rows = get_admiral_volkano_comparison(sort_by=sort_by)
+    return render_template("karsilastirma.html", rows=rows, sort_by=sort_by, active_page="karsilastirma")
 
 
 @app.route("/vip-kupon")

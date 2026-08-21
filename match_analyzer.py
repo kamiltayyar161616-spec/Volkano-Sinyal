@@ -1882,3 +1882,95 @@ def get_vip_kupon_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+# ---------------------------------------------------------------------------
+# ADMIRAL vs VOLKANO KARSILASTIRMA -- canli oranlari yan yana gosterir,
+# Admiral'i baz alarak (1/X/2 her sonuc icin ayri ayri) yuzdelik fark hesaplar.
+# ---------------------------------------------------------------------------
+
+def get_admiral_volkano_comparison(window_hours: int = 24, sort_by: str = "diff") -> list:
+    """Ayni gercek maci hem Admiral'de hem Volkano'da bulup, ikisinin canli 1/X/2
+    oranlarini ve Admiral'i baz alan yuzdelik farki doner.
+    sort_by='diff' -> en buyuk mutlak farktan kucuge, sort_by='time' -> baslama saatine gore."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+
+    conn = _get_conn()
+    try:
+        admiral_rows = conn.execute("""
+            SELECT home, away, league, match_time, current_1, current_x, current_2
+            FROM odds_tracking WHERE source='admiral'
+        """).fetchall()
+        volcano_rows = conn.execute("""
+            SELECT home, away, match_time, current_1, current_x, current_2
+            FROM odds_tracking WHERE source='volcano'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    # Volkano icin tam-anahtar-once index (hizli arama)
+    v_exact = {}
+    v_by_date = {}
+    for h, a, mt, c1, cx, c2 in volcano_rows:
+        dk = _date_bucket(mt)
+        v_exact[(dk, _norm(h), _norm(a))] = (c1, cx, c2)
+        v_by_date.setdefault(dk, []).append((h, a, mt, c1, cx, c2))
+
+    def pct_diff(v_odd, a_odd):
+        if not a_odd or v_odd is None:
+            return None
+        return round(100 * (v_odd - a_odd) / a_odd, 1)
+
+    results = []
+    for h, a, lg, mt, ac1, acx, ac2 in admiral_rows:
+        try:
+            dt = datetime.fromisoformat(str(mt).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if not (now <= dt <= window_end):
+            continue
+        if ac1 is None or acx is None or ac2 is None:
+            continue
+
+        dk = _date_bucket(mt)
+        nk = (dk, _norm(h), _norm(a))
+        vtriple = v_exact.get(nk)
+        if vtriple is None:
+            try:
+                next_dk = (datetime.strptime(dk, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                prev_dk = (datetime.strptime(dk, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+            except Exception:
+                next_dk = prev_dk = dk
+            vtriple = v_exact.get((next_dk, nk[1], nk[2])) or v_exact.get((prev_dk, nk[1], nk[2]))
+        if vtriple is None:
+            for vh, va, vmt, vc1, vcx, vc2 in v_by_date.get(dk, []):
+                if _same_match(h, a, mt, vh, va, vmt):
+                    vtriple = (vc1, vcx, vc2)
+                    break
+        if vtriple is None:
+            continue
+        vc1, vcx, vc2 = vtriple
+        if vc1 is None or vcx is None or vc2 is None:
+            continue
+
+        diff1 = pct_diff(vc1, ac1)
+        diffx = pct_diff(vcx, acx)
+        diff2 = pct_diff(vc2, ac2)
+        max_abs = max(abs(diff1 or 0), abs(diffx or 0), abs(diff2 or 0))
+
+        results.append({
+            "home": h, "away": a, "league": lg, "time": mt,
+            "admiral_1": ac1, "admiral_x": acx, "admiral_2": ac2,
+            "volkano_1": vc1, "volkano_x": vcx, "volkano_2": vc2,
+            "diff_1": diff1, "diff_x": diffx, "diff_2": diff2,
+            "max_abs_diff": max_abs,
+        })
+
+    if sort_by == "time":
+        results.sort(key=lambda r: r["time"])
+    else:
+        results.sort(key=lambda r: -r["max_abs_diff"])
+    return results
