@@ -16,6 +16,25 @@
   }
   .sort-tabs a.active{ background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; }
 
+  .overall-card{
+    margin:16px; padding:18px; border-radius:var(--radius);
+    background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
+    border:1px solid var(--navy-line); position:relative; overflow:hidden;
+  }
+  .overall-card::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(300px 140px at 90% -20%, rgba(242,169,59,0.10), transparent 70%);
+    pointer-events:none;
+  }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; position:relative; }
+  .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf-bright); }
+  .overall-num.neg{ color:var(--clay); }
+  .overall-num.flat{ color:var(--chalk-dim); }
+  .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
+  .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; position:relative; }
+
   .cmp-card{
     margin:0 16px 10px; padding:14px; border-radius:12px;
     background:linear-gradient(165deg, var(--navy-soft), var(--navy));
@@ -40,6 +59,40 @@
 
 {% block content %}
 
+<div class="overall-card">
+  <div class="overall-title">ADMIRAL'İN DÜŞÜK ÇIKTIĞI TARAFLARIN PERFORMANSI</div>
+  {% if overall.staked and overall.staked > 0 %}
+    <div class="overall-grid">
+      <div>
+        <div class="overall-num {{ 'pos' if overall.win_rate >= 50 else 'neg' }}">%{{ overall.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if overall.roi_pct > 0 else 'neg' }}">{{ '+' if overall.roi_pct > 0 else '' }}%{{ overall.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ overall.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ overall.won }} kazandı / {{ overall.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if overall.roi_units > 0 else 'var(--clay)' }};">{{ '+' if overall.roi_units > 0 else '' }}{{ '%.2f'|format(overall.roi_units) }} birim</b> &middot; {{ overall.pending }} bekliyor</div>
+    <div class="overall-note" style="border-top:1px dashed var(--navy-line); padding-top:10px; margin-top:10px;">
+      <span style="color:var(--chalk-dim); font-weight:700;">SON 7 GÜN:</span>
+      {% if overall_7d.staked and overall_7d.staked > 0 %}
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.win_rate >= 50 else 'var(--clay)' }};">%{{ overall_7d.win_rate }} kazanma</span> &middot;
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if overall_7d.roi_pct > 0 else '' }}%{{ overall_7d.roi_pct }} ROI</span>
+        (n={{ overall_7d.staked }})
+      {% else %}
+        <span style="color:var(--chalk-faint);">henüz veri yok</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — Admiral'in Volkano'dan düşük olduğu maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ overall.pending }} bekliyor).</div>
+  {% endif %}
+</div>
+
+
 <div class="sort-tabs">
   <a href="/karsilastirma?sort=diff" class="{{ 'active' if sort_by == 'diff' else '' }}">EN BÜYÜK FARK</a>
   <a href="/karsilastirma?sort=time" class="{{ 'active' if sort_by == 'time' else '' }}">BAŞLAMA SAATİ</a>
@@ -52,7 +105,7 @@
   {% for r in rows %}
   <div class="cmp-card">
     <div class="cmp-teams">{{ r.home }} — {{ r.away }}</div>
-    <div class="cmp-meta">{{ r.league }} &middot; {{ r.time | localtime }}</div>
+    <div class="cmp-meta">{{ r.league }} &middot; {{ r.time | localdatetime }}</div>
     <table class="cmp-table">
       <tr>
         <th></th>

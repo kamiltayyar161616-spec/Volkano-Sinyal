@@ -31,6 +31,25 @@ def to_local_str(iso_string) -> str:
         return s[11:16] if len(s) >= 16 else "?"
 
 
+_AYLAR_TR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+             "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+_GUNLER_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+
+
+def to_local_full_str(iso_string) -> str:
+    """Bir ISO zaman damgasini yerel saate cevirip 'GG Ay GununAdi SS:DD' formatinda tam tarih+saat doner."""
+    if not iso_string:
+        return "?"
+    try:
+        dt = datetime.fromisoformat(str(iso_string).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local = dt.astimezone(LOCAL_TZ)
+        return f"{local.day} {_AYLAR_TR[local.month - 1]} {_GUNLER_TR[local.weekday()]} {local.strftime('%H:%M')}"
+    except Exception:
+        return str(iso_string)
+
+
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "picks.db")
 
 # Cron'un ürettiği dosyaların VPS'teki gerçek yolları
@@ -1975,3 +1994,60 @@ def get_admiral_volkano_comparison(window_hours: int = 24, sort_by: str = "diff"
     else:
         results.sort(key=lambda r: -r["max_abs_diff"])
     return results
+
+
+def record_admiral_low_snapshot(rows: list) -> None:
+    """Admiral'in Volkano'dan DUSUK oldugu taraf icin (bir mac icinde birden fazla taraf
+    dusukse, EN GUCLU/en negatif farkli olan taraf) sinyal kaydeder (category='admiral_vs_volkano') --
+    'Admiral bu tarafa daha cok inaniyor' sinyalinin gercekten kazandirip kazandirmadigini izler.
+    NOT: picks tablosunun UNIQUE kisiti (kategori,ev,deplasman,mac_saati) uzerinde, taraf dahil
+    degil -- bu yuzden mac basina sadece TEK (en guclu) taraf kaydedilebilir."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = []
+        for r in rows:
+            candidates = [
+                ("1", r["diff_1"], r["admiral_1"]),
+                ("X", r["diff_x"], r["admiral_x"]),
+                ("2", r["diff_2"], r["admiral_2"]),
+            ]
+            negatives = [c for c in candidates if c[1] is not None and c[1] < 0 and c[2] is not None]
+            if not negatives:
+                continue
+            side, diff, odd = min(negatives, key=lambda c: c[1])  # en negatif (en guclu sinyal)
+            rows_to_insert.append((
+                "admiral_vs_volkano", r["home"], r["away"], r["league"], r["time"],
+                side, odd, diff, None, 0, now_iso,
+            ))
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows_to_insert)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_admiral_vs_volkano_performance(days: int = None) -> dict:
+    """Admiral'in Volkano'dan dusuk oldugu taraflarin toplam performansi (kazanma orani + ROI)."""
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='admiral_vs_volkano' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='admiral_vs_volkano' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf

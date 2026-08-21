@@ -14,7 +14,8 @@ from match_analyzer import (
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
     get_vip_kupon_candidates, record_vip_kupon, get_vip_kupon_active, get_vip_kupon_performance,
-    get_admiral_volkano_comparison,
+    get_admiral_volkano_comparison, record_admiral_low_snapshot, get_admiral_vs_volkano_performance,
+    to_local_full_str,
     to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
     get_reverse_flip_performance, record_source_accuracy_cache, get_source_accuracy_leaderboard,
 )
@@ -22,6 +23,7 @@ from results_checker import check_pending_results
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
+app.jinja_env.filters["localdatetime"] = to_local_full_str
 
 RECORD_INTERVAL_SEC = 300      # her 5 dakikada bir yeni pick'leri kaydet
 RESULT_CHECK_INTERVAL_SEC = 900  # her 15 dakikada bir sonuçları kontrol et
@@ -102,7 +104,10 @@ def kupon():
 def karsilastirma():
     sort_by = request.args.get("sort", "diff")
     rows = get_admiral_volkano_comparison(sort_by=sort_by)
-    return render_template("karsilastirma.html", rows=rows, sort_by=sort_by, active_page="karsilastirma")
+    overall = get_admiral_vs_volkano_performance()
+    overall_7d = get_admiral_vs_volkano_performance(days=7)
+    return render_template("karsilastirma.html", rows=rows, sort_by=sort_by,
+                            overall=overall, overall_7d=overall_7d, active_page="karsilastirma")
 
 
 @app.route("/vip-kupon")
@@ -161,6 +166,7 @@ def _background_loop():
             record_ozet_snapshot(get_gunun_ozeti())
             record_source_accuracy_cache()
             record_kupon_fill()
+            record_admiral_low_snapshot(get_admiral_volkano_comparison())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 
