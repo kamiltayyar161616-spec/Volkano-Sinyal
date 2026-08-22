@@ -58,7 +58,7 @@ fi
 # --- 4) VERI TAZELIGI: her kaynagin dosyasi 30 dakikadan eskiyse (orn. gecici DNS/ag
 #     kesintisi yuzunden scraper sessizce basarisiz olmus olabilir) uyari bas + bir kez yeniden dene
 declare -A FRESHNESS_CHECK=(
-    ["/root/volcanobet/volcanobet.json"]="cd /root/volcanobet && pkill -f volcanobet_scraper_termux.py; sleep 1; timeout 60 python3 volcanobet_scraper_termux.py"
+    ["/root/volcanobet/volcanobet.json"]="cd /root/volcanobet && pkill -f volcanobet_scraper_termux.py; sleep 1; timeout 120 python3 volcanobet_scraper_termux.py"
     ["/root/monsure/admiralbet.json"]="cd /root/monsure && pkill -f admiralbet_scraper.py; sleep 1; timeout 60 python3 admiralbet_scraper.py"
     ["/root/monsure/sansabet_odds.json"]="cd /root/monsure && pkill -f sansa_final.py; sleep 1; timeout 60 python3 sansa_final.py"
     ["/root/monsure/soccerbet.json"]="cd /root/monsure && pkill -f soccerbet_scraper.js; sleep 1; timeout 60 node soccerbet_scraper.js --once"
