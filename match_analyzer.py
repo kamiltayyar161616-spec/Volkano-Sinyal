@@ -1277,10 +1277,13 @@ def get_gunun_ozeti(window_hours: int = 24) -> list:
     window_end = now + timedelta(hours=window_hours)
     items = []
 
-    # 1) Value / Favori+Value / Ters
+    # 1) Value / Favori+Value / Ters -- Kupon'daki gibi oran<3.00 sinirlamasi burada da uygulaniyor,
+    #    cunku bu segmentlerin buyuk-veri kaniti sadece 3.00 alti bantlarda var (3.00+ hic dogrulanmadi/gurultu)
     analysis = get_analysis()
     seg_playable = get_playable_picks(analysis)
     for c in seg_playable["playable"]:
+        if c["odd"] is None or c["odd"] >= 3.00:
+            continue
         items.append({
             "type": c["perf"]["label"], "home": c["home"], "away": c["away"],
             "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
@@ -1804,9 +1807,13 @@ def _lookup_volkano_odd(home, away, time, side, exact_idx, by_date_idx):
     return {"1": c1, "X": cx, "2": c2}.get(side)
 
 
+VIP_MIN_EDGE_PCT = 3.0  # Volkano farki bunun altindaysa gurultu sayilir, VIP'e girmez
+
+
 def get_vip_kupon_candidates() -> list:
     """Ozet'teki (guvenilir) sinyalleri Volkano'nun guncel canli oranlarina karsi test eder --
-    Volkano ayni tarafa DAHA DUSUK oran veriyorsa (= daha yuksek guven), VIP aday olur."""
+    Volkano ayni tarafa EN AZ VIP_MIN_EDGE_PCT kadar DAHA DUSUK oran veriyorsa (= belirgin daha
+    yuksek guven), VIP aday olur. Kucuk (orn %0.5) farklar gurultu sayilir, dahil edilmez."""
     items = get_gunun_ozeti()
     exact_idx, by_date_idx = _build_volkano_odds_index()
     candidates = []
@@ -1816,10 +1823,13 @@ def get_vip_kupon_candidates() -> list:
         v_odd = _lookup_volkano_odd(it["home"], it["away"], it["time"], it["side"], exact_idx, by_date_idx)
         if v_odd is None or v_odd >= it["odd"]:
             continue
+        edge_pct = round(100 * (it["odd"] - v_odd) / it["odd"], 1)
+        if edge_pct < VIP_MIN_EDGE_PCT:
+            continue
         c = dict(it)
         c["listed_odd"] = it["odd"]
         c["volkano_odd"] = v_odd
-        c["edge_pct"] = round(100 * (it["odd"] - v_odd) / it["odd"], 1)
+        c["edge_pct"] = edge_pct
         candidates.append(c)
     candidates.sort(key=lambda x: -x["edge_pct"])
     return candidates
