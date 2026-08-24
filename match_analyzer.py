@@ -259,6 +259,37 @@ def _segment_qualifies(perf: dict, min_sample: int = SEGMENT_MIN_SAMPLE) -> bool
     return True
 
 
+def get_segment_performance_by_tier(segment: str) -> dict:
+    """favori_value veya value_mf segmentinin ORAN BANDINA gore kirilmis performansi.
+    Buyuk-veri analizinde bu iki segmentin bantlar arasi ROI'sinin ciddi farklilik gosterdigi
+    bulundu (orn. Favori+Value 1.50-1.99 bandi sadece +%3.6 ROI iken 2.00-2.99 bandi +%38.2) --
+    bu fonksiyon Kupon'un zayif bandi eleyip guclu bandi onceliklendirmesini saglar."""
+    conn = _get_conn()
+    try:
+        if segment == "favori_value":
+            rows = conn.execute("SELECT odd, result FROM picks WHERE category='favorite' AND result IN ('won','lost')").fetchall()
+        elif segment == "value_mf":
+            rows = conn.execute("SELECT odd, result FROM picks WHERE category='value' AND mf_confirmed=1 AND result IN ('won','lost')").fetchall()
+        else:
+            rows = []
+    finally:
+        conn.close()
+
+    by_tier = {}
+    for odd, result in rows:
+        if odd is None:
+            continue
+        tier = get_tier_label(odd)
+        by_tier.setdefault(tier, []).append((result, odd))
+
+    result_dict = {}
+    for label, lo, hi in ODDS_TIERS:
+        items = by_tier.get(label, [])
+        if items:
+            result_dict[label] = _perf_from_rows(items)
+    return result_dict
+
+
 def _segment_for(category, mf_confirmed, prob):
     if category == "favorite":
         return "favori_value"
@@ -1418,6 +1449,10 @@ def _kupon_candidate_pool() -> list:
     analysis = get_analysis()
     pl = get_playable_picks(analysis)
     volkano_exact, volkano_by_date = _build_volkano_odds_index()
+    tier_perf_cache = {
+        "favori_value": get_segment_performance_by_tier("favori_value"),
+        "value_mf": get_segment_performance_by_tier("value_mf"),
+    }
     for c in pl["playable"]:
         if c["segment"] not in ("favori_value", "value_mf") or not in_window(c["time"]):
             continue
@@ -1425,6 +1460,14 @@ def _kupon_candidate_pool() -> list:
             continue
         if c["side"] not in ("1", "2"):
             continue  # 'X' secimi cifte sansa cevrilemez, atla
+
+        # BANT-BAZLI KALITE: segmentin genel ROI'si pozitif olsa da, bu maca ozel ORAN BANDININ
+        # kendi tarihsel performansi ayri kontrol edilir -- zayif bantlar (orn. Favori+Value'nun
+        # 1.50-1.99 bandi sadece +%3.6 ROI) elenir, kupon geneline dusuk marj tasimasin diye.
+        band = get_tier_label(c["odd"])
+        band_perf = tier_perf_cache[c["segment"]].get(band)
+        if not _segment_qualifies(band_perf, min_sample=15):
+            continue
 
         triple = _lookup_volkano_triple(c["home"], c["away"], c["time"], volkano_exact, volkano_by_date)
         if triple is None or None in triple:
@@ -1437,9 +1480,9 @@ def _kupon_candidate_pool() -> list:
         dc_side = "1X" if c["side"] == "1" else "X2"
 
         pool.append({
-            "type": f"{c['perf']['label']} (Çifte Şans)", "home": c["home"], "away": c["away"],
+            "type": f"{c['perf']['label']} (Çifte Şans, {band} bandı)", "home": c["home"], "away": c["away"],
             "league": c["league"], "time": c["time"], "side": dc_side, "odd": dc_odd,
-            "win_rate": c["perf"]["win_rate"], "roi_pct": c["perf"]["roi_pct"], "sample": c["perf"]["staked"],
+            "win_rate": band_perf["win_rate"], "roi_pct": band_perf["roi_pct"], "sample": band_perf["staked"],
         })
 
     # 2) Sadece Volkano dusen oranlari -- oran<2.00 (genel dusen-oran analizine gore, degisim yok)
