@@ -14,8 +14,6 @@ from match_analyzer import (
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
     get_vip_kupon_candidates, record_vip_kupon, get_vip_kupon_active, get_vip_kupon_performance,
-    get_admiral_volkano_comparison, record_admiral_low_snapshot, get_admiral_vs_volkano_performance,
-    analyze_volkano_vs_admiral_retro, record_volkano_admiral_retro_cache, get_volkano_admiral_retro_cached,
     to_local_full_str,
     to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
     get_reverse_flip_performance, record_source_accuracy_cache, get_source_accuracy_leaderboard,
@@ -28,7 +26,6 @@ app.jinja_env.filters["localdatetime"] = to_local_full_str
 
 RECORD_INTERVAL_SEC = 300      # her 5 dakikada bir yeni pick'leri kaydet
 RESULT_CHECK_INTERVAL_SEC = 900  # her 15 dakikada bir sonuçları kontrol et
-RETRO_CACHE_INTERVAL_SEC = 1800  # agir analiz (tum picks+odds_tracking taramasi) -- 30 dakikada bir
 
 
 @app.route("/")
@@ -102,17 +99,6 @@ def kupon():
                             overall_7d=overall_7d, active_page="kupon")
 
 
-@app.route("/karsilastirma")
-def karsilastirma():
-    sort_by = request.args.get("sort", "diff")
-    rows = get_admiral_volkano_comparison(sort_by=sort_by)
-    overall = get_admiral_vs_volkano_performance()
-    overall_7d = get_admiral_vs_volkano_performance(days=7)
-    retro = get_volkano_admiral_retro_cached()
-    return render_template("karsilastirma.html", rows=rows, sort_by=sort_by,
-                            overall=overall, overall_7d=overall_7d, retro=retro, active_page="karsilastirma")
-
-
 @app.route("/vip-kupon")
 def vip_kupon():
     active = get_vip_kupon_active()
@@ -159,7 +145,6 @@ def api_dusen_oranlar():
 
 def _background_loop():
     last_result_check = 0
-    last_retro_cache = 0
     while True:
         try:
             data = get_analysis()
@@ -170,7 +155,6 @@ def _background_loop():
             record_ozet_snapshot(get_gunun_ozeti())
             record_source_accuracy_cache()
             record_kupon_fill()
-            record_admiral_low_snapshot(get_admiral_volkano_comparison())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 
@@ -182,13 +166,6 @@ def _background_loop():
             except Exception as e:
                 print(f"[background] sonuç kontrolü hatası: {e}")
             last_result_check = now
-
-        if now - last_retro_cache >= RETRO_CACHE_INTERVAL_SEC:
-            try:
-                record_volkano_admiral_retro_cache()
-            except Exception as e:
-                print(f"[background] retro cache hatası: {e}")
-            last_retro_cache = now
 
         time.sleep(RECORD_INTERVAL_SEC)
 
