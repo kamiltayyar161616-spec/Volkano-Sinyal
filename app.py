@@ -15,6 +15,7 @@ from match_analyzer import (
     record_kupon_fill, get_kupon_active, get_kupon_performance,
     get_vip_kupon_candidates, record_vip_kupon, get_vip_kupon_active, get_vip_kupon_performance,
     get_admiral_volkano_comparison, record_admiral_low_snapshot, get_admiral_vs_volkano_performance,
+    analyze_volkano_vs_admiral_retro,
     to_local_full_str,
     to_local_str, get_dropping_performance_by_drop_magnitude, get_dropping_performance_cross_matrix,
     get_reverse_flip_performance, record_source_accuracy_cache, get_source_accuracy_leaderboard,
@@ -106,8 +107,9 @@ def karsilastirma():
     rows = get_admiral_volkano_comparison(sort_by=sort_by)
     overall = get_admiral_vs_volkano_performance()
     overall_7d = get_admiral_vs_volkano_performance(days=7)
+    retro = analyze_volkano_vs_admiral_retro(min_sample=10)
     return render_template("karsilastirma.html", rows=rows, sort_by=sort_by,
-                            overall=overall, overall_7d=overall_7d, active_page="karsilastirma")
+                            overall=overall, overall_7d=overall_7d, retro=retro, active_page="karsilastirma")
 
 
 @app.route("/vip-kupon")
