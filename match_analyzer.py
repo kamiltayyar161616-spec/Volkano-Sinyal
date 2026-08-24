@@ -2195,3 +2195,106 @@ def get_admiral_vs_volkano_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+def analyze_volkano_vs_admiral_retro(min_sample: int = 5) -> dict:
+    """GERIYE DONUK analiz: Admiral ve Volkano'nun HER IKISININ de oran verdigi, sonuclanmis
+    (final_score bilinen) her mac icin, hangi kaynagin taraf icin DAHA DUSUK oran verdigini
+    bulur ve o tarafin GERCEKTEN kazanip kazanmadigini kontrol eder. Iki yon icin ayri ayri
+    oran bandina gore kirilim doner: 'volkano_dusuk' (Volkano Admiral'den dusukse) ve
+    'admiral_dusuk' (Admiral Volkano'dan dusukse, zaten admiral_vs_volkano ile bilinen sonuc)."""
+    conn = _get_conn()
+    try:
+        picks_rows = conn.execute("""
+            SELECT DISTINCT home, away, match_time, final_score
+            FROM picks WHERE final_score IS NOT NULL
+        """).fetchall()
+        admiral_rows = conn.execute("""
+            SELECT home, away, match_time, current_1, current_x, current_2 FROM odds_tracking WHERE source='admiral'
+        """).fetchall()
+        volcano_rows = conn.execute("""
+            SELECT home, away, match_time, current_1, current_x, current_2 FROM odds_tracking WHERE source='volcano'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    def build_index(rows):
+        exact, by_date = {}, {}
+        for h, a, mt, c1, cx, c2 in rows:
+            dk = _date_bucket(mt)
+            exact[(dk, _norm(h), _norm(a))] = (c1, cx, c2)
+            by_date.setdefault(dk, []).append((h, a, mt, c1, cx, c2))
+        return exact, by_date
+
+    def lookup(home, away, time, exact_idx, by_date_idx):
+        dk = _date_bucket(time)
+        nk = (dk, _norm(home), _norm(away))
+        triple = exact_idx.get(nk)
+        if triple is None:
+            try:
+                next_dk = (datetime.strptime(dk, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                prev_dk = (datetime.strptime(dk, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+            except Exception:
+                next_dk = prev_dk = dk
+            triple = exact_idx.get((next_dk, nk[1], nk[2])) or exact_idx.get((prev_dk, nk[1], nk[2]))
+        if triple is None:
+            for h, a, mt, c1, cx, c2 in by_date_idx.get(dk, []):
+                if _same_match(home, away, time, h, a, mt):
+                    triple = (c1, cx, c2)
+                    break
+        return triple
+
+    a_exact, a_by_date = build_index(admiral_rows)
+    v_exact, v_by_date = build_index(volcano_rows)
+
+    # ayni gercek mac tekrar sayilmasin (tarihe gore on-gruplu, hizli)
+    seen = set()
+    unique_matches = []
+    for h, a, mt, fs in picks_rows:
+        dk = _date_bucket(mt)
+        key = (dk, _norm(h), _norm(a))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_matches.append((h, a, mt, fs))
+
+    volkano_dusuk_by_tier = {}
+    admiral_dusuk_by_tier = {}
+
+    for h, a, mt, fs in unique_matches:
+        try:
+            hg, ag = map(int, fs.split("-"))
+        except Exception:
+            continue
+        actual = "1" if hg > ag else ("2" if hg < ag else "X")
+
+        at = lookup(h, a, mt, a_exact, a_by_date)
+        vt = lookup(h, a, mt, v_exact, v_by_date)
+        if at is None or vt is None or None in at or None in vt:
+            continue
+        a1, ax, a2 = at
+        v1, vx, v2 = vt
+
+        for side, aodd, vodd in (("1", a1, v1), ("X", ax, vx), ("2", a2, v2)):
+            if aodd is None or vodd is None:
+                continue
+            won = (actual == side)
+            if vodd < aodd:
+                tier = get_tier_label(vodd)
+                volkano_dusuk_by_tier.setdefault(tier, []).append((("won" if won else "lost"), vodd))
+            elif aodd < vodd:
+                tier = get_tier_label(aodd)
+                admiral_dusuk_by_tier.setdefault(tier, []).append((("won" if won else "lost"), aodd))
+
+    def summarize(by_tier):
+        out = {}
+        for label, lo, hi in ODDS_TIERS:
+            items = by_tier.get(label, [])
+            if len(items) >= min_sample:
+                out[label] = _perf_from_rows(items)
+        return out
+
+    return {
+        "volkano_dusuk": summarize(volkano_dusuk_by_tier),
+        "admiral_dusuk": summarize(admiral_dusuk_by_tier),
+    }
