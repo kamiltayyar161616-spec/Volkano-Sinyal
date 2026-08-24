@@ -1571,16 +1571,18 @@ def _kupon_candidate_pool() -> list:
     # ROI baraji (oran filtreleri artik yukarida her dala ozel uygulandi)
     pool = [p for p in pool if p.get("roi_pct") is not None and p["roi_pct"] >= KUPON_MIN_ROI_PCT]
 
-    # EDGE BAZLI FILTRE: dusuk oranda basari %100 olamaz (bu risksiz kar demek olurdu) -- asil onemli
-    # olan kazanma oraninin BASABAS NOKTASINDAN (100/oran) ne kadar yukarida oldugu. Zayif "edge"li
-    # (basabasa yakin) adaylar elenir, guclu edge'li adaylar oncelenir -- kuponun ortalama marjini
-    # gercekten yukselten dogru kaldiraç budur, sadece dusuk/yuksek oran kovalamak degil.
+    # NOT: Daha once burada ayrica bir "puan bazli edge" filtresi vardi (kazanma orani - basabas
+    # noktasi >= 8 puan). Bu, CIFTE SANS bahisleri icin yanlis cikti: cifte sansin basabas noktasi
+    # zaten cok yuksek oldugu icin (orn %87.6), gercekten guclu bir kazanma orani (%93.2) bile
+    # puan cinsinden kucuk bir marj (5.6 puan) veriyordu ve haksiz yere eleniyordu -- oysa ROI zaten
+    # (win_rate/basabas - 1) ile AYNI bilgiyi ORANLARDAN BAGIMSIZ, dogru normalize edilmis sekilde
+    # veriyor. Bu yuzden asil filtre/siralama ROI uzerinden yapiliyor, sadece bilgi amacli edge_pts
+    # hesaplanip gosteriliyor (filtrelemiyor).
     for p in pool:
         breakeven = 100.0 / p["odd"] if p.get("odd") else None
         p["edge_pts"] = round(p["win_rate"] - breakeven, 1) if (breakeven is not None and p.get("win_rate") is not None) else None
-    pool = [p for p in pool if p.get("edge_pts") is not None and p["edge_pts"] >= KUPON_MIN_EDGE_PTS]
 
-    pool.sort(key=lambda x: -(x["edge_pts"] or 0))
+    pool.sort(key=lambda x: -(x["roi_pct"] or 0))
     return pool
 
 
