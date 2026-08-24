@@ -1409,16 +1409,38 @@ def _kupon_candidate_pool() -> list:
 
     pool = []
 
-    # 1) Favori+Value ve Value+para akisi teyitli -- oran<3.00 (kendi veri kanitina gore)
+    # 1) Favori+Value ve Value+para akisi teyitli -- ARTIK TEK TARAF DEGIL, CIFTE SANS (1X/X2).
+    #    Sebep: kaybedilen bahislerin analizinde (n=15 ornek) %60'i BERABERLIKTEN kaynaklaniyordu --
+    #    favori taraf nadiren aciktan kaybediyor, cogunlukla beraberlige takiliyor. Cifte sans
+    #    (favori+berabere) bu riski komple ortadan kaldirir, karsiliginda oran dusuyor.
+    #    Oran<3.00 sinirlamasi ARTIK CIFTE SANS ONCESI (orijinal tek taraf) orana uygulaniyor --
+    #    o sinir zaten kanitlanmis bantla ilgiliydi, degismedi.
     analysis = get_analysis()
     pl = get_playable_picks(analysis)
+    volkano_exact, volkano_by_date = _build_volkano_odds_index()
     for c in pl["playable"]:
-        if c["segment"] in ("favori_value", "value_mf") and in_window(c["time"]) and c["odd"] is not None and c["odd"] < 3.00:
-            pool.append({
-                "type": c["perf"]["label"], "home": c["home"], "away": c["away"],
-                "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
-                "win_rate": c["perf"]["win_rate"], "roi_pct": c["perf"]["roi_pct"], "sample": c["perf"]["staked"],
-            })
+        if c["segment"] not in ("favori_value", "value_mf") or not in_window(c["time"]):
+            continue
+        if c["odd"] is None or c["odd"] >= 3.00:
+            continue
+        if c["side"] not in ("1", "2"):
+            continue  # 'X' secimi cifte sansa cevrilemez, atla
+
+        triple = _lookup_volkano_triple(c["home"], c["away"], c["time"], volkano_exact, volkano_by_date)
+        if triple is None or None in triple:
+            continue  # Volkano'nun tam uclusu yoksa cifte sans hesaplanamaz, bu adayi atla
+        c1, cx, c2 = triple
+        exclude_side = "2" if c["side"] == "1" else "1"
+        dc_odd = _double_chance_odd(c1, cx, c2, exclude_side)
+        if dc_odd is None:
+            continue
+        dc_side = "1X" if c["side"] == "1" else "X2"
+
+        pool.append({
+            "type": f"{c['perf']['label']} (Çifte Şans)", "home": c["home"], "away": c["away"],
+            "league": c["league"], "time": c["time"], "side": dc_side, "odd": dc_odd,
+            "win_rate": c["perf"]["win_rate"], "roi_pct": c["perf"]["roi_pct"], "sample": c["perf"]["staked"],
+        })
 
     # 2) Sadece Volkano dusen oranlari -- oran<2.00 (genel dusen-oran analizine gore, degisim yok)
     vperf = get_dropping_performance("volcano")
@@ -1786,6 +1808,15 @@ def _build_volkano_odds_index():
 
 
 def _lookup_volkano_odd(home, away, time, side, exact_idx, by_date_idx):
+    triple = _lookup_volkano_triple(home, away, time, exact_idx, by_date_idx)
+    if triple is None:
+        return None
+    c1, cx, c2 = triple
+    return {"1": c1, "X": cx, "2": c2}.get(side)
+
+
+def _lookup_volkano_triple(home, away, time, exact_idx, by_date_idx):
+    """Volkano'nun tam 1/X/2 uclusunu doner (cifte sans hesabi icin gerekli)."""
     dk = _date_bucket(time)
     nk = (dk, _norm(home), _norm(away))
     triple = exact_idx.get(nk)
@@ -1801,10 +1832,7 @@ def _lookup_volkano_odd(home, away, time, side, exact_idx, by_date_idx):
             if _same_match(home, away, time, h, a, mt):
                 triple = (c1, cx, c2)
                 break
-    if triple is None:
-        return None
-    c1, cx, c2 = triple
-    return {"1": c1, "X": cx, "2": c2}.get(side)
+    return triple
 
 
 VIP_MIN_EDGE_PCT = 3.0  # Volkano farki bunun altindaysa gurultu sayilir, VIP'e girmez
