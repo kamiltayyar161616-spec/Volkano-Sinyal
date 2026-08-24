@@ -2298,3 +2298,27 @@ def analyze_volkano_vs_admiral_retro(min_sample: int = 5) -> dict:
         "volkano_dusuk": summarize(volkano_dusuk_by_tier),
         "admiral_dusuk": summarize(admiral_dusuk_by_tier),
     }
+
+
+# ---------------------------------------------------------------------------
+# analyze_volkano_vs_admiral_retro() COK AGIR (tum picks + tum odds_tracking
+# tablosunu tarar) -- her sayfa yuklemesinde CANLI calistirmak yerine, tipki
+# kaynak isabet tablosu gibi, arka planda periyodik onbelleklenir.
+# ---------------------------------------------------------------------------
+
+_volkano_admiral_retro_cache = {"data": None, "updated_at": None}
+
+
+def record_volkano_admiral_retro_cache() -> None:
+    """analyze_volkano_vs_admiral_retro() sonucunu bellekte tazeler (arka plandan cagrilir)."""
+    try:
+        _volkano_admiral_retro_cache["data"] = analyze_volkano_vs_admiral_retro(min_sample=10)
+        _volkano_admiral_retro_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+    except Exception:
+        pass  # tazeleme basarisiz olursa eski deger (varsa) kullanilmaya devam eder
+
+
+def get_volkano_admiral_retro_cached() -> dict:
+    """Onbellekteki sonucu doner -- bos ise CANLI hesaplamaz (agir islem), sadece bos sozluk doner
+    (sayfa 'henuz veri yok' gosterir, ilk arka plan turu (5dk) gecince dolar)."""
+    return _volkano_admiral_retro_cache["data"] or {"volkano_dusuk": {}, "admiral_dusuk": {}}
