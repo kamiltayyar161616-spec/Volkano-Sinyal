@@ -259,6 +259,51 @@ def _segment_qualifies(perf: dict, min_sample: int = SEGMENT_MIN_SAMPLE) -> bool
     return True
 
 
+def get_segment_dc_performance_by_tier(segment: str) -> dict:
+    """favori_value/value_mf'nin CIFTE SANS (taraf VEYA beraberlik kazanirsa 'kazandi' sayilir)
+    ihtimaline gore PROJEKTE EDILMIS kazanma oranini oran bandina gore doner. Gercek cifte sans
+    fiyati gecmiste kaydedilmedigi icin (sadece tek taraf oranı kaydedildi), sadece KAZANMA ORANI
+    guvenilir olcum -- ROI, bu fonksiyonu cagiran yerde GUNCEL canli DC fiyatiyla tahmin edilir."""
+    conn = _get_conn()
+    try:
+        if segment == "favori_value":
+            rows = conn.execute("""
+                SELECT odd, side, final_score FROM picks
+                WHERE category='favorite' AND result IN ('won','lost') AND final_score IS NOT NULL
+            """).fetchall()
+        elif segment == "value_mf":
+            rows = conn.execute("""
+                SELECT odd, side, final_score FROM picks
+                WHERE category='value' AND mf_confirmed=1 AND result IN ('won','lost') AND final_score IS NOT NULL
+            """).fetchall()
+        else:
+            rows = []
+    finally:
+        conn.close()
+
+    by_tier = {}
+    for odd, side, fs in rows:
+        if odd is None or side not in ("1", "2"):
+            continue
+        try:
+            hg, ag = map(int, fs.split("-"))
+        except Exception:
+            continue
+        actual = "1" if hg > ag else ("2" if hg < ag else "X")
+        dc_win = actual == side or actual == "X"
+        tier = get_tier_label(odd)
+        by_tier.setdefault(tier, []).append(dc_win)
+
+    result = {}
+    for label, lo, hi in ODDS_TIERS:
+        wins = by_tier.get(label)
+        if wins:
+            n = len(wins)
+            w = sum(wins)
+            result[label] = {"staked": n, "won": w, "lost": n - w, "win_rate": round(100 * w / n, 1)}
+    return result
+
+
 def get_segment_performance_by_tier(segment: str) -> dict:
     """favori_value veya value_mf segmentinin ORAN BANDINA gore kirilmis performansi.
     Buyuk-veri analizinde bu iki segmentin bantlar arasi ROI'sinin ciddi farklilik gosterdigi
@@ -1414,6 +1459,7 @@ KUPON_SIZE = 30
 KUPON_WINDOW_HOURS = 48
 KUPON_MIN_VOLCANO_SAMPLE = 10
 KUPON_MIN_ROI_PCT = 5.0    # 15'ten indirildi -- artik oran<2.00 sert filtresiyle birlikte calisiyor, ikisi birlikte cok siki olmasin diye
+KUPON_MIN_EDGE_PTS = 8.0   # kazanma orani, o oranin basabas noktasindan (100/oran) en az bu kadar puan yukarida olmali
 KUPON_MAX_ODD = 2.00        # buyuk veri analizinde bulunan en guclu tek sinyal: 2.00 alti bantlar pozitif, ustu hep negatif
 
 
@@ -1449,9 +1495,12 @@ def _kupon_candidate_pool() -> list:
     analysis = get_analysis()
     pl = get_playable_picks(analysis)
     volkano_exact, volkano_by_date = _build_volkano_odds_index()
+    # ONEMLI: artik CIFTE SANS oynadigimiz icin, kalite kontrolu de CIFTE SANSIN PROJEKTE EDILMIS
+    # kazanma oranina gore yapiliyor -- eski tek-tarafli win_rate/ROI'yi kullanmak tutarsizdi
+    # (farkli bir bahis turunun istatistigini baska bir bahis turune uygulamak gibi).
     tier_perf_cache = {
-        "favori_value": get_segment_performance_by_tier("favori_value"),
-        "value_mf": get_segment_performance_by_tier("value_mf"),
+        "favori_value": get_segment_dc_performance_by_tier("favori_value"),
+        "value_mf": get_segment_dc_performance_by_tier("value_mf"),
     }
     for c in pl["playable"]:
         if c["segment"] not in ("favori_value", "value_mf") or not in_window(c["time"]):
@@ -1461,12 +1510,12 @@ def _kupon_candidate_pool() -> list:
         if c["side"] not in ("1", "2"):
             continue  # 'X' secimi cifte sansa cevrilemez, atla
 
-        # BANT-BAZLI KALITE: segmentin genel ROI'si pozitif olsa da, bu maca ozel ORAN BANDININ
-        # kendi tarihsel performansi ayri kontrol edilir -- zayif bantlar (orn. Favori+Value'nun
-        # 1.50-1.99 bandi sadece +%3.6 ROI) elenir, kupon geneline dusuk marj tasimasin diye.
+        # BANT-BAZLI KALITE: bu oran bandinda cifte sans PROJEKSIYONUNUN kazanma orani en az
+        # %75 VE en az 15 orneklemli olmali. (%75 esigi: cifte sansta basabas nokta genelde
+        # %70-85 araliginda oldugu icin, guvenli bir marj birakmak adina.)
         band = get_tier_label(c["odd"])
         band_perf = tier_perf_cache[c["segment"]].get(band)
-        if not _segment_qualifies(band_perf, min_sample=15):
+        if not band_perf or band_perf["staked"] < 15 or band_perf["win_rate"] < 75:
             continue
 
         triple = _lookup_volkano_triple(c["home"], c["away"], c["time"], volkano_exact, volkano_by_date)
@@ -1479,10 +1528,15 @@ def _kupon_candidate_pool() -> list:
             continue
         dc_side = "1X" if c["side"] == "1" else "X2"
 
+        # ROI TAHMINI: gecmiste gercek DC fiyati kaydedilmedigi icin, projekte edilmis kazanma
+        # oranini SU ANKI canli DC fiyatiyla carpip tahmini hesapliyoruz -- gercek deger, DC
+        # sonuclari birikince Kupon'un kendi performans kartinda gorulecek.
+        est_roi = round(100 * (band_perf["win_rate"] / 100 * dc_odd - 1), 1)
+
         pool.append({
-            "type": f"{c['perf']['label']} (Çifte Şans, {band} bandı)", "home": c["home"], "away": c["away"],
+            "type": f"{c['perf']['label']} (Çifte Şans, {band} bandı, tahmini)", "home": c["home"], "away": c["away"],
             "league": c["league"], "time": c["time"], "side": dc_side, "odd": dc_odd,
-            "win_rate": band_perf["win_rate"], "roi_pct": band_perf["roi_pct"], "sample": band_perf["staked"],
+            "win_rate": band_perf["win_rate"], "roi_pct": est_roi, "sample": band_perf["staked"],
         })
 
     # 2) Sadece Volkano dusen oranlari -- oran<2.00 (genel dusen-oran analizine gore, degisim yok)
@@ -1517,7 +1571,16 @@ def _kupon_candidate_pool() -> list:
     # ROI baraji (oran filtreleri artik yukarida her dala ozel uygulandi)
     pool = [p for p in pool if p.get("roi_pct") is not None and p["roi_pct"] >= KUPON_MIN_ROI_PCT]
 
-    pool.sort(key=lambda x: -(x["roi_pct"] or 0))
+    # EDGE BAZLI FILTRE: dusuk oranda basari %100 olamaz (bu risksiz kar demek olurdu) -- asil onemli
+    # olan kazanma oraninin BASABAS NOKTASINDAN (100/oran) ne kadar yukarida oldugu. Zayif "edge"li
+    # (basabasa yakin) adaylar elenir, guclu edge'li adaylar oncelenir -- kuponun ortalama marjini
+    # gercekten yukselten dogru kaldiraç budur, sadece dusuk/yuksek oran kovalamak degil.
+    for p in pool:
+        breakeven = 100.0 / p["odd"] if p.get("odd") else None
+        p["edge_pts"] = round(p["win_rate"] - breakeven, 1) if (breakeven is not None and p.get("win_rate") is not None) else None
+    pool = [p for p in pool if p.get("edge_pts") is not None and p["edge_pts"] >= KUPON_MIN_EDGE_PTS]
+
+    pool.sort(key=lambda x: -(x["edge_pts"] or 0))
     return pool
 
 
