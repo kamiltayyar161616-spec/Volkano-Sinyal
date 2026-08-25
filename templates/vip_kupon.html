@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — VIP Kupon{% endblock %}
 {% block page_tag %}VIP{% endblock %}
-{% block subtitle %}Özet'teki güvenilir sinyaller, Volkano'nun GÜNCEL canlı oranıyla ikinci kez teyit ediliyor — Volkano aynı tarafa daha düşük (daha güvenli) oran veriyorsa VIP sayılır. Elle çalıştırılır.{% endblock %}
+{% block subtitle %}Özet'teki güvenilir sinyaller, Admiral'in GÜNCEL canlı oranıyla ikinci kez teyit ediliyor — Admiral aynı tarafa daha düşük (daha güvenli) oran veriyorsa VIP sayılır. Elle çalıştırılır.{% endblock %}
 
 {% block extra_style %}
 <style>
@@ -85,7 +85,7 @@
 
 {% if added is not none %}
 <div class="added-banner">
-  {% if added|int > 0 %}✅ {{ added }} yeni VIP maç eklendi{% else %}ℹ️ Şu an Volkano'nun daha düşük oran verdiği yeni bir maç bulunamadı{% endif %}
+  {% if added|int > 0 %}✅ {{ added }} yeni VIP maç eklendi{% else %}ℹ️ Şu an Admiral'in daha düşük oran verdiği yeni bir maç bulunamadı{% endif %}
 </div>
 {% endif %}
 
@@ -128,7 +128,7 @@
 </div>
 
 <h2 class="section">💎 AKTİF VIP KUPON</h2>
-<div class="section-sub">Volkano'nun kendi oranı, Özet'te listelenen orandan daha düşük çıktığı için ekstra teyitli sayılıyor.</div>
+<div class="section-sub">Admiral'in kendi oranı, Özet'te listelenen orandan daha düşük çıktığı için ekstra teyitli sayılıyor.</div>
 
 {% if active %}
   {% for c in active %}
@@ -138,12 +138,12 @@
       <div class="kupon-body">
         <div class="teams">{{ c.home }} — {{ c.away }}<span class="side-chip">{{ c.side }}</span></div>
         {% if c.type %}<div class="type-tag">{{ c.type.upper() }}</div>{% endif %}
-        <div class="meta">{{ c.league }} &middot; Volkano oranı <b>{{ '%.2f'|format(c.odd) if c.odd else '?' }}</b> &middot; {{ c.match_time | localtime }}</div>
+        <div class="meta">{{ c.league }} &middot; Admiral oranı <b>{{ '%.2f'|format(c.odd) if c.odd else '?' }}</b> &middot; {{ c.match_time | localtime }}</div>
       </div>
     </div>
     <div class="row-right">
       <div class="perf-num" style="color:var(--turf-bright);">-%{{ c.edge_pct }}</div>
-      <div class="perf-sub">Volkano farkı &middot; %{{ c.win_rate }} kazanma</div>
+      <div class="perf-sub">Admiral farkı &middot; %{{ c.win_rate }} kazanma</div>
     </div>
   </div>
   {% endfor %}

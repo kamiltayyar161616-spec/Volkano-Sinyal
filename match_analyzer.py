@@ -1876,15 +1876,17 @@ def get_source_accuracy_leaderboard() -> list:
 # Elle "Calistir" butonuyla tetiklenir, arka planda otomatik calismaz.
 # ---------------------------------------------------------------------------
 
-def _build_volkano_odds_index():
-    """Volkano'nun guncel odds_tracking satirlarini hizli arama icin onceden indeksler
-    (analyze_source_accuracy()'deki ile ayni tam-anahtar-once yaklasimi)."""
+def _build_volkano_odds_index(source: str = "volcano"):
+    """Bir kaynagin guncel odds_tracking satirlarini hizli arama icin onceden indeksler
+    (analyze_source_accuracy()'deki ile ayni tam-anahtar-once yaklasimi). Varsayilan Volkano,
+    ama 'source' parametresiyle herhangi bir kaynak icin kullanilabilir (orn. VIP artik Admiral'i
+    kullaniyor, isim tarihi nedenlerle 'volkano' kalsa da)."""
     conn = _get_conn()
     try:
         rows = conn.execute("""
             SELECT home, away, match_time, current_1, current_x, current_2
-            FROM odds_tracking WHERE source='volcano'
-        """).fetchall()
+            FROM odds_tracking WHERE source=?
+        """, (source,)).fetchall()
     finally:
         conn.close()
 
@@ -1929,24 +1931,28 @@ VIP_MIN_EDGE_PCT = 3.0  # Volkano farki bunun altindaysa gurultu sayilir, VIP'e 
 
 
 def get_vip_kupon_candidates() -> list:
-    """Ozet'teki (guvenilir) sinyalleri Volkano'nun guncel canli oranlarina karsi test eder --
-    Volkano ayni tarafa EN AZ VIP_MIN_EDGE_PCT kadar DAHA DUSUK oran veriyorsa (= belirgin daha
-    yuksek guven), VIP aday olur. Kucuk (orn %0.5) farklar gurultu sayilir, dahil edilmez."""
+    """Ozet'teki (guvenilir) sinyalleri ADMIRAL'in guncel canli oranlarina karsi test eder --
+    Admiral ayni tarafa EN AZ VIP_MIN_EDGE_PCT kadar DAHA DUSUK oran veriyorsa (= bagimsiz bir
+    kaynaktan da belirgin teyit), VIP aday olur. Kucuk farklar gurultu sayilir, dahil edilmez.
+    NOT: Once Volkano kullaniyorduk ama Ozet'teki Favori+Value/Value+teyitli/Volkano-Dusen-Oran
+    oranlarinin ZATEN Volkano'nun kendi fiyati olmasi yuzunden bu, kendi kendini dogrulayan
+    (dongusel, hep %0 fark) bir karsilastirmaydi. Admiral BAGIMSIZ bir kaynak oldugu icin hem
+    bu dongusellikten kurtarir hem de kapsamı (kac macta veri bulunabildigi) belirgin artirir."""
     items = get_gunun_ozeti()
-    exact_idx, by_date_idx = _build_volkano_odds_index()
+    exact_idx, by_date_idx = _build_volkano_odds_index(source="admiral")
     candidates = []
     for it in items:
         if it.get("odd") is None or it.get("side") is None:
             continue
-        v_odd = _lookup_volkano_odd(it["home"], it["away"], it["time"], it["side"], exact_idx, by_date_idx)
-        if v_odd is None or v_odd >= it["odd"]:
+        confirm_odd = _lookup_volkano_odd(it["home"], it["away"], it["time"], it["side"], exact_idx, by_date_idx)
+        if confirm_odd is None or confirm_odd >= it["odd"]:
             continue
-        edge_pct = round(100 * (it["odd"] - v_odd) / it["odd"], 1)
+        edge_pct = round(100 * (it["odd"] - confirm_odd) / it["odd"], 1)
         if edge_pct < VIP_MIN_EDGE_PCT:
             continue
         c = dict(it)
         c["listed_odd"] = it["odd"]
-        c["volkano_odd"] = v_odd
+        c["volkano_odd"] = confirm_odd
         c["edge_pct"] = edge_pct
         candidates.append(c)
     candidates.sort(key=lambda x: -x["edge_pct"])
