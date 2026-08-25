@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 # VolcanoBet arayuzuyle ayni saat dilimi (Karadag, CET/CEST - DST'yi otomatik ayarlar)
-LOCAL_TZ = ZoneInfo("Europe/Podgorica")
+LOCAL_TZ = ZoneInfo("Europe/Istanbul")  # kullanicinin gercek yerel saatiyle eslessin diye (eskiden VolcanoBet'in kendi sitesiyle eslessin diye Podgorica idi)
 
 
 def to_local_str(iso_string) -> str:
