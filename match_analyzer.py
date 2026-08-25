@@ -1494,49 +1494,31 @@ def _kupon_candidate_pool() -> list:
     #    o sinir zaten kanitlanmis bantla ilgiliydi, degismedi.
     analysis = get_analysis()
     pl = get_playable_picks(analysis)
-    volkano_exact, volkano_by_date = _build_volkano_odds_index()
-    # ONEMLI: artik CIFTE SANS oynadigimiz icin, kalite kontrolu de CIFTE SANSIN PROJEKTE EDILMIS
-    # kazanma oranina gore yapiliyor -- eski tek-tarafli win_rate/ROI'yi kullanmak tutarsizdi
-    # (farkli bir bahis turunun istatistigini baska bir bahis turune uygulamak gibi).
+    # ESKI HALINE DONDURULDU: cifte sans (1X/X2) kaldirildi, tekrar TEK TARAF oynuyor -- kullanici
+    # cifte sansin cok az maç cikardigini (2-3 mac) begenmedi. Bant-bazli kalite kontrolu (zayif
+    # oran bantlarini eleme) KORUNDU, cunku o gercekten marji yukseltiyordu.
     tier_perf_cache = {
-        "favori_value": get_segment_dc_performance_by_tier("favori_value"),
-        "value_mf": get_segment_dc_performance_by_tier("value_mf"),
+        "favori_value": get_segment_performance_by_tier("favori_value"),
+        "value_mf": get_segment_performance_by_tier("value_mf"),
     }
     for c in pl["playable"]:
         if c["segment"] not in ("favori_value", "value_mf") or not in_window(c["time"]):
             continue
         if c["odd"] is None or c["odd"] >= 3.00:
             continue
-        if c["side"] not in ("1", "2"):
-            continue  # 'X' secimi cifte sansa cevrilemez, atla
 
-        # BANT-BAZLI KALITE: bu oran bandinda cifte sans PROJEKSIYONUNUN kazanma orani en az
-        # %75 VE en az 15 orneklemli olmali. (%75 esigi: cifte sansta basabas nokta genelde
-        # %70-85 araliginda oldugu icin, guvenli bir marj birakmak adina.)
+        # BANT-BAZLI KALITE: bu oran bandinin kendi tarihsel performansi (win_rate>=50, ROI>0,
+        # n>=15) ayrica kontrol edilir -- segmentin genel ROI'si pozitif olsa da zayif bantlar
+        # (orn. Favori+Value'nun 1.50-1.99 bandi dusuk marjli cikmisti) elenir.
         band = get_tier_label(c["odd"])
         band_perf = tier_perf_cache[c["segment"]].get(band)
-        if not band_perf or band_perf["staked"] < 15 or band_perf["win_rate"] < 75:
+        if not _segment_qualifies(band_perf, min_sample=15):
             continue
-
-        triple = _lookup_volkano_triple(c["home"], c["away"], c["time"], volkano_exact, volkano_by_date)
-        if triple is None or None in triple:
-            continue  # Volkano'nun tam uclusu yoksa cifte sans hesaplanamaz, bu adayi atla
-        c1, cx, c2 = triple
-        exclude_side = "2" if c["side"] == "1" else "1"
-        dc_odd = _double_chance_odd(c1, cx, c2, exclude_side)
-        if dc_odd is None:
-            continue
-        dc_side = "1X" if c["side"] == "1" else "X2"
-
-        # ROI TAHMINI: gecmiste gercek DC fiyati kaydedilmedigi icin, projekte edilmis kazanma
-        # oranini SU ANKI canli DC fiyatiyla carpip tahmini hesapliyoruz -- gercek deger, DC
-        # sonuclari birikince Kupon'un kendi performans kartinda gorulecek.
-        est_roi = round(100 * (band_perf["win_rate"] / 100 * dc_odd - 1), 1)
 
         pool.append({
-            "type": f"{c['perf']['label']} (Çifte Şans, {band} bandı, tahmini)", "home": c["home"], "away": c["away"],
-            "league": c["league"], "time": c["time"], "side": dc_side, "odd": dc_odd,
-            "win_rate": band_perf["win_rate"], "roi_pct": est_roi, "sample": band_perf["staked"],
+            "type": f"{c['perf']['label']} ({band} bandı)", "home": c["home"], "away": c["away"],
+            "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
+            "win_rate": band_perf["win_rate"], "roi_pct": band_perf["roi_pct"], "sample": band_perf["staked"],
         })
 
     # 2) Sadece Volkano dusen oranlari -- oran<2.00 (genel dusen-oran analizine gore, degisim yok)
