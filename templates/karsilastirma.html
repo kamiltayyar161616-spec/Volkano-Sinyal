@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Sansa vs Volkano{% endblock %}
+{% block page_tag %}KIYAS{% endblock %}
+{% block subtitle %}Sansa ve Volkano'nun canlı 1/X/2 oranları yan yana — yüzdelik fark Sansa baz alınarak hesaplanıyor{% endblock %}
+
+{% block extra_style %}
+<style>
+  .sort-tabs{
+    display:flex; gap:3px; margin:16px 16px 0; background:var(--navy); border:1px solid var(--navy-line);
+    border-radius:12px; padding:4px;
+  }
+  .sort-tabs a{
+    flex:1; text-align:center; padding:9px 6px; text-decoration:none;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:11.5px;
+    color:var(--chalk-dim); border-radius:8px;
+  }
+  .sort-tabs a.active{ background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; }
+
+  .overall-card{
+    margin:16px; padding:18px; border-radius:var(--radius);
+    background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep));
+    border:1px solid var(--navy-line); position:relative; overflow:hidden;
+  }
+  .overall-card::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(300px 140px at 90% -20%, rgba(242,169,59,0.10), transparent 70%);
+    pointer-events:none;
+  }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; position:relative; }
+  .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf-bright); }
+  .overall-num.neg{ color:var(--clay); }
+  .overall-num.flat{ color:var(--chalk-dim); }
+  .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; letter-spacing:0.03em; }
+  .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; position:relative; }
+
+  .cmp-card{
+    margin:0 16px 10px; padding:14px; border-radius:12px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--navy-line);
+  }
+  .cmp-teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; color:var(--chalk); }
+  .cmp-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; margin-bottom:10px; }
+  .cmp-table{ width:100%; border-collapse:collapse; }
+  .cmp-table th{
+    font-size:8.5px; color:var(--chalk-faint); font-weight:700; text-align:center;
+    padding-bottom:6px; letter-spacing:0.03em;
+  }
+  .cmp-table th:first-child{ text-align:left; }
+  .cmp-table td{ text-align:center; padding:5px 2px; font-size:12px; font-family:'Space Grotesk', sans-serif; }
+  .cmp-table td:first-child{ text-align:left; color:var(--chalk-dim); font-size:10px; font-weight:600; }
+  .cmp-table .odd-val{ font-weight:700; color:var(--chalk); }
+  .cmp-table .diff-pos{ color:var(--turf-bright); font-weight:800; }
+  .cmp-table .diff-neg{ color:var(--clay); font-weight:800; }
+  .cmp-table .diff-flat{ color:var(--chalk-faint); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="overall-card">
+  <div class="overall-title">SANSA'NIN DÜŞÜK ÇIKTIĞI TARAFLARIN PERFORMANSI</div>
+  {% if overall.staked and overall.staked > 0 %}
+    <div class="overall-grid">
+      <div>
+        <div class="overall-num {{ 'pos' if overall.win_rate >= 50 else 'neg' }}">%{{ overall.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if overall.roi_pct > 0 else 'neg' }}">{{ '+' if overall.roi_pct > 0 else '' }}%{{ overall.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ overall.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ overall.won }} kazandı / {{ overall.lost }} kaybetti &middot; <b style="color:{{ 'var(--turf-bright)' if overall.roi_units > 0 else 'var(--clay)' }};">{{ '+' if overall.roi_units > 0 else '' }}{{ '%.2f'|format(overall.roi_units) }} birim</b> &middot; {{ overall.pending }} bekliyor</div>
+    <div class="overall-note" style="border-top:1px dashed var(--navy-line); padding-top:10px; margin-top:10px;">
+      <span style="color:var(--chalk-dim); font-weight:700;">SON 7 GÜN:</span>
+      {% if overall_7d.staked and overall_7d.staked > 0 %}
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.win_rate >= 50 else 'var(--clay)' }};">%{{ overall_7d.win_rate }} kazanma</span> &middot;
+        <span style="color:{{ 'var(--turf-bright)' if overall_7d.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if overall_7d.roi_pct > 0 else '' }}%{{ overall_7d.roi_pct }} ROI</span>
+        (n={{ overall_7d.staked }})
+      {% else %}
+        <span style="color:var(--chalk-faint);">henüz veri yok</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — Sansa'nın Volkano'dan düşük olduğu maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ overall.pending }} bekliyor).</div>
+  {% endif %}
+</div>
+
+<div class="sort-tabs">
+  <a href="/karsilastirma?sort=diff" class="{{ 'active' if sort_by == 'diff' else '' }}">EN BÜYÜK FARK</a>
+  <a href="/karsilastirma?sort=time" class="{{ 'active' if sort_by == 'time' else '' }}">BAŞLAMA SAATİ</a>
+</div>
+
+<h2 class="section">⚖️ SANSA vs VOLKANO ({{ rows|length }} maç)</h2>
+<div class="section-sub">Önümüzdeki 24 saatte iki kaynakta da bulunan maçlar. Yüzde pozitifse Sansa'nın oranı Volkano'dan yüksek, negatifse düşük.</div>
+
+{% if rows %}
+  {% for r in rows %}
+  <div class="cmp-card">
+    <div class="cmp-teams">{{ r.home }} — {{ r.away }}</div>
+    <div class="cmp-meta">{{ r.league }} &middot; {{ r.time | localdatetime }}</div>
+    <table class="cmp-table">
+      <tr>
+        <th></th>
+        <th>1</th>
+        <th>X</th>
+        <th>2</th>
+      </tr>
+      <tr>
+        <td>Sansa</td>
+        <td class="odd-val">{{ '%.2f'|format(r.sansa_1) }}</td>
+        <td class="odd-val">{{ '%.2f'|format(r.sansa_x) }}</td>
+        <td class="odd-val">{{ '%.2f'|format(r.sansa_2) }}</td>
+      </tr>
+      <tr>
+        <td>Volkano</td>
+        <td class="odd-val">{{ '%.2f'|format(r.volkano_1) }}</td>
+        <td class="odd-val">{{ '%.2f'|format(r.volkano_x) }}</td>
+        <td class="odd-val">{{ '%.2f'|format(r.volkano_2) }}</td>
+      </tr>
+      <tr>
+        <td>Fark</td>
+        <td class="{{ 'diff-pos' if r.diff_1 and r.diff_1 > 0 else ('diff-neg' if r.diff_1 and r.diff_1 < 0 else 'diff-flat') }}">{{ '+' if r.diff_1 and r.diff_1 > 0 else '' }}{{ r.diff_1 }}%</td>
+        <td class="{{ 'diff-pos' if r.diff_x and r.diff_x > 0 else ('diff-neg' if r.diff_x and r.diff_x < 0 else 'diff-flat') }}">{{ '+' if r.diff_x and r.diff_x > 0 else '' }}{{ r.diff_x }}%</td>
+        <td class="{{ 'diff-pos' if r.diff_2 and r.diff_2 > 0 else ('diff-neg' if r.diff_2 and r.diff_2 < 0 else 'diff-flat') }}">{{ '+' if r.diff_2 and r.diff_2 > 0 else '' }}{{ r.diff_2 }}%</td>
+      </tr>
+    </table>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an her iki kaynakta da bulunan, önümüzdeki 24 saatte oynanacak eşleşen bir maç yok.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block footer %}YÜZDE = (SANSA - VOLKANO) / SANSA &middot; SANSA YÜKSEKSE + , DÜŞÜKSE - <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

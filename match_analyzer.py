@@ -2035,3 +2035,149 @@ def get_vip_kupon_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+# ---------------------------------------------------------------------------
+# SANSA vs VOLKANO KARSILASTIRMA -- canli oranlari yan yana gosterir,
+# Sansa'yi baz alarak (1/X/2 her sonuc icin ayri ayri) yuzdelik fark hesaplar.
+# Isaret: Sansa'nin orani Volkano'dan YUKSEKSE +, DUSUKSE - .
+# ---------------------------------------------------------------------------
+
+def get_sansa_volkano_comparison(window_hours: int = 24, sort_by: str = "diff") -> list:
+    """Ayni gercek maci hem Sansa'da hem Volkano'da bulup, ikisinin canli 1/X/2 oranlarini
+    ve Sansa'yi baz alan yuzdelik farki doner.
+    sort_by='diff' -> en buyuk mutlak farktan kucuge, sort_by='time' -> baslama saatine gore."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+
+    conn = _get_conn()
+    try:
+        sansa_rows = conn.execute("""
+            SELECT home, away, league, match_time, current_1, current_x, current_2
+            FROM odds_tracking WHERE source='sansa'
+        """).fetchall()
+        volcano_rows = conn.execute("""
+            SELECT home, away, match_time, current_1, current_x, current_2
+            FROM odds_tracking WHERE source='volcano'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    v_exact, v_by_date = {}, {}
+    for h, a, mt, c1, cx, c2 in volcano_rows:
+        dk = _date_bucket(mt)
+        v_exact[(dk, _norm(h), _norm(a))] = (c1, cx, c2)
+        v_by_date.setdefault(dk, []).append((h, a, mt, c1, cx, c2))
+
+    def pct_diff(s_odd, v_odd):
+        # Sansa'nin orani Volkano'dan YUKSEKSE + , DUSUKSE -
+        if not s_odd or v_odd is None:
+            return None
+        return round(100 * (s_odd - v_odd) / s_odd, 1)
+
+    results = []
+    for h, a, lg, mt, s1, sx, s2 in sansa_rows:
+        try:
+            dt = datetime.fromisoformat(str(mt).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if not (now <= dt <= window_end):
+            continue
+        if s1 is None or sx is None or s2 is None:
+            continue
+
+        dk = _date_bucket(mt)
+        nk = (dk, _norm(h), _norm(a))
+        vtriple = v_exact.get(nk)
+        if vtriple is None:
+            try:
+                next_dk = (datetime.strptime(dk, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                prev_dk = (datetime.strptime(dk, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+            except Exception:
+                next_dk = prev_dk = dk
+            vtriple = v_exact.get((next_dk, nk[1], nk[2])) or v_exact.get((prev_dk, nk[1], nk[2]))
+        if vtriple is None:
+            for vh, va, vmt, vc1, vcx, vc2 in v_by_date.get(dk, []):
+                if _same_match(h, a, mt, vh, va, vmt):
+                    vtriple = (vc1, vcx, vc2)
+                    break
+        if vtriple is None:
+            continue
+        v1, vx, v2 = vtriple
+        if v1 is None or vx is None or v2 is None:
+            continue
+
+        diff1 = pct_diff(s1, v1)
+        diffx = pct_diff(sx, vx)
+        diff2 = pct_diff(s2, v2)
+        max_abs = max(abs(diff1 or 0), abs(diffx or 0), abs(diff2 or 0))
+
+        results.append({
+            "home": h, "away": a, "league": lg, "time": mt,
+            "sansa_1": s1, "sansa_x": sx, "sansa_2": s2,
+            "volkano_1": v1, "volkano_x": vx, "volkano_2": v2,
+            "diff_1": diff1, "diff_x": diffx, "diff_2": diff2,
+            "max_abs_diff": max_abs,
+        })
+
+    if sort_by == "time":
+        results.sort(key=lambda r: r["time"])
+    else:
+        results.sort(key=lambda r: -r["max_abs_diff"])
+    return results
+
+
+def record_sansa_low_snapshot(rows: list) -> None:
+    """Sansa'nin Volkano'dan DUSUK oldugu taraf icin (bir mac icinde birden fazla taraf dusukse,
+    EN GUCLU/en negatif farkli olan taraf) sinyal kaydeder (category='sansa_vs_volkano')."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = []
+        for r in rows:
+            candidates = [
+                ("1", r["diff_1"], r["sansa_1"]),
+                ("X", r["diff_x"], r["sansa_x"]),
+                ("2", r["diff_2"], r["sansa_2"]),
+            ]
+            negatives = [c for c in candidates if c[1] is not None and c[1] < 0 and c[2] is not None]
+            if not negatives:
+                continue
+            side, diff, odd = min(negatives, key=lambda c: c[1])
+            rows_to_insert.append((
+                "sansa_vs_volkano", r["home"], r["away"], r["league"], r["time"],
+                side, odd, diff, None, 0, now_iso,
+            ))
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows_to_insert)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_sansa_vs_volkano_performance(days: int = None) -> dict:
+    """Sansa'nin Volkano'dan dusuk oldugu taraflarin toplam performansi (kazanma orani + ROI)."""
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='sansa_vs_volkano' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='sansa_vs_volkano' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
