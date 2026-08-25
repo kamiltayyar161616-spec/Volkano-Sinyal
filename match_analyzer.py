@@ -17,15 +17,35 @@ from zoneinfo import ZoneInfo
 LOCAL_TZ = ZoneInfo("Europe/Podgorica")  # kullanici Karadag'da -- Istanbul'a cevirmek yanlis bir varsayimdi, geri alindi
 
 
+_TZ_MARKER_RE = re.compile(r"(Z|[+-]\d{2}:\d{2})$")
+
+
+def _parse_to_local(iso_string) -> datetime:
+    """Bir zaman damgasini yerel saate (LOCAL_TZ) cevirir.
+    ONEMLI: bazi kaynaklar (orn. Admiral/Sansa) match_time'i HICBIR saat dilimi etiketi
+    OLMADAN (ne 'Z' ne '+HH:MM') kaydediyor -- bu durumda deger ZATEN YEREL SAAT kabul edilir
+    ve tekrar donusturulmez (eskiden yanlislikla UTC sayilip ustune bir kez daha yerel fark
+    ekleniyordu, bu da mac saatlerinin 2 saat ileri gorunmesine sebep oluyordu).
+    Sadece 'Z' veya acik bir '+HH:MM'/'-HH:MM' iceren degerler GERCEK UTC/ofsetli kabul edilip
+    LOCAL_TZ'ye donusturulur."""
+    s = str(iso_string)
+    has_marker = bool(_TZ_MARKER_RE.search(s))
+    if has_marker:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(LOCAL_TZ)
+    else:
+        dt = datetime.fromisoformat(s)
+        return dt.replace(tzinfo=LOCAL_TZ)
+
+
 def to_local_str(iso_string) -> str:
     """Bir ISO zaman damgasini (UTC varsayilarak) VolcanoBet arayuzuyle ayni yerel saate cevirip 'HH:MM' doner."""
     if not iso_string:
         return "?"
     try:
-        dt = datetime.fromisoformat(str(iso_string).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(LOCAL_TZ).strftime("%H:%M")
+        return _parse_to_local(iso_string).strftime("%H:%M")
     except Exception:
         s = str(iso_string)
         return s[11:16] if len(s) >= 16 else "?"
@@ -41,10 +61,7 @@ def to_local_full_str(iso_string) -> str:
     if not iso_string:
         return "?"
     try:
-        dt = datetime.fromisoformat(str(iso_string).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        local = dt.astimezone(LOCAL_TZ)
+        local = _parse_to_local(iso_string)
         return f"{local.day} {_AYLAR_TR[local.month - 1]} {_GUNLER_TR[local.weekday()]} {local.strftime('%H:%M')}"
     except Exception:
         return str(iso_string)
