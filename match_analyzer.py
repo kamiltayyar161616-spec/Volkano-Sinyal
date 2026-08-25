@@ -93,7 +93,7 @@ def _norm(name: str) -> str:
 
 def _parse_time(t):
     try:
-        return datetime.fromisoformat(str(t).replace("Z", "+00:00"))
+        return _parse_to_local(t)
     except Exception:
         return None
 
@@ -591,9 +591,7 @@ def get_dropping_odds(window_hours=12) -> list:
          o1, ox, o2, c1, cx, c2, updated_at) in rows:
         dt = None
         try:
-            dt = datetime.fromisoformat(str(match_time).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+            dt = _parse_to_local(match_time)
         except Exception:
             continue
         if dt is None or not (now <= dt <= window_end):
@@ -725,11 +723,9 @@ def _hours_before_kickoff(first_seen: str, match_time: str):
     """Sinyal, maç başlamadan kaç saat önce yakalanmış?"""
     try:
         fs = datetime.fromisoformat(str(first_seen).replace("Z", "+00:00"))
-        mt = datetime.fromisoformat(str(match_time).replace("Z", "+00:00"))
         if fs.tzinfo is None:
             fs = fs.replace(tzinfo=timezone.utc)
-        if mt.tzinfo is None:
-            mt = mt.replace(tzinfo=timezone.utc)
+        mt = _parse_to_local(match_time)
         return (mt - fs).total_seconds() / 3600
     except Exception:
         return None
@@ -1410,9 +1406,7 @@ def get_gunun_ozeti(window_hours: int = 24) -> list:
     filtered = []
     for it in items:
         try:
-            dt = datetime.fromisoformat(str(it["time"]).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+            dt = _parse_to_local(it["time"])
         except Exception:
             continue
         if now <= dt <= window_end:
@@ -1494,9 +1488,7 @@ def _kupon_candidate_pool() -> list:
 
     def in_window(t):
         try:
-            dt = datetime.fromisoformat(str(t).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+            dt = _parse_to_local(t)
             return now <= dt <= window_end
         except Exception:
             return False
@@ -1606,9 +1598,7 @@ def get_kupon_active(limit: int = KUPON_SIZE) -> list:
     for row in rows:
         d = dict(zip(cols, row))
         try:
-            dt = datetime.fromisoformat(str(d["match_time"]).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+            dt = _parse_to_local(d["match_time"])
         except Exception:
             continue  # tarih parse edilemiyorsa guvenli tarafta kal, listeye alma
         if dt > now:
@@ -1629,12 +1619,8 @@ def _same_match(a_home, a_away, a_time, b_home, b_away, b_time) -> bool:
                 difflib.SequenceMatcher(None, _norm(a_away), _norm(b_away)).ratio() < 0.82):
             return False
     try:
-        dt_a = datetime.fromisoformat(str(a_time).replace("Z", "+00:00"))
-        dt_b = datetime.fromisoformat(str(b_time).replace("Z", "+00:00"))
-        if dt_a.tzinfo is None:
-            dt_a = dt_a.replace(tzinfo=timezone.utc)
-        if dt_b.tzinfo is None:
-            dt_b = dt_b.replace(tzinfo=timezone.utc)
+        dt_a = _parse_to_local(a_time)
+        dt_b = _parse_to_local(b_time)
         return abs((dt_a - dt_b).total_seconds()) < 6 * 3600
     except Exception:
         return a_time == b_time
@@ -1726,9 +1712,7 @@ def get_reverse_flip_performance(days: int = None) -> dict:
 def _date_bucket(mt: str) -> str:
     """Bir zaman damgasindan sadece YYYY-MM-DD kismini cikarir (hizli on-gruplama icin)."""
     try:
-        dt = datetime.fromisoformat(str(mt).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+        dt = _parse_to_local(mt)
         return dt.strftime("%Y-%m-%d")
     except Exception:
         return str(mt)[:10]
@@ -2021,9 +2005,7 @@ def get_vip_kupon_active(limit: int = 100) -> list:
     for row in rows:
         d = dict(zip(cols, row))
         try:
-            dt = datetime.fromisoformat(str(d["match_time"]).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+            dt = _parse_to_local(d["match_time"])
         except Exception:
             continue
         if dt > now:
@@ -2095,9 +2077,7 @@ def get_sansa_sbbet_comparison(window_hours: int = 24, sort_by: str = "diff") ->
     results = []
     for h, a, lg, mt, s1, sx, s2 in sansa_rows:
         try:
-            dt = datetime.fromisoformat(str(mt).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+            dt = _parse_to_local(mt)
         except Exception:
             continue
         if not (now <= dt <= window_end):
