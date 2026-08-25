@@ -2043,8 +2043,8 @@ def get_vip_kupon_performance(days: int = None) -> dict:
 # Isaret: Sansa'nin orani Volkano'dan YUKSEKSE +, DUSUKSE - .
 # ---------------------------------------------------------------------------
 
-def get_sansa_volkano_comparison(window_hours: int = 24, sort_by: str = "diff") -> list:
-    """Ayni gercek maci hem Sansa'da hem Volkano'da bulup, ikisinin canli 1/X/2 oranlarini
+def get_sansa_sbbet_comparison(window_hours: int = 24, sort_by: str = "diff") -> list:
+    """Ayni gercek maci hem Sansa'da hem Sbbet'da bulup, ikisinin canli 1/X/2 oranlarini
     ve Sansa'yi baz alan yuzdelik farki doner.
     sort_by='diff' -> en buyuk mutlak farktan kucuge, sort_by='time' -> baslama saatine gore."""
     now = datetime.now(timezone.utc)
@@ -2056,21 +2056,21 @@ def get_sansa_volkano_comparison(window_hours: int = 24, sort_by: str = "diff") 
             SELECT home, away, league, match_time, current_1, current_x, current_2
             FROM odds_tracking WHERE source='sansa'
         """).fetchall()
-        volcano_rows = conn.execute("""
+        sbbet_rows = conn.execute("""
             SELECT home, away, match_time, current_1, current_x, current_2
-            FROM odds_tracking WHERE source='volcano'
+            FROM odds_tracking WHERE source='sbbet'
         """).fetchall()
     finally:
         conn.close()
 
     v_exact, v_by_date = {}, {}
-    for h, a, mt, c1, cx, c2 in volcano_rows:
+    for h, a, mt, c1, cx, c2 in sbbet_rows:
         dk = _date_bucket(mt)
         v_exact[(dk, _norm(h), _norm(a))] = (c1, cx, c2)
         v_by_date.setdefault(dk, []).append((h, a, mt, c1, cx, c2))
 
     def pct_diff(s_odd, v_odd):
-        # Sansa'nin orani Volkano'dan YUKSEKSE + , DUSUKSE -
+        # Sansa'nin orani Sbbet'dan YUKSEKSE + , DUSUKSE -
         if not s_odd or v_odd is None:
             return None
         return round(100 * (s_odd - v_odd) / s_odd, 1)
@@ -2117,7 +2117,7 @@ def get_sansa_volkano_comparison(window_hours: int = 24, sort_by: str = "diff") 
         results.append({
             "home": h, "away": a, "league": lg, "time": mt,
             "sansa_1": s1, "sansa_x": sx, "sansa_2": s2,
-            "volkano_1": v1, "volkano_x": vx, "volkano_2": v2,
+            "sbbet_1": v1, "sbbet_x": vx, "sbbet_2": v2,
             "diff_1": diff1, "diff_x": diffx, "diff_2": diff2,
             "max_abs_diff": max_abs,
         })
@@ -2129,9 +2129,9 @@ def get_sansa_volkano_comparison(window_hours: int = 24, sort_by: str = "diff") 
     return results
 
 
-def record_sansa_low_snapshot(rows: list) -> None:
-    """Sansa'nin Volkano'dan DUSUK oldugu taraf icin (bir mac icinde birden fazla taraf dusukse,
-    EN GUCLU/en negatif farkli olan taraf) sinyal kaydeder (category='sansa_vs_volkano')."""
+def record_sansa_low_snapshot_sbbet(rows: list) -> None:
+    """Sansa'nin Sbbet'dan DUSUK oldugu taraf icin (bir mac icinde birden fazla taraf dusukse,
+    EN GUCLU/en negatif farkli olan taraf) sinyal kaydeder (category='sansa_vs_sbbet')."""
     now_iso = datetime.now(timezone.utc).isoformat()
     conn = _get_conn()
     try:
@@ -2147,7 +2147,7 @@ def record_sansa_low_snapshot(rows: list) -> None:
                 continue
             side, diff, odd = min(negatives, key=lambda c: c[1])
             rows_to_insert.append((
-                "sansa_vs_volkano", r["home"], r["away"], r["league"], r["time"],
+                "sansa_vs_sbbet", r["home"], r["away"], r["league"], r["time"],
                 side, odd, diff, None, 0, now_iso,
             ))
         conn.executemany("""
@@ -2160,8 +2160,8 @@ def record_sansa_low_snapshot(rows: list) -> None:
         conn.close()
 
 
-def get_sansa_vs_volkano_performance(days: int = None) -> dict:
-    """Sansa'nin Volkano'dan dusuk oldugu taraflarin toplam performansi (kazanma orani + ROI)."""
+def get_sansa_vs_sbbet_performance(days: int = None) -> dict:
+    """Sansa'nin Sbbet'dan dusuk oldugu taraflarin toplam performansi (kazanma orani + ROI)."""
     conn = _get_conn()
     try:
         params = []
@@ -2171,10 +2171,10 @@ def get_sansa_vs_volkano_performance(days: int = None) -> dict:
             date_sql = " AND match_time >= ?"
             params.append(cutoff)
         resolved = conn.execute(f"""
-            SELECT result, odd FROM picks WHERE category='sansa_vs_volkano' AND result IN ('won','lost'){date_sql}
+            SELECT result, odd FROM picks WHERE category='sansa_vs_sbbet' AND result IN ('won','lost'){date_sql}
         """, params).fetchall()
         pending = conn.execute(f"""
-            SELECT COUNT(*) FROM picks WHERE category='sansa_vs_volkano' AND result='pending'{date_sql}
+            SELECT COUNT(*) FROM picks WHERE category='sansa_vs_sbbet' AND result='pending'{date_sql}
         """, params).fetchone()[0]
     finally:
         conn.close()

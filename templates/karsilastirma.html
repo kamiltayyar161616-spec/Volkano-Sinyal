@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}SAHA — Sansa vs Volkano{% endblock %}
+{% block title %}SAHA — Sansa vs Sbbet{% endblock %}
 {% block page_tag %}KIYAS{% endblock %}
-{% block subtitle %}Sansa ve Volkano'nun canlı 1/X/2 oranları yan yana — yüzdelik fark Sansa baz alınarak hesaplanıyor{% endblock %}
+{% block subtitle %}Sansa ve Sbbet'in canlı 1/X/2 oranları yan yana — yüzdelik fark Sansa baz alınarak hesaplanıyor{% endblock %}
 
 {% block extra_style %}
 <style>
@@ -88,7 +88,7 @@
       {% endif %}
     </div>
   {% else %}
-    <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — Sansa'nın Volkano'dan düşük olduğu maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ overall.pending }} bekliyor).</div>
+    <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — Sansa'nın Sbbet'ten düşük olduğu maçlar oynandıkça burada kazanma oranı ve ROI görünecek ({{ overall.pending }} bekliyor).</div>
   {% endif %}
 </div>
 
@@ -97,8 +97,8 @@
   <a href="/karsilastirma?sort=time" class="{{ 'active' if sort_by == 'time' else '' }}">BAŞLAMA SAATİ</a>
 </div>
 
-<h2 class="section">⚖️ SANSA vs VOLKANO ({{ rows|length }} maç)</h2>
-<div class="section-sub">Önümüzdeki 24 saatte iki kaynakta da bulunan maçlar. Yüzde pozitifse Sansa'nın oranı Volkano'dan yüksek, negatifse düşük.</div>
+<h2 class="section">⚖️ SANSA vs SBBET ({{ rows|length }} maç)</h2>
+<div class="section-sub">Önümüzdeki 24 saatte iki kaynakta da bulunan maçlar. Yüzde pozitifse Sansa'nın oranı Sbbet'ten yüksek, negatifse düşük.</div>
 
 {% if rows %}
   {% for r in rows %}
@@ -119,10 +119,10 @@
         <td class="odd-val">{{ '%.2f'|format(r.sansa_2) }}</td>
       </tr>
       <tr>
-        <td>Volkano</td>
-        <td class="odd-val">{{ '%.2f'|format(r.volkano_1) }}</td>
-        <td class="odd-val">{{ '%.2f'|format(r.volkano_x) }}</td>
-        <td class="odd-val">{{ '%.2f'|format(r.volkano_2) }}</td>
+        <td>Sbbet</td>
+        <td class="odd-val">{{ '%.2f'|format(r.sbbet_1) }}</td>
+        <td class="odd-val">{{ '%.2f'|format(r.sbbet_x) }}</td>
+        <td class="odd-val">{{ '%.2f'|format(r.sbbet_2) }}</td>
       </tr>
       <tr>
         <td>Fark</td>
@@ -139,4 +139,4 @@
 
 {% endblock %}
 
-{% block footer %}YÜZDE = (SANSA - VOLKANO) / SANSA &middot; SANSA YÜKSEKSE + , DÜŞÜKSE - <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}
+{% block footer %}YÜZDE = (SANSA - SBBET) / SANSA &middot; SANSA YÜKSEKSE + , DÜŞÜKSE - <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

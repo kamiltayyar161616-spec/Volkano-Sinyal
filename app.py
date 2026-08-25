@@ -10,7 +10,7 @@ from match_analyzer import (
     get_gunun_ozeti, record_ozet_snapshot, get_ozet_performance,
     record_kupon_fill, get_kupon_active, get_kupon_performance,
     get_vip_kupon_candidates, record_vip_kupon, get_vip_kupon_active, get_vip_kupon_performance,
-    get_sansa_volkano_comparison, record_sansa_low_snapshot, get_sansa_vs_volkano_performance,
+    get_sansa_sbbet_comparison, record_sansa_low_snapshot_sbbet, get_sansa_vs_sbbet_performance,
     to_local_full_str,
     to_local_str,
     get_reverse_flip_performance, record_source_accuracy_cache,
@@ -64,9 +64,9 @@ def kupon():
 @app.route("/karsilastirma")
 def karsilastirma():
     sort_by = request.args.get("sort", "diff")
-    rows = get_sansa_volkano_comparison(sort_by=sort_by)
-    overall = get_sansa_vs_volkano_performance()
-    overall_7d = get_sansa_vs_volkano_performance(days=7)
+    rows = get_sansa_sbbet_comparison(sort_by=sort_by)
+    overall = get_sansa_vs_sbbet_performance()
+    overall_7d = get_sansa_vs_sbbet_performance(days=7)
     return render_template("karsilastirma.html", rows=rows, sort_by=sort_by,
                             overall=overall, overall_7d=overall_7d, active_page="karsilastirma")
 
@@ -122,7 +122,7 @@ def _background_loop():
             record_ozet_snapshot(get_gunun_ozeti())
             record_source_accuracy_cache()
             record_kupon_fill()
-            record_sansa_low_snapshot(get_sansa_volkano_comparison())
+            record_sansa_low_snapshot_sbbet(get_sansa_sbbet_comparison())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
 
