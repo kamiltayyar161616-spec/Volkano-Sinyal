@@ -17,7 +17,7 @@ from datetime import datetime, timezone, timedelta
 
 import httpx
 
-from match_analyzer import _get_conn
+from match_analyzer import _get_conn, _parse_to_local
 
 API_BASE = "https://apiv2.allsportsapi.com/football/"
 API_KEY = os.environ.get("ALLSPORTS_API_KEY", "")
@@ -119,9 +119,7 @@ def check_pending_results() -> dict:
         by_date = {}
         for pid, home, away, match_time in pending:
             try:
-                dt = datetime.fromisoformat(str(match_time).replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                dt = _parse_to_local(match_time)
                 if now - dt < timedelta(hours=CHECK_AFTER_HOURS):
                     continue
             except Exception:
