@@ -97,12 +97,19 @@
   <a href="/karsilastirma?sort=time" class="{{ 'active' if sort_by == 'time' else '' }}">BAŞLAMA SAATİ</a>
 </div>
 
-<h2 class="section">⚖️ SANSA vs SBBET ({{ rows|length }} maç)</h2>
+<div style="margin:0 16px 16px;">
+  <input type="text" id="kiyasArama" placeholder="Maç veya lig adıyla ara…" autocomplete="off"
+         style="width:100%; box-sizing:border-box; padding:12px 14px; border-radius:10px; border:1px solid var(--navy-line);
+                background:var(--navy); color:var(--chalk); font-size:13px; font-family:inherit;">
+</div>
+
+<h2 class="section">⚖️ SANSA vs SBBET (<span id="kiyasSayac">{{ rows|length }}</span> maç)</h2>
 <div class="section-sub">Önümüzdeki 24 saatte iki kaynakta da bulunan maçlar. Yüzde pozitifse Sansa'nın oranı Sbbet'ten yüksek, negatifse düşük.</div>
 
 {% if rows %}
+  <div id="kiyasBos" class="empty" style="display:none;">Aramanla eşleşen bir maç bulunamadı.</div>
   {% for r in rows %}
-  <div class="cmp-card">
+  <div class="cmp-card" data-search="{{ (r.home ~ ' ' ~ r.away ~ ' ' ~ r.league) | lower }}">
     <div class="cmp-teams">{{ r.home }} — {{ r.away }}</div>
     <div class="cmp-meta">{{ r.league }} &middot; {{ r.time | localdatetime }}</div>
     <table class="cmp-table">
@@ -140,3 +147,28 @@
 {% endblock %}
 
 {% block footer %}YÜZDE = (SANSA - SBBET) / SANSA &middot; SANSA YÜKSEKSE + , DÜŞÜKSE - <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}
+
+{% block extra_script %}
+<script>
+(function() {
+  var input = document.getElementById('kiyasArama');
+  if (!input) return;
+  var cards = document.querySelectorAll('.cmp-card[data-search]');
+  var sayac = document.getElementById('kiyasSayac');
+  var bosMesaj = document.getElementById('kiyasBos');
+
+  input.addEventListener('input', function() {
+    var q = input.value.trim().toLocaleLowerCase('tr-TR');
+    var gorunen = 0;
+    cards.forEach(function(card) {
+      var eslesiyor = q === '' || card.getAttribute('data-search').includes(q);
+      card.style.display = eslesiyor ? '' : 'none';
+      if (eslesiyor) gorunen++;
+    });
+    if (sayac) sayac.textContent = gorunen;
+    if (bosMesaj) bosMesaj.style.display = (gorunen === 0 && q !== '') ? '' : 'none';
+  });
+})();
+</script>
+{% endblock %}
+
