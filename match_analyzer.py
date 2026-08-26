@@ -84,9 +84,24 @@ WINDOW_HOURS = 12
 FAVORITE_PROB_THRESHOLD = 50.0  # "kazanacak" filtresi için piyasa olasılık eşiği
 
 
+_TR_FOLD_MAP = str.maketrans({
+    "ç": "c", "Ç": "c",
+    "ğ": "g", "Ğ": "g",
+    "ı": "i", "İ": "i",
+    "ö": "o", "Ö": "o",
+    "ş": "s", "Ş": "s",
+    "ü": "u", "Ü": "u",
+})
+
+
 def _norm(name: str) -> str:
+    # ONEMLI: Turkce karakterler (c,g,i,o,s,u) ASCII karsiliklarina sadelestirilir --
+    # yoksa AllSportsAPI'nin "Fenerbahce" (c'siz) demesiyle bizim kaydimizdaki
+    # "Fenerbahce" (c'li, Sansa/Sbbet kaynakli) hic eslesmiyor, mac sonsuza kadar
+    # 'pending' kaliyordu. Once sadelestirme, sonra kucuk harfe cevirme yapilir.
+    name = name.translate(_TR_FOLD_MAP)
     name = name.lower()
-    name = re.sub(r"[^a-z0-9ğüşiöçİĞÜŞÖÇ ]", "", name)
+    name = re.sub(r"[^a-z0-9 ]", "", name)
     name = re.sub(r"\b(fc|sc|cf|cd|ac|sk|fk|if|bk|club|the)\b", "", name)
     return re.sub(r"\s+", " ", name).strip()
 
