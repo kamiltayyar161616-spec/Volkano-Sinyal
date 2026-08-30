@@ -2441,7 +2441,7 @@ def record_late_snapshot() -> None:
     try:
         rows = conn.execute("""
             SELECT source, home, away, league, match_time, current_1, current_x, current_2
-            FROM odds_tracking
+            FROM odds_tracking WHERE source != 'admiral'
         """).fetchall()
 
         to_insert = []
