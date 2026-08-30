@@ -2274,3 +2274,127 @@ def get_model_agreement(home: str, away: str, match_time: str, side: str):
 
     en_olasi_taraf = max(probs, key=probs.get)
     return en_olasi_taraf == side
+
+
+# ---------------------------------------------------------------------------
+# SURPRIZ ADAYLARI -- bahis sitelerinin (Volkano) DUSUK ihtimal verdigi (yuksek
+# oranli) bir tarafa, AllSportsAPI'nin BAGIMSIZ istatistik modelinin BELIRGIN
+# sekilde daha YUKSEK ihtimal verdigi durumlari bulur. Rastgele "yuksek oran sec"
+# degil, GERCEK bir goruş farkina dayanan aday listesi. PASIF IZLEME -- Kupon'a
+# hic dahil edilmiyor, once gercek performansini gormemiz lazim (Ters segmentinde
+# oldugu gibi kor bir "sürpriz sec" stratejisi daha once kaybettirmisti).
+# ---------------------------------------------------------------------------
+
+SURPRISE_MIN_ODD = 3.00       # bahis sitesine gore "acik ara az olasi" sayilmasi icin alt sinir
+SURPRISE_MIN_GAP_PTS = 15.0   # model olasiligi, bahis sitesinin adil olasiligindan en az bu kadar puan yuksek olmali
+
+
+def _fair_prob_from_triple(o1, ox, o2, side):
+    """Bir 1/X/2 uclusunden, kar marji temizlenmis (adil) olasiligi doner (0-100 arasi yuzde)."""
+    try:
+        p1, px, p2 = 1 / o1, 1 / ox, 1 / o2
+        total = p1 + px + p2
+        probs = {"1": p1 / total, "X": px / total, "2": p2 / total}
+        return round(probs[side] * 100, 1)
+    except Exception:
+        return None
+
+
+def get_surprise_candidates(window_hours: int = 24) -> list:
+    """Volkano'nun ACIK ARA az olasi gordugu (oran>=3.00) taraflar icin, AllSportsAPI'nin
+    bagimsiz modelinin GERCEKTEN belirgin sekilde daha yuksek ihtimal verdigi durumlari bulur."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT home, away, league, match_time, current_1, current_x, current_2
+            FROM odds_tracking WHERE source='volcano'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    candidates = []
+    for home, away, league, mt, c1, cx, c2 in rows:
+        if c1 is None or cx is None or c2 is None:
+            continue
+        try:
+            dt = _parse_to_local(mt)
+        except Exception:
+            continue
+        if not (now <= dt <= window_end):
+            continue
+
+        for side, odd in (("1", c1), ("X", cx), ("2", c2)):
+            if odd is None or odd < SURPRISE_MIN_ODD:
+                continue
+            fair_prob = _fair_prob_from_triple(c1, cx, c2, side)
+            if fair_prob is None:
+                continue
+
+            date_str = dt.strftime("%Y-%m-%d")
+            probs_by_match = _fetch_probabilities_for_date(date_str)
+            if not probs_by_match:
+                continue
+            key = (_norm(home), _norm(away))
+            model_probs = probs_by_match.get(key)
+            if model_probs is None:
+                continue
+            model_prob = model_probs.get(side)
+            if model_prob is None:
+                continue
+
+            gap = round(model_prob - fair_prob, 1)
+            if gap >= SURPRISE_MIN_GAP_PTS:
+                candidates.append({
+                    "home": home, "away": away, "league": league, "time": mt,
+                    "side": side, "odd": odd, "fair_prob": fair_prob,
+                    "model_prob": model_prob, "gap": gap,
+                })
+
+    candidates.sort(key=lambda c: -c["gap"])
+    return candidates
+
+
+def record_surprise_snapshot(candidates: list) -> None:
+    """Surpriz adaylarini picks tablosuna (category='surprise_candidate') pasif olarak
+    kaydeder -- Kupon'a hic dahil edilmiyor, sadece gercek performansi izlenir."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows = [
+            ("surprise_candidate", c["home"], c["away"], c["league"], c["time"],
+             c["side"], c["odd"], c["gap"], c["model_prob"], 0, now_iso)
+            for c in candidates
+        ]
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_surprise_performance(days: int = None) -> dict:
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='surprise_candidate' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='surprise_candidate' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf

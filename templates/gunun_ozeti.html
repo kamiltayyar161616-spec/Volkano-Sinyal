@@ -152,6 +152,44 @@
   {% endif %}
 </div>
 
+<div class="overall-card" style="border-color:var(--amber);">
+  <div class="overall-title">🎲 DENEYSEL: SÜRPRİZ ADAYLARI</div>
+  <div class="overall-note" style="margin-top:0;">Sisteme hiç önerilmiyor, sadece pasif izleniyor — Volkano'nun açık ara az olası gördüğü (oran≥3.00) taraflardan, AllSportsAPI'nin bağımsız modelinin belirgin şekilde (≥15 puan) daha yüksek ihtimal verdiği durumlar.</div>
+  {% if surprise_perf.staked and surprise_perf.staked > 0 %}
+    <div class="overall-grid" style="margin-top:12px;">
+      <div>
+        <div class="overall-num {{ 'pos' if surprise_perf.win_rate >= 30 else 'neg' }}">%{{ surprise_perf.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if surprise_perf.roi_pct > 0 else 'neg' }}">{{ '+' if surprise_perf.roi_pct > 0 else '' }}%{{ surprise_perf.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ surprise_perf.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ surprise_perf.won }} kazandı / {{ surprise_perf.lost }} kaybetti &middot; {{ surprise_perf.pending }} bekliyor</div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış veri yok — {{ surprise_perf.pending }} aday beklemede.</div>
+  {% endif %}
+  {% if surprises %}
+  <div style="margin-top:14px; border-top:1px dashed var(--navy-line); padding-top:12px;">
+    <div style="font-size:9.5px; color:var(--chalk-dim); font-weight:700; margin-bottom:8px;">ŞU AN AKTİF {{ surprises|length }} SÜRPRİZ ADAYI:</div>
+    {% for s in surprises[:10] %}
+    <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:10.5px; border-bottom:1px solid var(--navy-line);">
+      <div>
+        <div style="color:var(--chalk); font-weight:600;">{{ s.home }} — {{ s.away }} [{{ s.side }}]</div>
+        <div style="color:var(--chalk-faint); font-size:9px;">{{ s.league }} &middot; oran {{ s.odd }} &middot; {{ s.time | localdatetime }}</div>
+      </div>
+      <div style="text-align:right; color:var(--amber-bright); font-weight:700;">+{{ s.gap }}p</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
 <div class="count-banner">
   <div class="num">{{ items|length }}</div>
   <div class="lbl">ÖNÜMÜZDEKİ 24 SAATTE GÜVENİLİR SİNYAL &middot; ROI'YE GÖRE SIRALI</div>

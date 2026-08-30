@@ -14,6 +14,7 @@ from match_analyzer import (
     to_local_full_str,
     to_local_str,
     get_reverse_flip_performance, record_source_accuracy_cache,
+    get_surprise_candidates, record_surprise_snapshot, get_surprise_performance,
 )
 from results_checker import check_pending_results
 
@@ -47,9 +48,14 @@ def gunun_ozeti():
     reverse_flip = get_reverse_flip_performance()
     admiral_dc = get_dropping_performance("admiral_dc")
     admiral_dc_7d = get_dropping_performance("admiral_dc", days=7)
+    surprises = get_surprise_candidates()
+    surprise_perf = get_surprise_performance()
+    surprise_perf_7d = get_surprise_performance(days=7)
     return render_template("gunun_ozeti.html", items=items, overall=overall,
                             overall_7d=overall_7d, reverse_flip=reverse_flip,
-                            admiral_dc=admiral_dc, admiral_dc_7d=admiral_dc_7d, active_page="ozet")
+                            admiral_dc=admiral_dc, admiral_dc_7d=admiral_dc_7d,
+                            surprises=surprises, surprise_perf=surprise_perf,
+                            surprise_perf_7d=surprise_perf_7d, active_page="ozet")
 
 
 @app.route("/kupon")
@@ -122,6 +128,7 @@ def _background_loop():
             record_ozet_snapshot(get_gunun_ozeti())
             record_source_accuracy_cache()
             record_kupon_fill()
+            record_surprise_snapshot(get_surprise_candidates())
             record_sansa_low_snapshot_sbbet(get_sansa_sbbet_comparison())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")
