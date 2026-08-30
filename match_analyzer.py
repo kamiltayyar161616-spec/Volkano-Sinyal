@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import difflib
+import httpx
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
@@ -1537,6 +1538,14 @@ def _kupon_candidate_pool() -> list:
         if not _segment_qualifies(band_perf, min_sample=15):
             continue
 
+        # BAGIMSIZ MODEL TEYIDI: AllSportsAPI'nin kendi istatistiksel modeli (bahis fiyatlarindan
+        # BAGIMSIZ) bu tarafi en olasi sonuc olarak GORMUYORSA, aday elenir. Veri yoksa (kucuk
+        # lig kapsam eksikligi) elenmez -- sadece aciktan CELISEN adaylar cikar, kapsam
+        # eksikliginden dolayi hacim kaybetmeyelim.
+        agreement = get_model_agreement(c["home"], c["away"], c["time"], c["side"])
+        if agreement is False:
+            continue
+
         pool.append({
             "type": f"{c['perf']['label']} ({band} bandı)", "home": c["home"], "away": c["away"],
             "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
@@ -2191,3 +2200,77 @@ def get_sansa_vs_sbbet_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+# ---------------------------------------------------------------------------
+# ALLSPORTSAPI OLASILIK MODELI -- bahis sitelerinin fiyatlamasindan TAMAMEN
+# BAGIMSIZ, AllSportsAPI'nin kendi istatistiksel modelinin uretmedigi kazanma
+# olasiliklari. Kupon'a "Volkano'nun fiyati piyasadan farkli OLSUN, AMA bagimsiz
+# bir istatistik modeli de bu tarafi en olasi sonuc olarak goruyor mu?" sorusunu
+# soran IKINCI, BAGIMSIZ bir teyit katmani olarak eklenir.
+# ---------------------------------------------------------------------------
+
+ALLSPORTS_API_BASE = "https://apiv2.allsportsapi.com/football/"
+_probabilities_cache = {}  # date_str -> {(norm_home, norm_away): {"1":.., "X":.., "2":..}}
+
+
+def _fetch_probabilities_for_date(date_str: str) -> dict:
+    """Bir gun icin TUM maclarin AllSportsAPI olasilik tahminini TEK istekle ceker,
+    (norm_home, norm_away) anahtarli sozluge donusturup gunluk bellekte onbellekler."""
+    if date_str in _probabilities_cache:
+        return _probabilities_cache[date_str]
+
+    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
+    if not api_key:
+        return {}
+
+    result = {}
+    try:
+        url = f"{ALLSPORTS_API_BASE}?met=Probabilities&from={date_str}&to={date_str}&APIkey={api_key}"
+        resp = httpx.get(url, timeout=20)
+        if resp.status_code == 200:
+            data = resp.json()
+            for ev in data.get("result", []) or []:
+                home = ev.get("event_home_team")
+                away = ev.get("event_away_team")
+                hw, d, aw = ev.get("event_HW"), ev.get("event_D"), ev.get("event_AW")
+                if not home or not away or hw is None:
+                    continue
+                try:
+                    probs = {"1": float(hw), "X": float(d), "2": float(aw)}
+                except (TypeError, ValueError):
+                    continue
+                result[(_norm(home), _norm(away))] = probs
+    except Exception:
+        pass  # API erisilemezse sessizce bos doner, cagiran taraf bu durumu ele alir
+
+    _probabilities_cache[date_str] = result
+    return result
+
+
+def get_model_agreement(home: str, away: str, match_time: str, side: str):
+    """AllSportsAPI'nin bagimsiz modeli, bizim sectigimiz 'side' tarafini GERCEKTEN
+    en olasi sonuc olarak goruyor mu? (True/False/None -- None: veri bulunamadi)."""
+    try:
+        dt = _parse_to_local(match_time)
+        date_str = dt.strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+    probs_by_match = _fetch_probabilities_for_date(date_str)
+    if not probs_by_match:
+        return None
+
+    key = (_norm(home), _norm(away))
+    probs = probs_by_match.get(key)
+    if probs is None:
+        # bulanik eslestirme (nadir isim farkliliklari icin) -- sadece o gunun havuzunda ara
+        for (nh, na), p in probs_by_match.items():
+            if _same_match(home, away, match_time, nh, na, match_time):
+                probs = p
+                break
+    if probs is None:
+        return None
+
+    en_olasi_taraf = max(probs, key=probs.get)
+    return en_olasi_taraf == side
