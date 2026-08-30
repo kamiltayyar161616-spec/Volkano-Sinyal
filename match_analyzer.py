@@ -2505,16 +2505,23 @@ def get_late_drops(window_minutes: int, min_drop_pct: float = LATE_DROP_MIN_PCT)
             kickoff = _parse_to_local(mt)
         except Exception:
             continue
-        if kickoff <= now:
-            continue  # sadece henuz baslamamis maclar
 
         target_time = kickoff - timedelta(minutes=window_minutes)
+        # KRITIK DUZELTME: pencereye GERCEKTEN girilmis olmali (su an, kickoff'tan window_minutes
+        # kala noktasini GECMIS olmali) -- yoksa target_time henuz GELECEKTE bir an olur ve o ana
+        # ait hicbir gercek olcum yokken, elimizdeki TUM (henuz cok erken alinmis) olcumler yanlislikla
+        # "target_time'dan once" sayilip en son iki olcum (5dk arayla) 30dk'lik dususmus gibi gosterilirdi.
+        if now < target_time:
+            continue  # bu pencereye henuz girilmedi, gosterilecek bir sey yok
+
         # target_time'a EN YAKIN (ondan once veya esit) goruntuyu bul
         past_snaps = [s for s in snaps if datetime.fromisoformat(s[0]) <= target_time]
         if not past_snaps:
             continue
         ref_snap = max(past_snaps, key=lambda s: s[0])  # en yakin (en gec) referans
         latest_snap = max(snaps, key=lambda s: s[0])  # en guncel goruntu
+        if ref_snap[0] == latest_snap[0]:
+            continue  # ayni an, karsilastirilacak bir sey yok
 
         for side, idx in (("1", 1), ("X", 2), ("2", 3)):
             ref_odd = ref_snap[idx]
