@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Son Dakika{% endblock %}
+{% block page_tag %}SON DK{% endblock %}
+{% block subtitle %}Maça yaklaşırken (30dk / 15dk pencerelerinde) %10 üzeri düşüş yaşayan oranlar. Scraper'lar 10 dakikada bir çalıştığı için daha ince pencereler (5dk/1dk) şu an güvenilir ölçülemiyor.{% endblock %}
+
+{% block extra_style %}
+<style>
+  .window-tabs{
+    display:flex; gap:3px; margin:16px 16px 0; background:var(--navy); border:1px solid var(--navy-line);
+    border-radius:12px; padding:4px;
+  }
+  .window-tabs a{
+    flex:1; text-align:center; padding:9px 6px; text-decoration:none;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:11.5px;
+    color:var(--chalk-dim); border-radius:8px;
+  }
+  .window-tabs a.active{ background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; }
+
+  .drop-card{
+    margin:0 16px 10px; padding:14px; border-radius:12px;
+    background:linear-gradient(165deg, var(--navy-soft), var(--navy));
+    border:1px solid var(--clay);
+  }
+  .drop-teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; color:var(--chalk); }
+  .drop-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .drop-num-big{ font-size:18px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--clay); }
+
+  .tier-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:9px 14px; margin:0 16px 6px;
+    background:var(--navy); border:1px solid var(--navy-line); border-radius:10px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="window-tabs">
+  {% for w in windows %}
+  <a href="#pencere-{{ w }}">{{ w }} DK</a>
+  {% endfor %}
+</div>
+
+{% for w in windows %}
+<h2 class="section" id="pencere-{{ w }}">⏱️ SON {{ w }} DAKİKA ({{ active_by_window[w]|length }} sinyal)</h2>
+<div class="section-sub">Kickoff'a {{ w }} dakika kala oranla şu anki oran arasında en az %10 düşüş.</div>
+
+{% set active = active_by_window[w] %}
+{% if active %}
+  {% for d in active[:15] %}
+  <div class="drop-card">
+    <div class="drop-teams">{{ d.home }} — {{ d.away }} <span class="side-chip">{{ d.side }}</span></div>
+    <div class="drop-meta">{{ d.league }} &middot; {{ d.source.upper() }} &middot; {{ d.time | localdatetime }}</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+      <div class="drop-meta">{{ d.ref_odd }} → <b style="color:var(--chalk);">{{ d.current_odd }}</b></div>
+      <div class="drop-num-big">-%{{ d.drop_pct }}</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an bu pencerede %10 üzeri düşüş yaşayan sinyal yok.</div>
+{% endif %}
+
+<h3 class="section" style="font-size:12px;">📊 {{ w }} DK PENCERESİ — ORAN BANDINA GÖRE BAŞARI</h3>
+{% set perf = perf_by_window[w] %}
+{% if perf %}
+  {% for label, p in perf.items() %}
+  <div class="tier-row">
+    <div>
+      <div style="font-size:12px; color:var(--chalk); font-weight:600;">{{ label }}</div>
+      <div class="drop-meta">n={{ p.staked }} &middot; {{ p.won }} kazandı / {{ p.lost }} kaybetti</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-weight:800; color:{{ 'var(--turf-bright)' if p.roi_pct and p.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if p.roi_pct and p.roi_pct > 0 else '' }}%{{ p.roi_pct }}</div>
+      <div class="drop-meta">%{{ p.win_rate }} kazanma</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Henüz sonuçlanmış veri yok — bu pencerenin başarı tablosu veri birikince dolacak.</div>
+{% endif %}
+
+{% endfor %}
+
+{% endblock %}
+
+{% block footer %}SCRAPER'LAR ~10 DAKİKADA BİR ÇALIŞIYOR — DAHA İNCE PENCERELER (5DK/1DK) İÇİN DAHA SIK TARAMA GEREKİR <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

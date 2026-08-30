@@ -15,6 +15,8 @@ from match_analyzer import (
     to_local_str,
     get_reverse_flip_performance, record_source_accuracy_cache,
     get_surprise_candidates, record_surprise_snapshot, get_surprise_performance,
+    record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
+    LATE_DROP_WINDOWS_MIN,
 )
 from results_checker import check_pending_results
 
@@ -77,6 +79,14 @@ def karsilastirma():
                             overall=overall, overall_7d=overall_7d, active_page="karsilastirma")
 
 
+@app.route("/son-dakika")
+def son_dakika():
+    active_by_window = {w: get_late_drops(w) for w in LATE_DROP_WINDOWS_MIN}
+    perf_by_window = {w: get_late_drop_performance_by_tier(w) for w in LATE_DROP_WINDOWS_MIN}
+    return render_template("son_dakika.html", active_by_window=active_by_window,
+                            perf_by_window=perf_by_window, windows=LATE_DROP_WINDOWS_MIN, active_page="sondakika")
+
+
 @app.route("/vip-kupon")
 def vip_kupon():
     active = get_vip_kupon_active()
@@ -129,6 +139,8 @@ def _background_loop():
             record_source_accuracy_cache()
             record_kupon_fill()
             record_surprise_snapshot(get_surprise_candidates())
+            record_late_snapshot()
+            record_late_drop_snapshot()
             record_sansa_low_snapshot_sbbet(get_sansa_sbbet_comparison())
         except Exception as e:
             print(f"[background] snapshot hatası: {e}")

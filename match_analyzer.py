@@ -198,6 +198,22 @@ def _get_conn():
             UNIQUE(source, home, away, match_time)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS late_odds_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            home TEXT NOT NULL,
+            away TEXT NOT NULL,
+            league TEXT,
+            match_time TEXT NOT NULL,
+            odd_1 REAL, odd_x REAL, odd_2 REAL,
+            snapshot_time TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_late_snap_match
+        ON late_odds_snapshots(source, home, away, match_time)
+    """)
     conn.commit()
     return conn
 
@@ -2398,3 +2414,171 @@ def get_surprise_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+# ---------------------------------------------------------------------------
+# SON DAKIKA DUSUSLERI -- odds_tracking sadece acilis+guncel tutuyor, aradaki
+# hareketi saklamiyor. Bu yuzden maca yaklasirken (3 saat kala) periyodik
+# "anlik goruntu" (snapshot) kaydediyoruz -- boylece "30 dk once ne kadardi"
+# sorusuna cevap verebiliyoruz. NOT: scraper'lar 10 dakikada bir calistigi
+# icin en ince pencere ~10-15 dakika -- "son 1 dakika/5 dakika" mevcut
+# altyapiyla guvenilir sekilde olculemez, sadece 30dk ve 15dk penceresi var.
+# ---------------------------------------------------------------------------
+
+LATE_SNAPSHOT_WINDOW_HOURS = 3  # maca bu kadar saat kala anlik goruntu almaya basla
+LATE_DROP_WINDOWS_MIN = [30, 15]  # gercekci olcum pencereleri (10dk'lik scraper araligina gore)
+LATE_DROP_MIN_PCT = 10.0
+
+
+def record_late_snapshot() -> None:
+    """Kickoff'a LATE_SNAPSHOT_WINDOW_HOURS icinde olan her mac+kaynak icin anlik goruntu ekler
+    (silmez, biriktirir) -- boylece geriye donuk 'X dakika once ne kadardi' hesaplanabilir."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=LATE_SNAPSHOT_WINDOW_HOURS)
+    now_iso = now.isoformat()
+
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT source, home, away, league, match_time, current_1, current_x, current_2
+            FROM odds_tracking
+        """).fetchall()
+
+        to_insert = []
+        for source, home, away, league, mt, c1, cx, c2 in rows:
+            if c1 is None or cx is None or c2 is None:
+                continue
+            try:
+                dt = _parse_to_local(mt)
+            except Exception:
+                continue
+            if not (now <= dt <= window_end):
+                continue
+            to_insert.append((source, home, away, league, mt, c1, cx, c2, now_iso))
+
+        conn.executemany("""
+            INSERT INTO late_odds_snapshots
+            (source, home, away, league, match_time, odd_1, odd_x, odd_2, snapshot_time)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        """, to_insert)
+
+        # temizlik: kickoff'u 1 saatten fazla gecmis maclarin eski goruntulerini sil (buyumeyi sinirla)
+        cutoff = (now - timedelta(hours=1)).isoformat()
+        all_rows = conn.execute("SELECT DISTINCT match_time FROM late_odds_snapshots").fetchall()
+        old_ids = []
+        for (mt,) in all_rows:
+            try:
+                dt = _parse_to_local(mt)
+            except Exception:
+                continue
+            if dt < now - timedelta(hours=1):
+                old_ids.append(mt)
+        if old_ids:
+            conn.executemany("DELETE FROM late_odds_snapshots WHERE match_time = ?", [(m,) for m in old_ids])
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_late_drops(window_minutes: int, min_drop_pct: float = LATE_DROP_MIN_PCT) -> list:
+    """Kickoff'a window_minutes kaldigi andaki oranla, SU ANKI (en guncel) oran arasinda
+    en az min_drop_pct dusus olan taraflari bulur."""
+    now = datetime.now(timezone.utc)
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT source, home, away, league, match_time, odd_1, odd_x, odd_2, snapshot_time
+            FROM late_odds_snapshots ORDER BY snapshot_time ASC
+        """).fetchall()
+    finally:
+        conn.close()
+
+    by_match = {}
+    for source, home, away, league, mt, o1, ox, o2, snap_time in rows:
+        key = (source, home, away, mt)
+        by_match.setdefault(key, []).append((snap_time, o1, ox, o2))
+
+    results = []
+    for (source, home, away, mt), snaps in by_match.items():
+        try:
+            kickoff = _parse_to_local(mt)
+        except Exception:
+            continue
+        if kickoff <= now:
+            continue  # sadece henuz baslamamis maclar
+
+        target_time = kickoff - timedelta(minutes=window_minutes)
+        # target_time'a EN YAKIN (ondan once veya esit) goruntuyu bul
+        past_snaps = [s for s in snaps if datetime.fromisoformat(s[0]) <= target_time]
+        if not past_snaps:
+            continue
+        ref_snap = max(past_snaps, key=lambda s: s[0])  # en yakin (en gec) referans
+        latest_snap = max(snaps, key=lambda s: s[0])  # en guncel goruntu
+
+        for side, idx in (("1", 1), ("X", 2), ("2", 3)):
+            ref_odd = ref_snap[idx]
+            latest_odd = latest_snap[idx]
+            if ref_odd is None or latest_odd is None or ref_odd <= 0:
+                continue
+            drop_pct = round(100 * (ref_odd - latest_odd) / ref_odd, 1)
+            if drop_pct >= min_drop_pct:
+                # league bilgisini orijinal satirlardan cek
+                league = next((r[3] for r in rows if r[1] == home and r[2] == away and r[4] == mt), "")
+                results.append({
+                    "source": source, "home": home, "away": away, "league": league, "time": mt,
+                    "side": side, "ref_odd": ref_odd, "current_odd": latest_odd,
+                    "drop_pct": drop_pct, "window_min": window_minutes,
+                })
+
+    results.sort(key=lambda r: -r["drop_pct"])
+    return results
+
+
+def record_late_drop_snapshot() -> None:
+    """Her pencere (30dk, 15dk) icin bulunan son-dakika dususlerini picks tablosuna
+    (category=f'late_drop_{window}m') pasif olarak kaydeder -- Kupon'a dahil edilmez."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        for window in LATE_DROP_WINDOWS_MIN:
+            drops = get_late_drops(window)
+            rows_to_insert = [
+                (f"late_drop_{window}m", d["home"], d["away"], d["league"], d["time"],
+                 d["side"], d["current_odd"], d["drop_pct"], None, 0, now_iso)
+                for d in drops
+            ]
+            conn.executemany("""
+                INSERT OR IGNORE INTO picks
+                (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, rows_to_insert)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_late_drop_performance_by_tier(window_minutes: int) -> dict:
+    """Bir pencerenin (orn 30dk) oran bandina gore basari tablosu."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT odd, result FROM picks
+            WHERE category=? AND result IN ('won','lost')
+        """, (f"late_drop_{window_minutes}m",)).fetchall()
+    finally:
+        conn.close()
+
+    by_tier = {}
+    for odd, result in rows:
+        if odd is None:
+            continue
+        tier = get_tier_label(odd)
+        by_tier.setdefault(tier, []).append((result, odd))
+
+    result = {}
+    for label, lo, hi in ODDS_TIERS:
+        items = by_tier.get(label, [])
+        if items:
+            result[label] = _perf_from_rows(items)
+    return result
