@@ -1547,11 +1547,13 @@ def _kupon_candidate_pool() -> list:
         if c["segment"] not in ("favori_value", "value_mf") or not in_window(c["time"]):
             continue
         if c["odd"] is None or c["odd"] >= 3.00:
+            print(f"[KUPON_DEBUG] {c['home']}-{c['away']} ORAN>=3.00 ELENDI: {c['odd']}")
             continue
 
         band = get_tier_label(c["odd"])
         band_perf = tier_perf_cache[c["segment"]].get(band)
         if not _segment_qualifies(band_perf, min_sample=15):
+            print(f"[KUPON_DEBUG] {c['home']}-{c['away']} BANT KALITESI ELENDI: bant={band} perf={band_perf}")
             continue
 
         # BAGIMSIZ MODEL TEYIDI: AllSportsAPI'nin kendi istatistiksel modeli (bahis fiyatlarindan
@@ -1561,8 +1563,10 @@ def _kupon_candidate_pool() -> list:
         # KALDIRILDI (kullanici "ratingi unut, kullanmayacagiz" dedi) -- sadece bu katman kaldi.
         agreement = get_model_agreement(c["home"], c["away"], c["time"], c["side"])
         if agreement is False:
+            print(f"[KUPON_DEBUG] {c['home']}-{c['away']} MODEL TEYIDI ELENDI: agreement={agreement}")
             continue
 
+        print(f"[KUPON_DEBUG] {c['home']}-{c['away']} HAVUZA GIRDI")
         pool.append({
             "type": f"{c['perf']['label']} ({band} bandı)", "home": c["home"], "away": c["away"],
             "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
