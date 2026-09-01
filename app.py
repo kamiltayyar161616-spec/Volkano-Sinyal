@@ -73,11 +73,16 @@ def kupon():
 
 @app.route("/oracle")
 def oracle_kiyas():
-    rows = get_oracle_comparison_cached()
+    sort_by = request.args.get("sort", "diff")
+    rows = list(get_oracle_comparison_cached())
+    if sort_by == "time":
+        rows.sort(key=lambda r: r["time"])
+    else:
+        rows.sort(key=lambda r: -(r["max_abs_diff"] or 0))
     overall = get_oracle_vs_volkano_performance()
     overall_7d = get_oracle_vs_volkano_performance(days=7)
     tier_perf = get_oracle_vs_volkano_performance_by_tier()
-    return render_template("oracle.html", rows=rows, overall=overall,
+    return render_template("oracle.html", rows=rows, sort_by=sort_by, overall=overall,
                             overall_7d=overall_7d, tier_perf=tier_perf, active_page="oracle")
 
 

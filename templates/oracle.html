@@ -89,7 +89,7 @@
       <div class="cmp-meta" style="margin:0;">n={{ p.staked }} &middot; {{ p.won }} kazandı / {{ p.lost }} kaybetti</div>
     </div>
     <div style="text-align:right;">
-      <div style="font-weight:800; color:{{ 'var(--turf-bright)' if p.roi_pct and p.roi_pct > 0 else 'var(--clay)' }};">{{ '+' if p.roi_pct and p.roi_pct > 0 else '' }}%{{ p.roi_pct }}</div>
+      <div style="font-weight:800; color:{{ 'var(--turf-bright)' if p.roi_pct and p.roi_pct > 0 else 'var(--clay)' }};">ROI {{ '+' if p.roi_pct and p.roi_pct > 0 else '' }}%{{ p.roi_pct }}</div>
       <div class="cmp-meta" style="margin:0;">%{{ p.win_rate }} kazanma</div>
     </div>
   </div>
@@ -97,6 +97,11 @@
 {% else %}
   <div class="empty">Henüz sonuçlanmış veri yok.</div>
 {% endif %}
+
+<div class="sort-tabs" style="display:flex; gap:3px; margin:16px 16px 0; background:var(--navy); border:1px solid var(--navy-line); border-radius:12px; padding:4px;">
+  <a href="/oracle?sort=diff" style="flex:1; text-align:center; padding:9px 6px; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:11.5px; border-radius:8px; {{ 'background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06;' if sort_by == 'diff' else 'color:var(--chalk-dim);' }}">EN BÜYÜK FARK</a>
+  <a href="/oracle?sort=time" style="flex:1; text-align:center; padding:9px 6px; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:11.5px; border-radius:8px; {{ 'background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06;' if sort_by == 'time' else 'color:var(--chalk-dim);' }}">BAŞLAMA SAATİ</a>
+</div>
 
 <h2 class="section">🔮 ORACLE vs VOLKANO ({{ rows|length }} maç)</h2>
 <div class="section-sub">Önümüzdeki 24 saatte iki tarafın da oran ürettiği maçlar. Sadece üst düzey liglerdeki maçlar hesaplanıyor.</div>
