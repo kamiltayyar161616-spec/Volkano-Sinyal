@@ -2589,3 +2589,104 @@ def get_late_drop_performance_by_tier(window_minutes: int) -> dict:
         if items:
             result[label] = _perf_from_rows(items)
     return result
+
+
+def analyze_sansa_sbbet_retro(min_sample: int = 10) -> dict:
+    """GERIYE DONUK analiz: Sansa ve Sbbet'in HER IKISININ de oran verdigi, sonuclanmis
+    (final_score bilinen) her mac icin, hangi kaynagin taraf icin DAHA DUSUK oran verdigini
+    bulur ve o tarafin GERCEKTEN kazanip kazanmadigini kontrol eder. Iki yon icin ayri ayri
+    oran bandina gore kirilim doner: 'sansa_dusuk' ve 'sbbet_dusuk'."""
+    conn = _get_conn()
+    try:
+        picks_rows = conn.execute("""
+            SELECT DISTINCT home, away, match_time, final_score
+            FROM picks WHERE final_score IS NOT NULL
+        """).fetchall()
+        sansa_rows = conn.execute("""
+            SELECT home, away, match_time, current_1, current_x, current_2 FROM odds_tracking WHERE source='sansa'
+        """).fetchall()
+        sbbet_rows = conn.execute("""
+            SELECT home, away, match_time, current_1, current_x, current_2 FROM odds_tracking WHERE source='sbbet'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    def build_index(rows):
+        exact, by_date = {}, {}
+        for h, a, mt, c1, cx, c2 in rows:
+            dk = _date_bucket(mt)
+            exact[(dk, _norm(h), _norm(a))] = (c1, cx, c2)
+            by_date.setdefault(dk, []).append((h, a, mt, c1, cx, c2))
+        return exact, by_date
+
+    def lookup(home, away, time, exact_idx, by_date_idx):
+        dk = _date_bucket(time)
+        nk = (dk, _norm(home), _norm(away))
+        triple = exact_idx.get(nk)
+        if triple is None:
+            try:
+                next_dk = (datetime.strptime(dk, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                prev_dk = (datetime.strptime(dk, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+            except Exception:
+                next_dk = prev_dk = dk
+            triple = exact_idx.get((next_dk, nk[1], nk[2])) or exact_idx.get((prev_dk, nk[1], nk[2]))
+        if triple is None:
+            for h, a, mt, c1, cx, c2 in by_date_idx.get(dk, []):
+                if _same_match(home, away, time, h, a, mt):
+                    triple = (c1, cx, c2)
+                    break
+        return triple
+
+    s_exact, s_by_date = build_index(sansa_rows)
+    b_exact, b_by_date = build_index(sbbet_rows)
+
+    seen = set()
+    unique_matches = []
+    for h, a, mt, fs in picks_rows:
+        dk = _date_bucket(mt)
+        key = (dk, _norm(h), _norm(a))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_matches.append((h, a, mt, fs))
+
+    sansa_dusuk_by_tier = {}
+    sbbet_dusuk_by_tier = {}
+
+    for h, a, mt, fs in unique_matches:
+        try:
+            hg, ag = map(int, fs.split("-"))
+        except Exception:
+            continue
+        actual = "1" if hg > ag else ("2" if hg < ag else "X")
+
+        st = lookup(h, a, mt, s_exact, s_by_date)
+        bt = lookup(h, a, mt, b_exact, b_by_date)
+        if st is None or bt is None or None in st or None in bt:
+            continue
+        s1, sx, s2 = st
+        b1, bx, b2 = bt
+
+        for side, sodd, bodd in (("1", s1, b1), ("X", sx, bx), ("2", s2, b2)):
+            if sodd is None or bodd is None:
+                continue
+            won = (actual == side)
+            if sodd < bodd:
+                tier = get_tier_label(sodd)
+                sansa_dusuk_by_tier.setdefault(tier, []).append((("won" if won else "lost"), sodd))
+            elif bodd < sodd:
+                tier = get_tier_label(bodd)
+                sbbet_dusuk_by_tier.setdefault(tier, []).append((("won" if won else "lost"), bodd))
+
+    def summarize(by_tier):
+        out = {}
+        for label, lo, hi in ODDS_TIERS:
+            items = by_tier.get(label, [])
+            if len(items) >= min_sample:
+                out[label] = _perf_from_rows(items)
+        return out
+
+    return {
+        "sansa_dusuk": summarize(sansa_dusuk_by_tier),
+        "sbbet_dusuk": summarize(sbbet_dusuk_by_tier),
+    }
