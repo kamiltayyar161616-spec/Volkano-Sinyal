@@ -1562,6 +1562,11 @@ def _kupon_candidate_pool() -> list:
         if agreement is False:
             continue
 
+        # UCUNCU BAGIMSIZ KATMAN: sectigimiz takim son 6 mactaki gercek skorlara gore ACIKCA
+        # kotu bir seride mi (puan-basi-ortalama FORM_MIN_PPG altinda)? Veri yoksa elenmez.
+        if not get_form_agreement(c["home"], c["away"], c["time"], c["side"]):
+            continue
+
         pool.append({
             "type": f"{c['perf']['label']} ({band} bandı)", "home": c["home"], "away": c["away"],
             "league": c["league"], "time": c["time"], "side": c["side"], "odd": c["odd"],
@@ -2227,12 +2232,13 @@ def get_sansa_vs_sbbet_performance(days: int = None) -> dict:
 # ---------------------------------------------------------------------------
 
 ALLSPORTS_API_BASE = "https://apiv2.allsportsapi.com/football/"
-_probabilities_cache = {}  # date_str -> {(norm_home, norm_away): {"1":.., "X":.., "2":..}}
+_probabilities_cache = {}  # date_str -> {(norm_home, norm_away): {"probs": {...}, "home_key":.., "away_key":..}}
 
 
 def _fetch_probabilities_for_date(date_str: str) -> dict:
     """Bir gun icin TUM maclarin AllSportsAPI olasilik tahminini TEK istekle ceker,
-    (norm_home, norm_away) anahtarli sozluge donusturup gunluk bellekte onbellekler."""
+    (norm_home, norm_away) anahtarli sozluge donusturup gunluk bellekte onbellekler.
+    Ayrica home_team_key/away_team_key'i de saklar (form kontrolu icin kullanilir)."""
     if date_str in _probabilities_cache:
         return _probabilities_cache[date_str]
 
@@ -2256,7 +2262,11 @@ def _fetch_probabilities_for_date(date_str: str) -> dict:
                     probs = {"1": float(hw), "X": float(d), "2": float(aw)}
                 except (TypeError, ValueError):
                     continue
-                result[(_norm(home), _norm(away))] = probs
+                result[(_norm(home), _norm(away))] = {
+                    "probs": probs,
+                    "home_key": ev.get("home_team_key"),
+                    "away_key": ev.get("away_team_key"),
+                }
     except Exception:
         pass  # API erisilemezse sessizce bos doner, cagiran taraf bu durumu ele alir
 
@@ -2267,6 +2277,16 @@ def _fetch_probabilities_for_date(date_str: str) -> dict:
 def get_model_agreement(home: str, away: str, match_time: str, side: str):
     """AllSportsAPI'nin bagimsiz modeli, bizim sectigimiz 'side' tarafini GERCEKTEN
     en olasi sonuc olarak goruyor mu? (True/False/None -- None: veri bulunamadi)."""
+    entry = _lookup_probabilities_entry(home, away, match_time)
+    if entry is None:
+        return None
+    probs = entry["probs"]
+    en_olasi_taraf = max(probs, key=probs.get)
+    return en_olasi_taraf == side
+
+
+def _lookup_probabilities_entry(home: str, away: str, match_time: str):
+    """Bir mac icin AllSportsAPI'nin gunluk onbellegindeki tam kaydi (probs+team_key'ler) doner."""
     try:
         dt = _parse_to_local(match_time)
         date_str = dt.strftime("%Y-%m-%d")
@@ -2278,18 +2298,97 @@ def get_model_agreement(home: str, away: str, match_time: str, side: str):
         return None
 
     key = (_norm(home), _norm(away))
-    probs = probs_by_match.get(key)
-    if probs is None:
-        # bulanik eslestirme (nadir isim farkliliklari icin) -- sadece o gunun havuzunda ara
-        for (nh, na), p in probs_by_match.items():
+    entry = probs_by_match.get(key)
+    if entry is None:
+        for (nh, na), e in probs_by_match.items():
             if _same_match(home, away, match_time, nh, na, match_time):
-                probs = p
+                entry = e
                 break
-    if probs is None:
+    return entry
+
+
+# ---------------------------------------------------------------------------
+# TAKIM FORMU (son 6 mac) -- AllSportsAPI'nin met=Fixtures&teamId=X uc noktasi, o takimin
+# GECMIS maclarini (gercek skorlarla) doner. Bu, ucuncu bagimsiz katman: "Volkano'nun fiyati
+# piyasadan farkli OLSUN, model de destekliyor OLSUN, AMA sectigimiz takim gercekten kotu
+# bir seri icinde DEGIL mi?" sorusunu sorar.
+# ---------------------------------------------------------------------------
+
+FORM_MIN_PPG = 1.0  # son 6 mactaki puan-basi-ortalama (3=galibiyet,1=beraberlik,0=maglubiyet) en az bu kadar olmali
+_team_form_cache = {}  # (team_key, before_date) -> puan-basi-ortalama (float) veya None
+
+
+def _fetch_team_recent_form(team_key, before_date_str: str, num_matches: int = 6):
+    """Bir takimin, verilen tarihten ONCEKI son num_matches macinin puan-basi-ortalamasini
+    (0-3 arasi) doner. API'ye gitmeden once (team_key, before_date) bazinda onbellekler."""
+    if not team_key:
+        return None
+    cache_key = (team_key, before_date_str)
+    if cache_key in _team_form_cache:
+        return _team_form_cache[cache_key]
+
+    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
+    if not api_key:
         return None
 
-    en_olasi_taraf = max(probs, key=probs.get)
-    return en_olasi_taraf == side
+    result = None
+    try:
+        before_dt = datetime.strptime(before_date_str, "%Y-%m-%d")
+        from_dt = before_dt - timedelta(days=45)
+        to_dt = before_dt - timedelta(days=1)
+        url = (f"{ALLSPORTS_API_BASE}?met=Fixtures&teamId={team_key}"
+               f"&from={from_dt.strftime('%Y-%m-%d')}&to={to_dt.strftime('%Y-%m-%d')}&APIkey={api_key}")
+        resp = httpx.get(url, timeout=20)
+        if resp.status_code == 200:
+            data = resp.json()
+            matches = [ev for ev in (data.get("result", []) or []) if ev.get("event_final_result") not in (None, "", "-")]
+            matches.sort(key=lambda ev: ev.get("event_date", ""))
+            recent = matches[-num_matches:]
+            points = []
+            for ev in recent:
+                fs = ev.get("event_final_result", "")
+                try:
+                    hg, ag = map(int, fs.replace(" ", "").split("-"))
+                except Exception:
+                    continue
+                is_home = str(ev.get("home_team_key")) == str(team_key)
+                if hg == ag:
+                    points.append(1)
+                elif (is_home and hg > ag) or (not is_home and ag > hg):
+                    points.append(3)
+                else:
+                    points.append(0)
+            if points:
+                result = round(sum(points) / len(points), 2)
+    except Exception:
+        pass
+
+    _team_form_cache[cache_key] = result
+    return result
+
+
+def get_form_agreement(home: str, away: str, match_time: str, side: str):
+    """Sectigimiz 'side' tarafinin takimi, son 6 mactaki formuyla ACIKCA kotu bir seride mi?
+    (True: form makul/veri yok, False: form acikca kotu -- FORM_MIN_PPG altinda)."""
+    if side not in ("1", "2"):
+        return True  # beraberlik (X) icin takim-bazli form kontrolu anlamli degil
+
+    entry = _lookup_probabilities_entry(home, away, match_time)
+    if entry is None:
+        return True  # veri yoksa elemeyelim, hacim kaybetmeyelim
+
+    team_key = entry["home_key"] if side == "1" else entry["away_key"]
+    try:
+        dt = _parse_to_local(match_time)
+        date_str = dt.strftime("%Y-%m-%d")
+    except Exception:
+        return True
+
+    ppg = _fetch_team_recent_form(team_key, date_str)
+    if ppg is None:
+        return True  # veri yoksa elemeyelim
+
+    return ppg >= FORM_MIN_PPG
 
 
 # ---------------------------------------------------------------------------
@@ -2354,10 +2453,10 @@ def get_surprise_candidates(window_hours: int = 24) -> list:
             if not probs_by_match:
                 continue
             key = (_norm(home), _norm(away))
-            model_probs = probs_by_match.get(key)
-            if model_probs is None:
+            entry = probs_by_match.get(key)
+            if entry is None:
                 continue
-            model_prob = model_probs.get(side)
+            model_prob = entry["probs"].get(side)
             if model_prob is None:
                 continue
 
