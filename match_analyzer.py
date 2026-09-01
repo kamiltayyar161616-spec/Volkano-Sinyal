@@ -1557,16 +1557,10 @@ def _kupon_candidate_pool() -> list:
         # BAGIMSIZ MODEL TEYIDI: AllSportsAPI'nin kendi istatistiksel modeli (bahis fiyatlarindan
         # BAGIMSIZ) bu tarafi en olasi sonuc olarak GORMUYORSA, aday elenir. Veri yoksa (kucuk
         # lig kapsam eksikligi) elenmez -- sadece aciktan CELISEN adaylar cikar, kapsam
-        # eksikliginden dolayi hacim kaybetmeyelim.
+        # eksikliginden dolayi hacim kaybetmeyelim. RATING KATMANI KULLANICI TALEBIYLE
+        # KALDIRILDI (kullanici "ratingi unut, kullanmayacagiz" dedi) -- sadece bu katman kaldi.
         agreement = get_model_agreement(c["home"], c["away"], c["time"], c["side"])
         if agreement is False:
-            continue
-
-        # UCUNCU BAGIMSIZ KATMAN: sectigimiz takimin RATING'i (genel form + baglamsal form +
-        # baglamsal gol farki), RAKIBIN rating'inden en az RATING_MIN_GAP (5) puan yuksek olmali.
-        # Veri yoksa elenmez (hacim kaybetmemek icin).
-        rating_gap = get_rating_gap(c["home"], c["away"], c["time"], c["side"])
-        if rating_gap is not None and rating_gap < RATING_MIN_GAP:
             continue
 
         pool.append({
