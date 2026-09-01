@@ -2249,7 +2249,7 @@ def _fetch_probabilities_for_date(date_str: str) -> dict:
     result = {}
     try:
         url = f"{ALLSPORTS_API_BASE}?met=Probabilities&from={date_str}&to={date_str}&APIkey={api_key}"
-        resp = httpx.get(url, timeout=20)
+        resp = httpx.get(url, timeout=8)
         if resp.status_code == 200:
             data = resp.json()
             for ev in data.get("result", []) or []:
@@ -2338,7 +2338,7 @@ def _fetch_team_recent_form(team_key, before_date_str: str, num_matches: int = 6
         to_dt = before_dt - timedelta(days=1)
         url = (f"{ALLSPORTS_API_BASE}?met=Fixtures&teamId={team_key}"
                f"&from={from_dt.strftime('%Y-%m-%d')}&to={to_dt.strftime('%Y-%m-%d')}&APIkey={api_key}")
-        resp = httpx.get(url, timeout=20)
+        resp = httpx.get(url, timeout=8)
         if resp.status_code == 200:
             data = resp.json()
             matches = [ev for ev in (data.get("result", []) or []) if ev.get("event_final_result") not in (None, "", "-")]
