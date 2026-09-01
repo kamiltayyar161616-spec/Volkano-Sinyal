@@ -2398,17 +2398,36 @@ def _fetch_team_window_stats(team_key, before_date_str: str, num_matches: int = 
     return result
 
 
+HOME_ADVANTAGE_PPG = 0.4       # futbolda genel ev sahibi avantaji -- literatur ortalamasi ~0.3-0.4 puan/mac
+HOME_ADVANTAGE_GOAL_DIFF = 0.3  # ve ~0.3-0.5 gol farki/mac
+
+
 def get_team_rating(team_key, before_date_str: str, context_venue: str):
     """Rating = Genel_PPG + Baglamsal_PPG (evdeyse ev, deplasmandaysa deplasman) +
-    Baglamsal_Gol_Farki_Ortalamasi. Bu ILK-TASARIM bir formul -- agirliklar (hepsi esit,
-    1x) makul bir baslangic ama kesin bilimsel degil, gercek performansa gore ayarlanabilir."""
+    Baglamsal_Gol_Farki_Ortalamasi -- EV SAHIBI AVANTAJI DUZELTMESIYLE.
+    ONEMLI: futbolda ev sahibi olmak basli basina bir avantaj saglar (ayni takim evinde
+    deplasmandan sistematik olarak daha iyi performans gosterir) -- bu yuzden HAM ev-baglamli
+    ve deplasman-baglamli degerleri dogrudan karsilastirmak, guclu bir deplasman takimini bile
+    zayif bir ev sahibine karsi haksiz yere dusuk gostere bilirdi. Ev baglaminda HOME_ADVANTAGE
+    kadar CIKARILIR, deplasman baglaminda ayni miktar EKLENIR -- boylece karsilastirma adil olur.
+    Bu ILK-TASARIM bir formul -- agirliklar kesin bilimsel degil, gercek performansa gore
+    ayarlanabilir."""
     stats = _fetch_team_window_stats(team_key, before_date_str)
     if not stats or not stats.get("general") or not stats.get(context_venue):
         return None
     general = stats["general"]
     context = stats[context_venue]
+    context_ppg = context["ppg"]
     goal_diff = context["gf_avg"] - context["ga_avg"]
-    return round(general["ppg"] + context["ppg"] + goal_diff, 2)
+
+    if context_venue == "home":
+        context_ppg -= HOME_ADVANTAGE_PPG
+        goal_diff -= HOME_ADVANTAGE_GOAL_DIFF
+    else:
+        context_ppg += HOME_ADVANTAGE_PPG
+        goal_diff += HOME_ADVANTAGE_GOAL_DIFF
+
+    return round(general["ppg"] + context_ppg + goal_diff, 2)
 
 
 def get_rating_gap(home: str, away: str, match_time: str, side: str):
