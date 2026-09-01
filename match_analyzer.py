@@ -2591,17 +2591,26 @@ def get_late_drop_performance_by_tier(window_minutes: int) -> dict:
     return result
 
 
-def analyze_sansa_sbbet_retro(min_sample: int = 10) -> dict:
+def analyze_sansa_sbbet_retro(min_sample: int = 10, days: int = 60) -> dict:
     """GERIYE DONUK analiz: Sansa ve Sbbet'in HER IKISININ de oran verdigi, sonuclanmis
     (final_score bilinen) her mac icin, hangi kaynagin taraf icin DAHA DUSUK oran verdigini
     bulur ve o tarafin GERCEKTEN kazanip kazanmadigini kontrol eder. Iki yon icin ayri ayri
-    oran bandina gore kirilim doner: 'sansa_dusuk' ve 'sbbet_dusuk'."""
+    oran bandina gore kirilim doner: 'sansa_dusuk' ve 'sbbet_dusuk'.
+    NOT: 'days' ile son N gune sinirlanir -- tum gecmisi taramak (aylarca birikmis binlerce
+    kayit) bulanik eslestirme yuzunden cok yavas olabiliyor, varsayilan 60 gun yeterli ve hizli."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat() if days else None
     conn = _get_conn()
     try:
-        picks_rows = conn.execute("""
-            SELECT DISTINCT home, away, match_time, final_score
-            FROM picks WHERE final_score IS NOT NULL
-        """).fetchall()
+        if cutoff:
+            picks_rows = conn.execute("""
+                SELECT DISTINCT home, away, match_time, final_score
+                FROM picks WHERE final_score IS NOT NULL AND match_time >= ?
+            """, (cutoff,)).fetchall()
+        else:
+            picks_rows = conn.execute("""
+                SELECT DISTINCT home, away, match_time, final_score
+                FROM picks WHERE final_score IS NOT NULL
+            """).fetchall()
         sansa_rows = conn.execute("""
             SELECT home, away, match_time, current_1, current_x, current_2 FROM odds_tracking WHERE source='sansa'
         """).fetchall()
@@ -2653,7 +2662,11 @@ def analyze_sansa_sbbet_retro(min_sample: int = 10) -> dict:
     sansa_dusuk_by_tier = {}
     sbbet_dusuk_by_tier = {}
 
-    for h, a, mt, fs in unique_matches:
+    total = len(unique_matches)
+    print(f"[analyze_sansa_sbbet_retro] {total} benzersiz mac taranacak...")
+    for i, (h, a, mt, fs) in enumerate(unique_matches):
+        if i and i % 200 == 0:
+            print(f"[analyze_sansa_sbbet_retro] {i}/{total} tarandi...")
         try:
             hg, ag = map(int, fs.split("-"))
         except Exception:
