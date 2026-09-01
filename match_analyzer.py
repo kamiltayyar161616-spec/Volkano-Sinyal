@@ -2929,11 +2929,12 @@ def _lookup_fixture_entry(home: str, away: str, match_time: str):
 
 def get_oracle_prediction(home: str, away: str, match_time: str):
     """Bir mac icin Oracle (Dixon-Coles) tahminini doner, yoksa None.
-    Lig kalite filtresinden gecmeyen (genclik/kadin/alt lig) maclar icin None doner."""
+    LIG KISITLAMASI KALDIRILDI (kullanici talebiyle) -- artik Volkano'nun kapsadigi HER
+    mac icin, AllSportsAPI'de yeterli takim_id/lig_id + gecmis mac verisi varsa hesaplanir.
+    Tek kalan filtre: get_oracle_match_data() icindeki 'en az 3 gecmis mac' sarti (veri
+    yetersizse zaten anlamli bir tahmin uretilemez)."""
     entry = _lookup_fixture_entry(home, away, match_time)
     if entry is None:
-        return None
-    if not oracle_data.is_league_allowed(entry.get("league_name"), entry.get("country_name")):
         return None
 
     match_data = oracle_data.get_oracle_match_data(entry.get("home_key"), entry.get("away_key"), entry.get("league_key"))
