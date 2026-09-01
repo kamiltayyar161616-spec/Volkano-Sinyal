@@ -14,6 +14,8 @@ from match_analyzer import (
     to_local_str,
     get_reverse_flip_performance, record_source_accuracy_cache,
     get_surprise_candidates, record_surprise_snapshot, get_surprise_performance,
+    get_oracle_comparison_cached, record_oracle_comparison_cache, get_oracle_vs_volkano_performance,
+    get_oracle_vs_volkano_performance_by_tier,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -25,6 +27,7 @@ app.jinja_env.filters["localdatetime"] = to_local_full_str
 
 RECORD_INTERVAL_SEC = 300      # her 5 dakikada bir yeni pick'leri kaydet
 RESULT_CHECK_INTERVAL_SEC = 900  # her 15 dakikada bir sonuçları kontrol et
+ORACLE_CACHE_INTERVAL_SEC = 1800  # Oracle hesaplamasi agir (lig fikstur cekimi) -- 30 dakikada bir
 
 
 @app.route("/")
@@ -66,6 +69,16 @@ def kupon():
     overall_7d = get_kupon_performance(days=7)
     return render_template("kupon.html", active=active, overall=overall,
                             overall_7d=overall_7d, active_page="kupon")
+
+
+@app.route("/oracle")
+def oracle_kiyas():
+    rows = get_oracle_comparison_cached()
+    overall = get_oracle_vs_volkano_performance()
+    overall_7d = get_oracle_vs_volkano_performance(days=7)
+    tier_perf = get_oracle_vs_volkano_performance_by_tier()
+    return render_template("oracle.html", rows=rows, overall=overall,
+                            overall_7d=overall_7d, tier_perf=tier_perf, active_page="oracle")
 
 
 @app.route("/son-dakika")
@@ -117,6 +130,7 @@ def api_oynanabilir():
 
 def _background_loop():
     last_result_check = 0
+    last_oracle_cache = 0
     while True:
         try:
             data = get_analysis()
@@ -141,6 +155,14 @@ def _background_loop():
             except Exception as e:
                 print(f"[background] sonuç kontrolü hatası: {e}")
             last_result_check = now
+
+        if now - last_oracle_cache >= ORACLE_CACHE_INTERVAL_SEC:
+            try:
+                record_oracle_comparison_cache()
+                print("[background] Oracle karşılaştırması güncellendi")
+            except Exception as e:
+                print(f"[background] Oracle hatası: {e}")
+            last_oracle_cache = now
 
         time.sleep(RECORD_INTERVAL_SEC)
 

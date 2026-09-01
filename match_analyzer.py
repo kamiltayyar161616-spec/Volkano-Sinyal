@@ -14,6 +14,9 @@ import httpx
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
+import oracle_data
+import oracle_model
+
 # VolcanoBet arayuzuyle ayni saat dilimi (Karadag, CET/CEST - DST'yi otomatik ayarlar)
 LOCAL_TZ = ZoneInfo("Europe/Podgorica")  # kullanici Karadag'da -- Istanbul'a cevirmek yanlis bir varsayimdi, geri alindi
 
@@ -2260,6 +2263,9 @@ def _fetch_probabilities_for_date(date_str: str) -> dict:
                     continue
                 result[(_norm(home), _norm(away))] = {
                     "probs": probs,
+                    "league_key": ev.get("league_key"),
+                    "league_name": ev.get("league_name"),
+                    "country_name": ev.get("country_name"),
                     "home_key": ev.get("home_team_key"),
                     "away_key": ev.get("away_team_key"),
                 }
@@ -2840,3 +2846,187 @@ def analyze_sansa_sbbet_retro(min_sample: int = 10, days: int = 60) -> dict:
         "sansa_dusuk": summarize(sansa_dusuk_by_tier),
         "sbbet_dusuk": summarize(sbbet_dusuk_by_tier),
     }
+
+
+# ---------------------------------------------------------------------------
+# ORACLE (Dixon-Coles model) vs VOLKANO KARSILASTIRMASI -- kamiltayyar161616-spec/
+# vip-tahmin (BetOracle) projesinden port edilen Dixon-Coles Poisson modeli, Volkano'nun
+# canli oranlariyla karsilastirilir. Volkano BAZ ALINIR: fark = (Volkano-Oracle)/Volkano,
+# Volkano yuksekse + (Oracle daha dusuk/daha "emin" gorunuyor), dusukse -.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# ORACLE (Dixon-Coles model) vs VOLKANO KARSILASTIRMASI -- kamiltayyar161616-spec/
+# vip-tahmin (BetOracle) projesinden port edilen Dixon-Coles Poisson modeli, Volkano'nun
+# canli oranlariyla karsilastirilir. Volkano BAZ ALINIR: fark = (Volkano-Oracle)/Volkano,
+# Volkano yuksekse + (Oracle daha dusuk/daha "emin" gorunuyor), dusukse -.
+# ---------------------------------------------------------------------------
+
+def get_oracle_prediction(home: str, away: str, match_time: str):
+    """Bir mac icin Oracle (Dixon-Coles) tahminini doner, yoksa None.
+    Lig kalite filtresinden gecmeyen (genclik/kadin/alt lig) maclar icin None doner."""
+    entry = _lookup_probabilities_entry(home, away, match_time)
+    if entry is None:
+        return None
+    if not oracle_data.is_league_allowed(entry.get("league_name"), entry.get("country_name")):
+        return None
+
+    match_data = oracle_data.get_oracle_match_data(entry.get("home_key"), entry.get("away_key"), entry.get("league_key"))
+    if match_data is None:
+        return None
+
+    try:
+        return oracle_model.run_value_hunting(
+            match_data["home_general"], match_data["home_venue"],
+            match_data["away_general"], match_data["away_venue"],
+        )
+    except Exception:
+        return None
+
+
+def get_oracle_vs_volkano_comparison(window_hours: int = 24) -> list:
+    """Volkano'nun yakin zamanli tum maclarini tarar, her biri icin Oracle tahmini
+    varsa (lig filtresinden gecerse) canli karsilastirma satiri uretir."""
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT home, away, league, match_time, current_1, current_x, current_2
+            FROM odds_tracking WHERE source='volcano'
+        """).fetchall()
+    finally:
+        conn.close()
+
+    results = []
+    for home, away, league, mt, v1, vx, v2 in rows:
+        if v1 is None or vx is None or v2 is None:
+            continue
+        try:
+            dt = _parse_to_local(mt)
+        except Exception:
+            continue
+        if not (now <= dt <= window_end):
+            continue
+
+        oracle = get_oracle_prediction(home, away, mt)
+        if oracle is None:
+            continue
+
+        def pct_diff(v_odd, o_odd):
+            if not v_odd or not o_odd:
+                return None
+            return round(100 * (v_odd - o_odd) / v_odd, 1)
+
+        diff1 = pct_diff(v1, oracle["odd_home"])
+        diffx = pct_diff(vx, oracle["odd_draw"])
+        diff2 = pct_diff(v2, oracle["odd_away"])
+        max_abs = max(abs(diff1 or 0), abs(diffx or 0), abs(diff2 or 0))
+
+        results.append({
+            "home": home, "away": away, "league": league, "time": mt,
+            "volkano_1": v1, "volkano_x": vx, "volkano_2": v2,
+            "oracle_1": oracle["odd_home"], "oracle_x": oracle["odd_draw"], "oracle_2": oracle["odd_away"],
+            "diff_1": diff1, "diff_x": diffx, "diff_2": diff2,
+            "oracle_prediction": oracle["prediction"], "oracle_confidence": oracle["confidence"],
+            "max_abs_diff": max_abs,
+        })
+
+    results.sort(key=lambda r: -r["max_abs_diff"])
+    return results
+
+
+def record_oracle_snapshot(rows: list) -> None:
+    """Volkano'nun Oracle'a gore DUSUK oldugu taraf icin (Volkano daha 'ucuz'/emin
+    gorunuyorsa) sinyal kaydeder (category='oracle_vs_volkano')."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = []
+        for r in rows:
+            candidates = [
+                ("1", r["diff_1"], r["volkano_1"]),
+                ("X", r["diff_x"], r["volkano_x"]),
+                ("2", r["diff_2"], r["volkano_2"]),
+            ]
+            negatives = [c for c in candidates if c[1] is not None and c[1] < 0 and c[2] is not None]
+            if not negatives:
+                continue
+            side, diff, odd = min(negatives, key=lambda c: c[1])
+            rows_to_insert.append((
+                "oracle_vs_volkano", r["home"], r["away"], r["league"], r["time"],
+                side, odd, diff, None, 0, now_iso,
+            ))
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows_to_insert)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_oracle_vs_volkano_performance(days: int = None) -> dict:
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='oracle_vs_volkano' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='oracle_vs_volkano' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
+
+
+def get_oracle_vs_volkano_performance_by_tier() -> dict:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT odd, result FROM picks WHERE category='oracle_vs_volkano' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    by_tier = {}
+    for odd, result in rows:
+        if odd is None:
+            continue
+        tier = get_tier_label(odd)
+        by_tier.setdefault(tier, []).append((result, odd))
+    result = {}
+    for label, lo, hi in ODDS_TIERS:
+        items = by_tier.get(label, [])
+        if items:
+            result[label] = _perf_from_rows(items)
+    return result
+
+
+_oracle_comparison_cache = {"data": [], "updated_at": None}
+
+
+def record_oracle_comparison_cache() -> None:
+    """Oracle vs Volkano karsilastirmasini arka planda hesaplayip onbelleklerine yazar --
+    sayfa asla canli hesaplama yapmaz, sadece bu onbellegi okur (gecmisteki agir-sayfa
+    yavaslamasi sorununu tekrarlamamak icin)."""
+    try:
+        rows = get_oracle_vs_volkano_comparison()
+        _oracle_comparison_cache["data"] = rows
+        _oracle_comparison_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+        record_oracle_snapshot(rows)
+    except Exception:
+        pass
+
+
+def get_oracle_comparison_cached() -> list:
+    return _oracle_comparison_cache["data"]
