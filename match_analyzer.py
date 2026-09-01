@@ -2318,12 +2318,16 @@ FORM_MIN_PPG = 1.0  # son 6 mactaki puan-basi-ortalama (3=galibiyet,1=beraberlik
 _team_form_cache = {}  # (team_key, before_date) -> puan-basi-ortalama (float) veya None
 
 
-def _fetch_team_recent_form(team_key, before_date_str: str, num_matches: int = 6):
-    """Bir takimin, verilen tarihten ONCEKI son num_matches macinin puan-basi-ortalamasini
-    (0-3 arasi) doner. API'ye gitmeden once (team_key, before_date) bazinda onbellekler."""
+def _fetch_team_recent_form(team_key, before_date_str: str, venue: str, num_matches: int = 6):
+    """Bir takimin, verilen tarihten ONCEKI, SADECE 'venue' (home/away) tarafinda oynadigi
+    son num_matches macinin puan-basi-ortalamasini (0-3 arasi) doner. Genel (karma ev+deplasman)
+    form yerine, sectigimiz tarafa gore SADECE o baglamdaki (evinde/deplasmanda) form kullanilir --
+    cunku bir takimin evdeki ve deplasmandaki performansi cok farkli olabilir.
+    NOT: sadece tek taraf (venue) maclarini filtreledigimiz icin, 6 tanesini yakalayabilmek adina
+    arama penceresi 120 gune genisletildi (45 gun cogu zaman yetersiz kaliyordu)."""
     if not team_key:
         return None
-    cache_key = (team_key, before_date_str)
+    cache_key = (team_key, before_date_str, venue)
     if cache_key in _team_form_cache:
         return _team_form_cache[cache_key]
 
@@ -2334,7 +2338,7 @@ def _fetch_team_recent_form(team_key, before_date_str: str, num_matches: int = 6
     result = None
     try:
         before_dt = datetime.strptime(before_date_str, "%Y-%m-%d")
-        from_dt = before_dt - timedelta(days=45)
+        from_dt = before_dt - timedelta(days=120)
         to_dt = before_dt - timedelta(days=1)
         url = (f"{ALLSPORTS_API_BASE}?met=Fixtures&teamId={team_key}"
                f"&from={from_dt.strftime('%Y-%m-%d')}&to={to_dt.strftime('%Y-%m-%d')}&APIkey={api_key}")
@@ -2342,6 +2346,10 @@ def _fetch_team_recent_form(team_key, before_date_str: str, num_matches: int = 6
         if resp.status_code == 200:
             data = resp.json()
             matches = [ev for ev in (data.get("result", []) or []) if ev.get("event_final_result") not in (None, "", "-")]
+            if venue == "home":
+                matches = [ev for ev in matches if str(ev.get("home_team_key")) == str(team_key)]
+            else:
+                matches = [ev for ev in matches if str(ev.get("away_team_key")) == str(team_key)]
             matches.sort(key=lambda ev: ev.get("event_date", ""))
             recent = matches[-num_matches:]
             points = []
@@ -2351,10 +2359,9 @@ def _fetch_team_recent_form(team_key, before_date_str: str, num_matches: int = 6
                     hg, ag = map(int, fs.replace(" ", "").split("-"))
                 except Exception:
                     continue
-                is_home = str(ev.get("home_team_key")) == str(team_key)
                 if hg == ag:
                     points.append(1)
-                elif (is_home and hg > ag) or (not is_home and ag > hg):
+                elif (venue == "home" and hg > ag) or (venue == "away" and ag > hg):
                     points.append(3)
                 else:
                     points.append(0)
@@ -2368,7 +2375,8 @@ def _fetch_team_recent_form(team_key, before_date_str: str, num_matches: int = 6
 
 
 def get_form_agreement(home: str, away: str, match_time: str, side: str):
-    """Sectigimiz 'side' tarafinin takimi, son 6 mactaki formuyla ACIKCA kotu bir seride mi?
+    """Sectigimiz 'side' tarafinin takimi, KENDI BAGLAMINDAKI (evindeyse ev, deplasmandaysa
+    deplasman) son 6 mactaki formuyla ACIKCA kotu bir seride mi?
     (True: form makul/veri yok, False: form acikca kotu -- FORM_MIN_PPG altinda)."""
     if side not in ("1", "2"):
         return True  # beraberlik (X) icin takim-bazli form kontrolu anlamli degil
@@ -2377,14 +2385,18 @@ def get_form_agreement(home: str, away: str, match_time: str, side: str):
     if entry is None:
         return True  # veri yoksa elemeyelim, hacim kaybetmeyelim
 
-    team_key = entry["home_key"] if side == "1" else entry["away_key"]
+    if side == "1":
+        team_key, venue = entry["home_key"], "home"
+    else:
+        team_key, venue = entry["away_key"], "away"
+
     try:
         dt = _parse_to_local(match_time)
         date_str = dt.strftime("%Y-%m-%d")
     except Exception:
         return True
 
-    ppg = _fetch_team_recent_form(team_key, date_str)
+    ppg = _fetch_team_recent_form(team_key, date_str, venue)
     if ppg is None:
         return True  # veri yoksa elemeyelim
 
