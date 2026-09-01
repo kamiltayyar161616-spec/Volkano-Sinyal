@@ -2862,10 +2862,75 @@ def analyze_sansa_sbbet_retro(min_sample: int = 10, days: int = 60) -> dict:
 # Volkano yuksekse + (Oracle daha dusuk/daha "emin" gorunuyor), dusukse -.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# ORACLE ICIN GENIS KAPSAMLI TAKIM/LIG ARAMASI -- "Probabilities" uc noktasinin
+# kapsami cok dar (sadece bazi buyuk maclarda olasilik tahmini var). "Fixtures" uc
+# noktasi (zaten sonuc kontrolunde kullandigimiz, COK DAHA GENIS kapsamli) ayni
+# takim kimligi/lig bilgisini icerir. Oracle artik BUNU kullanir -- boylece Volkano'nun
+# kapsadigi cok daha fazla mac icin takim/lig eslesmesi bulunabilir.
+# ---------------------------------------------------------------------------
+
+_fixtures_cache = {}  # date_str -> {(norm_home, norm_away): {home_key, away_key, league_key, league_name, country_name}}
+
+
+def _fetch_fixtures_for_date(date_str: str) -> dict:
+    if date_str in _fixtures_cache:
+        return _fixtures_cache[date_str]
+
+    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
+    if not api_key:
+        return {}
+
+    result = {}
+    try:
+        url = f"{ALLSPORTS_API_BASE}?met=Fixtures&from={date_str}&to={date_str}&APIkey={api_key}"
+        resp = httpx.get(url, timeout=8)
+        if resp.status_code == 200:
+            data = resp.json()
+            for ev in data.get("result", []) or []:
+                home = ev.get("event_home_team")
+                away = ev.get("event_away_team")
+                if not home or not away:
+                    continue
+                result[(_norm(home), _norm(away))] = {
+                    "home_key": ev.get("home_team_key"),
+                    "away_key": ev.get("away_team_key"),
+                    "league_key": ev.get("league_key"),
+                    "league_name": ev.get("league_name"),
+                    "country_name": ev.get("country_name"),
+                }
+    except Exception:
+        pass
+
+    _fixtures_cache[date_str] = result
+    return result
+
+
+def _lookup_fixture_entry(home: str, away: str, match_time: str):
+    try:
+        dt = _parse_to_local(match_time)
+        date_str = dt.strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+    fixtures_by_match = _fetch_fixtures_for_date(date_str)
+    if not fixtures_by_match:
+        return None
+
+    key = (_norm(home), _norm(away))
+    entry = fixtures_by_match.get(key)
+    if entry is None:
+        for (nh, na), e in fixtures_by_match.items():
+            if _same_match(home, away, match_time, nh, na, match_time):
+                entry = e
+                break
+    return entry
+
+
 def get_oracle_prediction(home: str, away: str, match_time: str):
     """Bir mac icin Oracle (Dixon-Coles) tahminini doner, yoksa None.
     Lig kalite filtresinden gecmeyen (genclik/kadin/alt lig) maclar icin None doner."""
-    entry = _lookup_probabilities_entry(home, away, match_time)
+    entry = _lookup_fixture_entry(home, away, match_time)
     if entry is None:
         return None
     if not oracle_data.is_league_allowed(entry.get("league_name"), entry.get("country_name")):
