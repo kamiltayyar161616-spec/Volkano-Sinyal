@@ -1562,9 +1562,11 @@ def _kupon_candidate_pool() -> list:
         if agreement is False:
             continue
 
-        # UCUNCU BAGIMSIZ KATMAN: sectigimiz takim son 6 mactaki gercek skorlara gore ACIKCA
-        # kotu bir seride mi (puan-basi-ortalama FORM_MIN_PPG altinda)? Veri yoksa elenmez.
-        if not get_form_agreement(c["home"], c["away"], c["time"], c["side"]):
+        # UCUNCU BAGIMSIZ KATMAN: sectigimiz takimin RATING'i (genel form + baglamsal form +
+        # baglamsal gol farki), RAKIBIN rating'inden en az RATING_MIN_GAP (5) puan yuksek olmali.
+        # Veri yoksa elenmez (hacim kaybetmemek icin).
+        rating_gap = get_rating_gap(c["home"], c["away"], c["time"], c["side"])
+        if rating_gap is not None and rating_gap < RATING_MIN_GAP:
             continue
 
         pool.append({
@@ -2318,18 +2320,19 @@ FORM_MIN_PPG = 1.0  # son 6 mactaki puan-basi-ortalama (3=galibiyet,1=beraberlik
 _team_form_cache = {}  # (team_key, before_date) -> puan-basi-ortalama (float) veya None
 
 
-def _fetch_team_recent_form(team_key, before_date_str: str, venue: str, num_matches: int = 6):
-    """Bir takimin, verilen tarihten ONCEKI, SADECE 'venue' (home/away) tarafinda oynadigi
-    son num_matches macinin puan-basi-ortalamasini (0-3 arasi) doner. Genel (karma ev+deplasman)
-    form yerine, sectigimiz tarafa gore SADECE o baglamdaki (evinde/deplasmanda) form kullanilir --
-    cunku bir takimin evdeki ve deplasmandaki performansi cok farkli olabilir.
-    NOT: sadece tek taraf (venue) maclarini filtreledigimiz icin, 6 tanesini yakalayabilmek adina
-    arama penceresi 120 gune genisletildi (45 gun cogu zaman yetersiz kaliyordu)."""
+RATING_MIN_GAP = 5.0  # iki takimin rating'i arasindaki fark en az bu kadar olmali
+_team_window_stats_cache = {}  # (team_key, before_date) -> {"general":{...}, "home":{...}, "away":{...}}
+
+
+def _fetch_team_window_stats(team_key, before_date_str: str, num_matches: int = 6):
+    """Bir takimin TEK bir API cagrisiyla hem GENEL (karma) hem SADECE EV hem SADECE DEPLASMAN
+    son 6 macinin istatistigini (puan-basi-ortalama + gol-basi ortalamalari) cikarir.
+    120 gunluk pencere kullanilir (sadece ev/deplasman filtrelenince 6 ornek bulmak icin)."""
     if not team_key:
         return None
-    cache_key = (team_key, before_date_str, venue)
-    if cache_key in _team_form_cache:
-        return _team_form_cache[cache_key]
+    cache_key = (team_key, before_date_str)
+    if cache_key in _team_window_stats_cache:
+        return _team_window_stats_cache[cache_key]
 
     api_key = os.environ.get("ALLSPORTS_API_KEY", "")
     if not api_key:
@@ -2345,62 +2348,91 @@ def _fetch_team_recent_form(team_key, before_date_str: str, venue: str, num_matc
         resp = httpx.get(url, timeout=8)
         if resp.status_code == 200:
             data = resp.json()
-            matches = [ev for ev in (data.get("result", []) or []) if ev.get("event_final_result") not in (None, "", "-")]
-            if venue == "home":
-                matches = [ev for ev in matches if str(ev.get("home_team_key")) == str(team_key)]
-            else:
-                matches = [ev for ev in matches if str(ev.get("away_team_key")) == str(team_key)]
-            matches.sort(key=lambda ev: ev.get("event_date", ""))
-            recent = matches[-num_matches:]
-            points = []
-            for ev in recent:
-                fs = ev.get("event_final_result", "")
-                try:
-                    hg, ag = map(int, fs.replace(" ", "").split("-"))
-                except Exception:
-                    continue
-                if hg == ag:
-                    points.append(1)
-                elif (venue == "home" and hg > ag) or (venue == "away" and ag > hg):
-                    points.append(3)
+            all_matches = [ev for ev in (data.get("result", []) or []) if ev.get("event_final_result") not in (None, "", "-")]
+            all_matches.sort(key=lambda ev: ev.get("event_date", ""))
+
+            def summarize(matches, venue):
+                """venue=None -> genel (karma), 'home'/'away' -> o taraf filtrelenmis."""
+                if venue == "home":
+                    filtered = [ev for ev in matches if str(ev.get("home_team_key")) == str(team_key)]
+                elif venue == "away":
+                    filtered = [ev for ev in matches if str(ev.get("away_team_key")) == str(team_key)]
                 else:
-                    points.append(0)
-            if points:
-                result = round(sum(points) / len(points), 2)
+                    filtered = matches
+                recent = filtered[-num_matches:]
+                points, gf, ga = [], [], []
+                for ev in recent:
+                    fs = ev.get("event_final_result", "")
+                    try:
+                        hg, ag = map(int, fs.replace(" ", "").split("-"))
+                    except Exception:
+                        continue
+                    is_home = str(ev.get("home_team_key")) == str(team_key)
+                    scored, conceded = (hg, ag) if is_home else (ag, hg)
+                    gf.append(scored)
+                    ga.append(conceded)
+                    if scored == conceded:
+                        points.append(1)
+                    elif scored > conceded:
+                        points.append(3)
+                    else:
+                        points.append(0)
+                if not points:
+                    return None
+                return {
+                    "ppg": round(sum(points) / len(points), 2),
+                    "gf_avg": round(sum(gf) / len(gf), 2),
+                    "ga_avg": round(sum(ga) / len(ga), 2),
+                    "n": len(points),
+                }
+
+            result = {
+                "general": summarize(all_matches, None),
+                "home": summarize(all_matches, "home"),
+                "away": summarize(all_matches, "away"),
+            }
     except Exception:
         pass
 
-    _team_form_cache[cache_key] = result
+    _team_window_stats_cache[cache_key] = result
     return result
 
 
-def get_form_agreement(home: str, away: str, match_time: str, side: str):
-    """Sectigimiz 'side' tarafinin takimi, KENDI BAGLAMINDAKI (evindeyse ev, deplasmandaysa
-    deplasman) son 6 mactaki formuyla ACIKCA kotu bir seride mi?
-    (True: form makul/veri yok, False: form acikca kotu -- FORM_MIN_PPG altinda)."""
+def get_team_rating(team_key, before_date_str: str, context_venue: str):
+    """Rating = Genel_PPG + Baglamsal_PPG (evdeyse ev, deplasmandaysa deplasman) +
+    Baglamsal_Gol_Farki_Ortalamasi. Bu ILK-TASARIM bir formul -- agirliklar (hepsi esit,
+    1x) makul bir baslangic ama kesin bilimsel degil, gercek performansa gore ayarlanabilir."""
+    stats = _fetch_team_window_stats(team_key, before_date_str)
+    if not stats or not stats.get("general") or not stats.get(context_venue):
+        return None
+    general = stats["general"]
+    context = stats[context_venue]
+    goal_diff = context["gf_avg"] - context["ga_avg"]
+    return round(general["ppg"] + context["ppg"] + goal_diff, 2)
+
+
+def get_rating_gap(home: str, away: str, match_time: str, side: str):
+    """Sectigimiz 'side' tarafinin rating'i, RAKIBIN rating'inden ne kadar yuksek?
+    (None: veri yoksa/beraberlik secimiyse hesaplanamaz)."""
     if side not in ("1", "2"):
-        return True  # beraberlik (X) icin takim-bazli form kontrolu anlamli degil
+        return None
 
     entry = _lookup_probabilities_entry(home, away, match_time)
     if entry is None:
-        return True  # veri yoksa elemeyelim, hacim kaybetmeyelim
-
-    if side == "1":
-        team_key, venue = entry["home_key"], "home"
-    else:
-        team_key, venue = entry["away_key"], "away"
+        return None
 
     try:
         dt = _parse_to_local(match_time)
         date_str = dt.strftime("%Y-%m-%d")
     except Exception:
-        return True
+        return None
 
-    ppg = _fetch_team_recent_form(team_key, date_str, venue)
-    if ppg is None:
-        return True  # veri yoksa elemeyelim
+    home_rating = get_team_rating(entry["home_key"], date_str, "home")
+    away_rating = get_team_rating(entry["away_key"], date_str, "away")
+    if home_rating is None or away_rating is None:
+        return None
 
-    return ppg >= FORM_MIN_PPG
+    return round(home_rating - away_rating, 2) if side == "1" else round(away_rating - home_rating, 2)
 
 
 # ---------------------------------------------------------------------------
