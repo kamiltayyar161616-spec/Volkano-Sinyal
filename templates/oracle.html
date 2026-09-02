@@ -98,6 +98,31 @@
   <div class="empty">Henüz sonuçlanmış veri yok.</div>
 {% endif %}
 
+<div class="overall-card" style="border-color:var(--amber);">
+  <div class="overall-title">🥊 ORACLE FAVORİSİ vs VOLKANO FAVORİSİ</div>
+  <div class="overall-note" style="margin-top:0;">Her ikisi de kendi en düşük oranlı tarafını seçseydi, hangisi daha çok kazanırdı?</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
+    <div style="text-align:center; padding:12px; background:var(--navy); border-radius:10px; border:1px solid var(--navy-line);">
+      <div style="font-size:10px; color:var(--chalk-dim); font-weight:700; margin-bottom:6px;">🔮 ORACLE FAVORİSİ</div>
+      {% if favorite_perf.oracle.staked and favorite_perf.oracle.staked > 0 %}
+        <div class="overall-num {{ 'pos' if favorite_perf.oracle.win_rate >= 50 else 'neg' }}" style="font-size:19px;">%{{ favorite_perf.oracle.win_rate }}</div>
+        <div class="cmp-meta" style="margin:2px 0 0;">n={{ favorite_perf.oracle.staked }} &middot; ROI {{ '+' if favorite_perf.oracle.roi_pct > 0 else '' }}%{{ favorite_perf.oracle.roi_pct }}</div>
+      {% else %}
+        <div class="cmp-meta" style="margin:0;">henüz veri yok</div>
+      {% endif %}
+    </div>
+    <div style="text-align:center; padding:12px; background:var(--navy); border-radius:10px; border:1px solid var(--navy-line);">
+      <div style="font-size:10px; color:var(--chalk-dim); font-weight:700; margin-bottom:6px;">📡 VOLKANO FAVORİSİ</div>
+      {% if favorite_perf.volkano.staked and favorite_perf.volkano.staked > 0 %}
+        <div class="overall-num {{ 'pos' if favorite_perf.volkano.win_rate >= 50 else 'neg' }}" style="font-size:19px;">%{{ favorite_perf.volkano.win_rate }}</div>
+        <div class="cmp-meta" style="margin:2px 0 0;">n={{ favorite_perf.volkano.staked }} &middot; ROI {{ '+' if favorite_perf.volkano.roi_pct > 0 else '' }}%{{ favorite_perf.volkano.roi_pct }}</div>
+      {% else %}
+        <div class="cmp-meta" style="margin:0;">henüz veri yok</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <h2 class="section">🎯 FARK BÜYÜKLÜĞÜNE GÖRE BAŞARI</h2>
 <div class="section-sub">Yüzdelik fark ne kadar büyükse, sonuç gerçekten daha mı iyi/kötü oluyor?</div>
 {% if edge_perf %}

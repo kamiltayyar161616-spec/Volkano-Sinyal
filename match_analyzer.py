@@ -3103,6 +3103,7 @@ def record_oracle_comparison_cache() -> None:
         _oracle_comparison_cache["data"] = rows
         _oracle_comparison_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
         record_oracle_snapshot(rows)
+        record_favorite_comparison(rows)
     except Exception:
         pass
 
@@ -3140,3 +3141,55 @@ def get_oracle_vs_volkano_performance_by_edge() -> dict:
             label = f"%{lo}-{hi}" if hi < 999 else f"%{lo} üzeri"
             result_out[label] = _perf_from_rows(items)
     return result_out
+
+
+# ---------------------------------------------------------------------------
+# ORACLE FAVORISI vs VOLKANO FAVORISI -- kullanicinin sordugu direkt soruya cevap:
+# "Oracle'in dusuk oran verdigi taraf mi kazaniyor, Volkano'nun dusuk oran verdigi
+# taraf mi?" Her iki tarafin KENDI favorisini (en dusuk oran verdigi taraf) ayri ayri
+# izleyip, hangisinin gercekte daha isabetli oldugunu zamanla gorebilmek icin.
+# ---------------------------------------------------------------------------
+
+def record_favorite_comparison(rows: list) -> None:
+    """Her mac icin Oracle'in KENDI favorisini (category='oracle_favorite') ve Volkano'nun
+    KENDI favorisini (category='volkano_favorite') ayri ayri kaydeder -- birbirinden BAGIMSIZ,
+    aralarindaki farka bakmadan, sadece 'her biri kendi en dusuk oranli tarafini secseydi ne olurdu'."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        oracle_rows, volkano_rows = [], []
+        for r in rows:
+            o_odds = {"1": r["oracle_1"], "X": r["oracle_x"], "2": r["oracle_2"]}
+            v_odds = {"1": r["volkano_1"], "X": r["volkano_x"], "2": r["volkano_2"]}
+            o_side = min(o_odds, key=o_odds.get)
+            v_side = min(v_odds, key=v_odds.get)
+            oracle_rows.append(("oracle_favorite", r["home"], r["away"], r["league"], r["time"],
+                                 o_side, o_odds[o_side], None, None, 0, now_iso))
+            volkano_rows.append(("volkano_favorite", r["home"], r["away"], r["league"], r["time"],
+                                  v_side, v_odds[v_side], None, None, 0, now_iso))
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, oracle_rows + volkano_rows)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_favorite_comparison_performance() -> dict:
+    """Oracle favorisi ile Volkano favorisinin GENEL kazanma orani/ROI'sini yan yana doner."""
+    conn = _get_conn()
+    try:
+        oracle_rows = conn.execute("""
+            SELECT result, odd FROM picks WHERE category='oracle_favorite' AND result IN ('won','lost')
+        """).fetchall()
+        volkano_rows = conn.execute("""
+            SELECT result, odd FROM picks WHERE category='volkano_favorite' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    return {
+        "oracle": _perf_from_rows(oracle_rows),
+        "volkano": _perf_from_rows(volkano_rows),
+    }
