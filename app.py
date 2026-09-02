@@ -15,7 +15,7 @@ from match_analyzer import (
     get_reverse_flip_performance, record_source_accuracy_cache,
     get_surprise_candidates, record_surprise_snapshot, get_surprise_performance,
     get_oracle_comparison_cached, record_oracle_comparison_cache, get_oracle_vs_volkano_performance,
-    get_oracle_vs_volkano_performance_by_tier,
+    get_oracle_vs_volkano_performance_by_tier, get_oracle_vs_volkano_performance_by_edge,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -82,8 +82,9 @@ def oracle_kiyas():
     overall = get_oracle_vs_volkano_performance()
     overall_7d = get_oracle_vs_volkano_performance(days=7)
     tier_perf = get_oracle_vs_volkano_performance_by_tier()
+    edge_perf = get_oracle_vs_volkano_performance_by_edge()
     return render_template("oracle.html", rows=rows, sort_by=sort_by, overall=overall,
-                            overall_7d=overall_7d, tier_perf=tier_perf, active_page="oracle")
+                            overall_7d=overall_7d, tier_perf=tier_perf, edge_perf=edge_perf, active_page="oracle")
 
 
 @app.route("/son-dakika")

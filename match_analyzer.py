@@ -3109,3 +3109,34 @@ def record_oracle_comparison_cache() -> None:
 
 def get_oracle_comparison_cached() -> list:
     return _oracle_comparison_cache["data"]
+
+
+def get_oracle_vs_volkano_performance_by_edge() -> dict:
+    """Oracle vs Volkano sinyallerini, YUZDELIK FARKIN BUYUKLUGUNE gore bantlayip
+    her bandin gercek kazanma orani/ROI'sini doner (oran bandi degil, fark buyuklugu bandi --
+    'boyle cok buyuk farklarin sonucu ne oluyor' sorusuna cevap verir)."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT edge, result, odd FROM picks
+            WHERE category='oracle_vs_volkano' AND result IN ('won','lost') AND edge IS NOT NULL
+        """).fetchall()
+    finally:
+        conn.close()
+
+    bantlar = [(0, 10), (10, 20), (20, 30), (30, 50), (50, 75), (75, 100), (100, 999)]
+    by_band = {}
+    for edge, result, odd in rows:
+        e = abs(edge)
+        for lo, hi in bantlar:
+            if lo <= e < hi:
+                by_band.setdefault((lo, hi), []).append((result, odd))
+                break
+
+    result_out = {}
+    for lo, hi in bantlar:
+        items = by_band.get((lo, hi))
+        if items:
+            label = f"%{lo}-{hi}" if hi < 999 else f"%{lo} üzeri"
+            result_out[label] = _perf_from_rows(items)
+    return result_out
