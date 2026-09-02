@@ -1653,13 +1653,26 @@ def get_kupon_active(limit: int = KUPON_SIZE) -> list:
     return active[:limit]
 
 
+def _name_matches(a: str, b: str) -> bool:
+    """Iki takim adinin ayni takim oldugunu kontrol eder: tam esitlik, bulanik benzerlik (>=0.82),
+    VEYA birinin digerinin TAM ON EKI olmasi (orn. 'Fortaleza' ile 'Fortaleza C.E.I.F' -- kulup
+    kisaltmasi eklenmis versiyonlar bazen bulanik esikte kalip kaciyordu)."""
+    na, nb = _norm(a), _norm(b)
+    if na == nb:
+        return True
+    if difflib.SequenceMatcher(None, na, nb).ratio() >= 0.82:
+        return True
+    shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
+    if shorter and longer.startswith(shorter + " "):
+        return True
+    return False
+
+
 def _same_match(a_home, a_away, a_time, b_home, b_away, b_time) -> bool:
     """Iki kaydin gercekte AYNI mac olup olmadigini bulanik isim + yakin saat karsilastirmasiyla kontrol eder
     (farkli kaynaklar ayni maci hafif farkli yazimla/saat formatiyla bildirebiliyor)."""
-    if _norm(a_home) != _norm(b_home) or _norm(a_away) != _norm(b_away):
-        if (difflib.SequenceMatcher(None, _norm(a_home), _norm(b_home)).ratio() < 0.82 or
-                difflib.SequenceMatcher(None, _norm(a_away), _norm(b_away)).ratio() < 0.82):
-            return False
+    if not (_name_matches(a_home, b_home) and _name_matches(a_away, b_away)):
+        return False
     try:
         dt_a = _parse_to_local(a_time)
         dt_b = _parse_to_local(b_time)
