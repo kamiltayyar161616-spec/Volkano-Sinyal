@@ -3018,7 +3018,12 @@ def get_oracle_vs_volkano_comparison(window_hours: int = 24) -> list:
 
 def record_oracle_snapshot(rows: list) -> None:
     """Volkano'nun Oracle'a gore DUSUK oldugu taraf icin (Volkano daha 'ucuz'/emin
-    gorunuyorsa) sinyal kaydeder (category='oracle_vs_volkano')."""
+    gorunuyorsa, fark NEGATIF) sinyal kaydeder (category='oracle_vs_volkano').
+    AYRICA tam TERSI yonu de (Oracle Volkano'dan daha emin gorunuyorsa, fark POZITIF)
+    ayri bir kategoride (category='oracle_confident_vs_volkano') kaydeder -- boylece
+    IKI YONU DE zamanla karsilastirabiliriz (once sadece negatif yon kaydediliyordu,
+    kullanicinin sordugu 'pozitif farkta ne oluyor' sorusuna gecmise donuk cevap
+    veremiyorduk)."""
     now_iso = datetime.now(timezone.utc).isoformat()
     conn = _get_conn()
     try:
@@ -3030,13 +3035,20 @@ def record_oracle_snapshot(rows: list) -> None:
                 ("2", r["diff_2"], r["volkano_2"]),
             ]
             negatives = [c for c in candidates if c[1] is not None and c[1] < 0 and c[2] is not None]
-            if not negatives:
-                continue
-            side, diff, odd = min(negatives, key=lambda c: c[1])
-            rows_to_insert.append((
-                "oracle_vs_volkano", r["home"], r["away"], r["league"], r["time"],
-                side, odd, diff, None, 0, now_iso,
-            ))
+            if negatives:
+                side, diff, odd = min(negatives, key=lambda c: c[1])
+                rows_to_insert.append((
+                    "oracle_vs_volkano", r["home"], r["away"], r["league"], r["time"],
+                    side, odd, diff, None, 0, now_iso,
+                ))
+
+            positives = [c for c in candidates if c[1] is not None and c[1] > 0 and c[2] is not None]
+            if positives:
+                side, diff, odd = max(positives, key=lambda c: c[1])
+                rows_to_insert.append((
+                    "oracle_confident_vs_volkano", r["home"], r["away"], r["league"], r["time"],
+                    side, odd, diff, None, 0, now_iso,
+                ))
         conn.executemany("""
             INSERT OR IGNORE INTO picks
             (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
@@ -3193,3 +3205,55 @@ def get_favorite_comparison_performance() -> dict:
         "oracle": _perf_from_rows(oracle_rows),
         "volkano": _perf_from_rows(volkano_rows),
     }
+
+
+def get_oracle_confident_performance_by_edge() -> dict:
+    """Tersi yon icin (Oracle'in Volkano'dan daha emin gorundugu, fark POZITIF) fark
+    buyuklugune gore basari tablosu."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT edge, result, odd FROM picks
+            WHERE category='oracle_confident_vs_volkano' AND result IN ('won','lost') AND edge IS NOT NULL
+        """).fetchall()
+    finally:
+        conn.close()
+
+    bantlar = [(0, 10), (10, 20), (20, 30), (30, 50), (50, 75), (75, 100), (100, 999)]
+    by_band = {}
+    for edge, result, odd in rows:
+        e = abs(edge)
+        for lo, hi in bantlar:
+            if lo <= e < hi:
+                by_band.setdefault((lo, hi), []).append((result, odd))
+                break
+
+    result_out = {}
+    for lo, hi in bantlar:
+        items = by_band.get((lo, hi))
+        if items:
+            label = f"%{lo}-{hi}" if hi < 999 else f"%{lo} üzeri"
+            result_out[label] = _perf_from_rows(items)
+    return result_out
+
+
+def get_oracle_confident_performance(days: int = None) -> dict:
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='oracle_confident_vs_volkano' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='oracle_confident_vs_volkano' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
