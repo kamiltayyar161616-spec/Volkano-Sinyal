@@ -98,6 +98,40 @@
   <div class="empty">Henüz sonuçlanmış veri yok.</div>
 {% endif %}
 
+<div class="overall-card" style="border-color:var(--turf-bright);">
+  <div class="overall-title">🟢 TERS YÖN: ORACLE'IN VOLKANO'DAN DAHA EMİN OLDUĞU SİNYALLER</div>
+  <div class="overall-note" style="margin-top:0;">Yukarıdaki kartın tam tersi — burada Oracle, Volkano'dan daha düşük oran veriyor.</div>
+  {% if confident_overall.staked and confident_overall.staked > 0 %}
+    <div class="overall-grid" style="margin-top:12px;">
+      <div>
+        <div class="overall-num {{ 'pos' if confident_overall.win_rate >= 50 else 'neg' }}">%{{ confident_overall.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if confident_overall.roi_pct > 0 else 'neg' }}">{{ '+' if confident_overall.roi_pct > 0 else '' }}%{{ confident_overall.roi_pct }}</div>
+        <div class="overall-lbl">ROI (1 BİRİM STAKE)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ confident_overall.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ confident_overall.won }} kazandı / {{ confident_overall.lost }} kaybetti &middot; {{ confident_overall.pending }} bekliyor</div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış veri yok — {{ confident_overall.pending }} bekliyor.</div>
+  {% endif %}
+  {% if confident_edge_perf %}
+  <div style="margin-top:14px; border-top:1px dashed var(--navy-line); padding-top:12px;">
+    {% for label, p in confident_edge_perf.items() %}
+    <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:11px;">
+      <div style="color:var(--chalk-dim);">{{ label }} fark (n={{ p.staked }})</div>
+      <div style="color:{{ 'var(--turf-bright)' if p.roi_pct > 0 else 'var(--clay)' }}; font-weight:700;">%{{ p.win_rate }} kazanma &middot; ROI {{ '+' if p.roi_pct > 0 else '' }}%{{ p.roi_pct }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
 <div class="overall-card" style="border-color:var(--amber);">
   <div class="overall-title">🥊 ORACLE FAVORİSİ vs VOLKANO FAVORİSİ</div>
   <div class="overall-note" style="margin-top:0;">Her ikisi de kendi en düşük oranlı tarafını seçseydi, hangisi daha çok kazanırdı?</div>
