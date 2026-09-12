@@ -1504,7 +1504,10 @@ def get_ozet_performance(days: int = None) -> dict:
 KUPON_SIZE = 30
 KUPON_WINDOW_HOURS = 48
 KUPON_MIN_VOLCANO_SAMPLE = 10
-KUPON_MIN_ROI_PCT = 5.0    # 15'ten indirildi -- artik oran<2.00 sert filtresiyle birlikte calisiyor, ikisi birlikte cok siki olmasin diye
+KUPON_MIN_ROI_PCT = 0.0    # 5.0'dan indirildi -- bant-bazli kalite kontrolu (win_rate>=50, ROI>0) zaten
+                            # favori_value/value_mf icin ROI pozitifligini garantiliyordu, bu GENEL esik
+                            # USTUNE bir de %5 istemek CIFT filtreleme yaratip butun havuzu (24 kalifiye
+                            # aday dahil) sifirliyordu. Artik sadece negatif ROI'yi eleyen bir guvenlik agi.
 KUPON_MIN_EDGE_PTS = 8.0   # kazanma orani, o oranin basabas noktasindan (100/oran) en az bu kadar puan yukarida olmali
 KUPON_MAX_ODD = 2.00        # buyuk veri analizinde bulunan en guclu tek sinyal: 2.00 alti bantlar pozitif, ustu hep negatif
 
