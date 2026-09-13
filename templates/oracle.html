@@ -47,19 +47,20 @@
 
 {% block content %}
 
-<div class="overall-card" style="border-color:var(--chalk-faint);">
-  <div class="overall-title">💾 HAM VERİ İNDİR</div>
-  <div class="overall-note" style="margin-top:0;">Her 30 dakikada bir görünen tüm maçların tam 1-X-2 tablosu (Volkano+Oracle) biriktiriliyor.</div>
-  <div class="overall-note" style="margin-top:8px;">
-    {% if log_stats.kayit_sayisi > 0 %}
-      {{ log_stats.kayit_sayisi }} kayıt &middot; {{ log_stats.dosya_boyutu_mb }} MB
-    {% else %}
-      Henüz veri birikmedi — 30 dakika içinde ilk kayıtlar oluşacak.
-    {% endif %}
+<div class="overall-card" style="border-color:var(--chalk-faint); padding:12px 16px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+    <div style="font-size:10px; color:var(--chalk-faint);">
+      💾 Ham veri
+      {% if log_stats.kayit_sayisi > 0 %}
+        &middot; {{ log_stats.kayit_sayisi }} kayıt &middot; {{ log_stats.dosya_boyutu_mb }} MB
+      {% else %}
+        &middot; henüz veri yok
+      {% endif %}
+    </div>
+    <a href="/oracle/indir" style="flex-shrink:0; padding:5px 12px; border-radius:7px; background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:10px; white-space:nowrap;">⬇️ İndir</a>
   </div>
-  <div style="text-align:center; margin-top:12px;">
-    <a href="/oracle/indir" style="display:inline-block; padding:10px 24px; border-radius:10px; background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12px;">⬇️ JSON İndir</a>
-  </div>
+</div>
+
 </div>
 
 <div class="overall-card">
