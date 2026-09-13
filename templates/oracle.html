@@ -47,6 +47,21 @@
 
 {% block content %}
 
+<div class="overall-card" style="border-color:var(--chalk-faint);">
+  <div class="overall-title">💾 HAM VERİ İNDİR</div>
+  <div class="overall-note" style="margin-top:0;">Her 30 dakikada bir görünen tüm maçların tam 1-X-2 tablosu (Volkano+Oracle) biriktiriliyor.</div>
+  <div class="overall-note" style="margin-top:8px;">
+    {% if log_stats.kayit_sayisi > 0 %}
+      {{ log_stats.kayit_sayisi }} kayıt &middot; {{ log_stats.dosya_boyutu_mb }} MB
+    {% else %}
+      Henüz veri birikmedi — 30 dakika içinde ilk kayıtlar oluşacak.
+    {% endif %}
+  </div>
+  <div style="text-align:center; margin-top:12px;">
+    <a href="/oracle/indir" style="display:inline-block; padding:10px 24px; border-radius:10px; background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12px;">⬇️ JSON İndir</a>
+  </div>
+</div>
+
 <div class="overall-card">
   <div class="overall-title">ORACLE'IN VOLKANO'DAN DÜŞÜK ÇIKTIĞI SİNYALLERİN PERFORMANSI</div>
   {% if overall.staked and overall.staked > 0 %}

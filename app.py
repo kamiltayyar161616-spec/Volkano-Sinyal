@@ -1,7 +1,8 @@
+import os
 import threading
 import time
 
-from flask import Flask, render_template, jsonify, redirect, url_for, request
+from flask import Flask, render_template, jsonify, redirect, url_for, request, send_file
 
 from match_analyzer import (
     get_analysis, record_snapshot, get_stats, get_recent_picks, get_playable_picks,
@@ -18,6 +19,7 @@ from match_analyzer import (
     get_oracle_vs_volkano_performance_by_tier, get_oracle_vs_volkano_performance_by_edge,
     get_favorite_comparison_performance,
     get_oracle_confident_performance, get_oracle_confident_performance_by_edge,
+    get_oracle_log_stats, ORACLE_LOG_FILE,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -88,10 +90,18 @@ def oracle_kiyas():
     favorite_perf = get_favorite_comparison_performance()
     confident_overall = get_oracle_confident_performance()
     confident_edge_perf = get_oracle_confident_performance_by_edge()
+    log_stats = get_oracle_log_stats()
     return render_template("oracle.html", rows=rows, sort_by=sort_by, overall=overall,
                             overall_7d=overall_7d, tier_perf=tier_perf, edge_perf=edge_perf,
                             favorite_perf=favorite_perf, confident_overall=confident_overall,
-                            confident_edge_perf=confident_edge_perf, active_page="oracle")
+                            confident_edge_perf=confident_edge_perf, log_stats=log_stats, active_page="oracle")
+
+
+@app.route("/oracle/indir")
+def oracle_indir():
+    if not os.path.exists(ORACLE_LOG_FILE):
+        return "Henüz veri birikmedi.", 404
+    return send_file(ORACLE_LOG_FILE, as_attachment=True, download_name="oracle_veri.json", mimetype="application/json")
 
 
 @app.route("/son-dakika")

@@ -3118,6 +3118,7 @@ def record_oracle_comparison_cache() -> None:
         _oracle_comparison_cache["data"] = rows
         _oracle_comparison_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
         record_oracle_snapshot(rows)
+        record_oracle_full_log(rows)
         record_favorite_comparison(rows)
     except Exception:
         pass
@@ -3260,3 +3261,63 @@ def get_oracle_confident_performance(days: int = None) -> dict:
     perf = _perf_from_rows(resolved)
     perf["pending"] = pending
     return perf
+
+
+# ---------------------------------------------------------------------------
+# ORACLE TAM GUNLUK -- her arka plan turunda (30dk'da bir), o an gorunen TUM
+# maclarin TAM 1-X-2 tablosunu (hem Volkano hem Oracle, farklar, tahmin, guven)
+# zaman damgasiyla biriktirir. Eskiden sadece TEK sinyal (secilen taraf) kaydediliyordu,
+# bu artik HER SEYI (kullanicinin "her ayrinti, her degisim" talebiyle) saklar.
+# ---------------------------------------------------------------------------
+
+ORACLE_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "oracle_log.json")
+ORACLE_LOG_MAX_ENTRIES = 200000  # dosya cok buyumesin diye bir tavan (guvenlik amacli)
+
+
+def record_oracle_full_log(rows: list) -> None:
+    """Su anki Oracle vs Volkano karsilastirma satirlarinin TAMAMINI (tam 1-X-2 tablosu dahil)
+    zaman damgasiyla JSON dosyasina EKLER (uzerine yazmaz, biriktirir)."""
+    if not rows:
+        return
+    now_iso = datetime.now(timezone.utc).isoformat()
+    os.makedirs(os.path.dirname(ORACLE_LOG_FILE), exist_ok=True)
+
+    mevcut = []
+    if os.path.exists(ORACLE_LOG_FILE):
+        try:
+            with open(ORACLE_LOG_FILE, "r", encoding="utf-8") as f:
+                mevcut = json.load(f)
+        except Exception:
+            mevcut = []
+
+    for r in rows:
+        mevcut.append({
+            "kayit_zamani": now_iso,
+            "ev_sahibi": r["home"], "deplasman": r["away"], "lig": r["league"],
+            "mac_zamani": r["time"],
+            "volkano_1": r["volkano_1"], "volkano_x": r["volkano_x"], "volkano_2": r["volkano_2"],
+            "oracle_1": r["oracle_1"], "oracle_x": r["oracle_x"], "oracle_2": r["oracle_2"],
+            "fark_1": r["diff_1"], "fark_x": r["diff_x"], "fark_2": r["diff_2"],
+            "oracle_tahmini": r["oracle_prediction"], "oracle_guven": r["oracle_confidence"],
+        })
+
+    if len(mevcut) > ORACLE_LOG_MAX_ENTRIES:
+        mevcut = mevcut[-ORACLE_LOG_MAX_ENTRIES:]
+
+    with open(ORACLE_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(mevcut, f, ensure_ascii=False)
+
+
+def get_oracle_log_stats() -> dict:
+    """Indirme sayfasinda gosterilecek basit ozet: kac kayit var, dosya boyutu, ilk/son kayit zamani."""
+    if not os.path.exists(ORACLE_LOG_FILE):
+        return {"kayit_sayisi": 0, "dosya_boyutu_mb": 0, "ilk_kayit": None, "son_kayit": None}
+    try:
+        with open(ORACLE_LOG_FILE, "r", encoding="utf-8") as f:
+            veri = json.load(f)
+        boyut_mb = round(os.path.getsize(ORACLE_LOG_FILE) / (1024 * 1024), 2)
+        ilk = veri[0]["kayit_zamani"] if veri else None
+        son = veri[-1]["kayit_zamani"] if veri else None
+        return {"kayit_sayisi": len(veri), "dosya_boyutu_mb": boyut_mb, "ilk_kayit": ilk, "son_kayit": son}
+    except Exception:
+        return {"kayit_sayisi": 0, "dosya_boyutu_mb": 0, "ilk_kayit": None, "son_kayit": None}
