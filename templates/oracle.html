@@ -59,6 +59,16 @@
     </div>
     <a href="/oracle/indir" style="flex-shrink:0; padding:5px 12px; border-radius:7px; background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:10px; white-space:nowrap;">⬇️ İndir</a>
   </div>
+  {% if log_ozet.sonuclanan > 0 %}
+  <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--navy-line); font-size:10.5px;">
+    <div style="color:var(--chalk-dim);">{{ log_ozet.sonuclanan }} maç sonuçlandı</div>
+    <div>
+      <span style="color:var(--amber-bright);">Oracle %{{ log_ozet.oracle_yuzde }}</span>
+      <span style="color:var(--chalk-faint); margin:0 4px;">vs</span>
+      <span style="color:var(--chalk);">Volkano %{{ log_ozet.volkano_yuzde }}</span>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 </div>

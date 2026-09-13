@@ -3321,3 +3321,134 @@ def get_oracle_log_stats() -> dict:
         return {"kayit_sayisi": len(veri), "dosya_boyutu_mb": boyut_mb, "ilk_kayit": ilk, "son_kayit": son}
     except Exception:
         return {"kayit_sayisi": 0, "dosya_boyutu_mb": 0, "ilk_kayit": None, "son_kayit": None}
+
+
+ORACLE_LOG_CHECK_AFTER_HOURS = 3  # kickoff'tan bu kadar saat sonra sonuc kontrolu yapilir
+
+
+def record_oracle_log_results() -> dict:
+    """oracle_log.json'daki, HENUZ SONUCU ISLENMEMIS (final_skor alani olmayan) ve kickoff'u
+    yeterince gerilerde kalmis kayitlar icin gercek skoru bulup AYNI KAYDA isler:
+    final_skor, gercek_taraf (1/X/2), oracle_dogru_mu, volkano_dogru_mu.
+    Ayni gercek mac birden fazla kez loglanmis olabilir (her 30dk'lik turde) -- hepsi
+    ayni sonucla guncellenir, boylece hicbir kayit 'yetim' kalmaz."""
+    if not os.path.exists(ORACLE_LOG_FILE):
+        return {"kontrol_edilen": 0, "guncellenen": 0}
+
+    try:
+        with open(ORACLE_LOG_FILE, "r", encoding="utf-8") as f:
+            veri = json.load(f)
+    except Exception:
+        return {"kontrol_edilen": 0, "guncellenen": 0}
+
+    now = datetime.now(timezone.utc)
+    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
+    if not api_key:
+        return {"kontrol_edilen": 0, "guncellenen": 0}
+
+    # sonucu olmayan, kickoff'u yeterince eski kayitlarin benzersiz (ev,deplasman,mac_zamani) listesini cikar
+    bekleyen_macler = {}
+    for kayit in veri:
+        if "final_skor" in kayit:
+            continue
+        try:
+            dt = _parse_to_local(kayit["mac_zamani"])
+        except Exception:
+            continue
+        if (now - dt).total_seconds() / 3600 < ORACLE_LOG_CHECK_AFTER_HOURS:
+            continue
+        anahtar = (kayit["ev_sahibi"], kayit["deplasman"], kayit["mac_zamani"])
+        bekleyen_macler[anahtar] = dt
+
+    if not bekleyen_macler:
+        return {"kontrol_edilen": 0, "guncellenen": 0}
+
+    # tarihe gore gruplayip gunluk Fixtures cagrisi yapalim (zaten onbellekli _fetch_fixtures_for_date)
+    tarih_gruplari = {}
+    for (home, away, mt), dt in bekleyen_macler.items():
+        tarih_str = dt.strftime("%Y-%m-%d")
+        tarih_gruplari.setdefault(tarih_str, []).append((home, away, mt))
+
+    sonuclar = {}  # (home,away,mt) -> (final_skor, gercek_taraf)
+    for tarih_str, mac_listesi in tarih_gruplari.items():
+        for onceki_gun in [tarih_str, (datetime.strptime(tarih_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")]:
+            try:
+                url = f"{ALLSPORTS_API_BASE}?met=Fixtures&from={onceki_gun}&to={onceki_gun}&APIkey={api_key}"
+                resp = httpx.get(url, timeout=15)
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                for ev in data.get("result", []) or []:
+                    eh, ea = ev.get("event_home_team", ""), ev.get("event_away_team", "")
+                    fs = ev.get("event_final_result", "")
+                    if not fs or fs.strip() in ("-", "", "- -"):
+                        continue
+                    for home, away, mt in mac_listesi:
+                        if (home, away, mt) in sonuclar:
+                            continue
+                        if _name_matches(home, eh) and _name_matches(away, ea):
+                            try:
+                                hg, ag = map(int, fs.replace(" ", "").split("-"))
+                            except Exception:
+                                continue
+                            gercek_taraf = "1" if hg > ag else ("2" if hg < ag else "X")
+                            sonuclar[(home, away, mt)] = (fs, gercek_taraf)
+            except Exception:
+                continue
+
+    if not sonuclar:
+        return {"kontrol_edilen": len(bekleyen_macler), "guncellenen": 0}
+
+    guncellenen = 0
+    for kayit in veri:
+        anahtar = (kayit["ev_sahibi"], kayit["deplasman"], kayit["mac_zamani"])
+        if anahtar in sonuclar:
+            final_skor, gercek_taraf = sonuclar[anahtar]
+            kayit["final_skor"] = final_skor
+            kayit["gercek_taraf"] = gercek_taraf
+            kayit["oracle_dogru_mu"] = (kayit.get("oracle_tahmini") == gercek_taraf)
+            # Volkano'nun en dusuk oran verdigi taraf da dogru muydu (karsilastirma icin)
+            volkano_favori = min(("1", "X", "2"), key=lambda s: kayit.get(f"volkano_{s.lower()}", 999))
+            kayit["volkano_favori"] = volkano_favori
+            kayit["volkano_dogru_mu"] = (volkano_favori == gercek_taraf)
+            guncellenen += 1
+
+    with open(ORACLE_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(veri, f, ensure_ascii=False)
+
+    return {"kontrol_edilen": len(bekleyen_macler), "guncellenen": guncellenen}
+
+
+def get_oracle_log_success_summary() -> dict:
+    """Indirme kartinda gosterilecek: log dosyasindaki sonuclanmis (final_skor'lu) benzersiz
+    maclarin Oracle ve Volkano favorisi acisindan gercek basari ozeti."""
+    if not os.path.exists(ORACLE_LOG_FILE):
+        return {"sonuclanan": 0, "oracle_dogru": 0, "volkano_dogru": 0}
+    try:
+        with open(ORACLE_LOG_FILE, "r", encoding="utf-8") as f:
+            veri = json.load(f)
+    except Exception:
+        return {"sonuclanan": 0, "oracle_dogru": 0, "volkano_dogru": 0}
+
+    gorulen = set()
+    oracle_dogru = volkano_dogru = 0
+    for kayit in veri:
+        if "final_skor" not in kayit:
+            continue
+        anahtar = (kayit["ev_sahibi"], kayit["deplasman"], kayit["mac_zamani"])
+        if anahtar in gorulen:
+            continue
+        gorulen.add(anahtar)
+        if kayit.get("oracle_dogru_mu"):
+            oracle_dogru += 1
+        if kayit.get("volkano_dogru_mu"):
+            volkano_dogru += 1
+
+    n = len(gorulen)
+    return {
+        "sonuclanan": n,
+        "oracle_dogru": oracle_dogru,
+        "oracle_yuzde": round(100 * oracle_dogru / n, 1) if n else 0,
+        "volkano_dogru": volkano_dogru,
+        "volkano_yuzde": round(100 * volkano_dogru / n, 1) if n else 0,
+    }

@@ -19,7 +19,7 @@ from match_analyzer import (
     get_oracle_vs_volkano_performance_by_tier, get_oracle_vs_volkano_performance_by_edge,
     get_favorite_comparison_performance,
     get_oracle_confident_performance, get_oracle_confident_performance_by_edge,
-    get_oracle_log_stats, ORACLE_LOG_FILE,
+    get_oracle_log_stats, ORACLE_LOG_FILE, record_oracle_log_results, get_oracle_log_success_summary,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -91,10 +91,12 @@ def oracle_kiyas():
     confident_overall = get_oracle_confident_performance()
     confident_edge_perf = get_oracle_confident_performance_by_edge()
     log_stats = get_oracle_log_stats()
+    log_ozet = get_oracle_log_success_summary()
     return render_template("oracle.html", rows=rows, sort_by=sort_by, overall=overall,
                             overall_7d=overall_7d, tier_perf=tier_perf, edge_perf=edge_perf,
                             favorite_perf=favorite_perf, confident_overall=confident_overall,
-                            confident_edge_perf=confident_edge_perf, log_stats=log_stats, active_page="oracle")
+                            confident_edge_perf=confident_edge_perf, log_stats=log_stats,
+                            log_ozet=log_ozet, active_page="oracle")
 
 
 @app.route("/oracle/indir")
@@ -182,7 +184,8 @@ def _background_loop():
         if now - last_oracle_cache >= ORACLE_CACHE_INTERVAL_SEC:
             try:
                 record_oracle_comparison_cache()
-                print("[background] Oracle karşılaştırması güncellendi")
+                log_sonuc = record_oracle_log_results()
+                print(f"[background] Oracle karşılaştırması güncellendi | log sonuç kontrolü: {log_sonuc}")
             except Exception as e:
                 print(f"[background] Oracle hatası: {e}")
             last_oracle_cache = now
