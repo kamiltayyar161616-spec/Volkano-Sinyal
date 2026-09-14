@@ -20,6 +20,8 @@ from match_analyzer import (
     get_favorite_comparison_performance,
     get_oracle_confident_performance, get_oracle_confident_performance_by_edge,
     get_oracle_log_stats, ORACLE_LOG_FILE, record_oracle_log_results, get_oracle_log_success_summary,
+    get_oracle_cift_tavan_comparison, record_oracle_cift_tavan_snapshot,
+    get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -106,6 +108,21 @@ def oracle_indir():
     return send_file(ORACLE_LOG_FILE, as_attachment=True, download_name="oracle_veri.json", mimetype="application/json")
 
 
+@app.route("/oracle-cift-tavan")
+def oracle_cift_tavan():
+    sort_by = request.args.get("sort", "time")
+    rows = get_oracle_cift_tavan_comparison()
+    if sort_by == "time":
+        rows.sort(key=lambda r: r["time"])
+    else:
+        rows.sort(key=lambda r: -(r["oracle_confidence"] or 0))
+    overall = get_oracle_cift_tavan_performance()
+    overall_7d = get_oracle_cift_tavan_performance(days=7)
+    volkano_odd_perf = get_oracle_cift_tavan_by_volkano_odd()
+    return render_template("oracle_cift_tavan.html", rows=rows, sort_by=sort_by, overall=overall,
+                            overall_7d=overall_7d, volkano_odd_perf=volkano_odd_perf, active_page="ciftavan")
+
+
 @app.route("/son-dakika")
 def son_dakika():
     active_by_window = {w: get_late_drops(w) for w in LATE_DROP_WINDOWS_MIN}
@@ -185,6 +202,7 @@ def _background_loop():
             try:
                 record_oracle_comparison_cache()
                 log_sonuc = record_oracle_log_results()
+                record_oracle_cift_tavan_snapshot()
                 print(f"[background] Oracle karşılaştırması güncellendi | log sonuç kontrolü: {log_sonuc}")
             except Exception as e:
                 print(f"[background] Oracle hatası: {e}")

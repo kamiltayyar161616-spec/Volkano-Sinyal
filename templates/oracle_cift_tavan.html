@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Çift Tavan{% endblock %}
+{% block page_tag %}ÇİFT TAVAN{% endblock %}
+{% block subtitle %}Oracle'ın üç taraftan İKİSİNE (15.00) tavan verdiği maçlar. Kalan tek tarafın gerçek isabet oranı genel ortalamadan belirgin şekilde yüksek çıkıyor. ROI, Volkano'nun o taraftaki oranına göre hesaplanıyor.{% endblock %}
+
+{% block extra_style %}
+<style>
+  .overall-card{ margin:16px; padding:18px; border-radius:var(--radius); background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep)); border:1px solid var(--navy-line); position:relative; overflow:hidden; }
+  .overall-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .overall-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; }
+  .overall-num{ font-size:23px; font-weight:800; font-family:'Space Grotesk', sans-serif; }
+  .overall-num.pos{ color:var(--turf-bright); }
+  .overall-num.neg{ color:var(--clay); }
+  .overall-num.flat{ color:var(--chalk-dim); }
+  .overall-lbl{ font-size:9px; color:var(--chalk-faint); margin-top:4px; }
+  .overall-note{ font-size:10px; color:var(--chalk-faint); margin-top:12px; text-align:center; }
+  .tier-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 14px; margin:0 16px 6px; background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; }
+  .cmp-card{ margin:0 16px 10px; padding:14px; border-radius:12px; background:linear-gradient(165deg, var(--navy-soft), var(--navy)); border:1px solid var(--navy-line); }
+  .cmp-teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; color:var(--chalk); }
+  .cmp-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; margin-bottom:8px; }
+  .kalan-taraf{ display:inline-block; padding:4px 10px; border-radius:7px; background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06; font-weight:800; font-size:12px; font-family:'Space Grotesk', sans-serif; }
+  .kalan-odd{ font-size:14px; font-weight:700; color:var(--chalk); margin-left:8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="overall-card">
+  <div class="overall-title">🎯 ÇİFT TAVAN SİNYALLERİNİN PERFORMANSI</div>
+  {% if overall.staked and overall.staked > 0 %}
+    <div class="overall-grid">
+      <div>
+        <div class="overall-num {{ 'pos' if overall.win_rate >= 50 else 'neg' }}">%{{ overall.win_rate }}</div>
+        <div class="overall-lbl">KAZANMA ORANI</div>
+      </div>
+      <div>
+        <div class="overall-num {{ 'pos' if overall.roi_pct > 0 else 'neg' }}">{{ '+' if overall.roi_pct > 0 else '' }}%{{ overall.roi_pct }}</div>
+        <div class="overall-lbl">ROI (VOLKANO ORANI)</div>
+      </div>
+      <div>
+        <div class="overall-num flat">{{ overall.staked }}</div>
+        <div class="overall-lbl">SONUÇLANAN SİNYAL</div>
+      </div>
+    </div>
+    <div class="overall-note">{{ overall.won }} kazandı / {{ overall.lost }} kaybetti &middot; {{ overall.pending }} bekliyor</div>
+  {% else %}
+    <div class="overall-note">Henüz sonuçlanmış bir sinyal yok — {{ overall.pending }} bekliyor.</div>
+  {% endif %}
+</div>
+
+<h2 class="section">🔍 VOLKANO'NUN AYNI TARAFA VERDİĞİ ORANA GÖRE</h2>
+<div class="section-sub">Bulgumuz: Volkano da aynı tarafa düşük oran veriyorsa (iki kaynak hemfikirse), sinyal daha güvenilir.</div>
+{% if volkano_odd_perf %}
+  {% for label, p in volkano_odd_perf.items() %}
+  <div class="tier-row">
+    <div>
+      <div style="font-size:12px; color:var(--chalk); font-weight:600;">Volkano {{ label }}</div>
+      <div class="cmp-meta" style="margin:0;">n={{ p.staked }} &middot; {{ p.won }} kazandı / {{ p.lost }} kaybetti</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-weight:800; color:{{ 'var(--turf-bright)' if p.roi_pct and p.roi_pct > 0 else 'var(--clay)' }};">ROI {{ '+' if p.roi_pct and p.roi_pct > 0 else '' }}%{{ p.roi_pct }}</div>
+      <div class="cmp-meta" style="margin:0;">%{{ p.win_rate }} kazanma</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Henüz sonuçlanmış veri yok.</div>
+{% endif %}
+
+<h2 class="section">🎯 AKTİF ÇİFT TAVAN MAÇLARI ({{ rows|length }})</h2>
+{% if rows %}
+  {% for r in rows %}
+  <div class="cmp-card">
+    <div class="cmp-teams">{{ r.home }} — {{ r.away }}</div>
+    <div class="cmp-meta">{{ r.league }} &middot; {{ r.time | localdatetime }}</div>
+    <div>
+      <span class="kalan-taraf">{{ r.kalan_taraf }}</span>
+      <span class="kalan-odd">Volkano: {{ '%.2f'|format(r.kalan_volkano_odd) }}</span>
+      <span class="cmp-meta" style="display:inline;">&middot; Oracle güven %{{ r.oracle_confidence }}</span>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an aktif çift tavan sinyali yok — 30 dakikalık güncellemeyi bekleyin.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block footer %}ROI = VOLKANO ORANINA GÖRE HESAPLANIR <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

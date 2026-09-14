@@ -3452,3 +3452,107 @@ def get_oracle_log_success_summary() -> dict:
         "volkano_dogru": volkano_dogru,
         "volkano_yuzde": round(100 * volkano_dogru / n, 1) if n else 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# ORACLE CIFT TAVAN -- kullanicinin JSON analiziyle bulunan guclu bir oruntu:
+# Oracle'in UC taraftan IKISINE 15.0 (tavan) verdigi maclarda, kalan (tavan
+# olmayan) tarafin dogru cikma orani genel ortalamadan BELIRGIN sekilde yuksek
+# (iki bagimsiz veri cekiminde de ~%65 civarinda tutarli cikti). ROI, VOLKANO'nun
+# o taraftaki oranina gore hesaplanir (kullanici talebiyle).
+# ---------------------------------------------------------------------------
+
+def _cift_tavan_kalan_taraf(oracle_1, oracle_x, oracle_2):
+    """3 Oracle orani icinde TAM OLARAK IKISI 15.0'a dayanmissa, kalan (tavan
+    olmayan) tarafin adini (1/X/2) doner, degilse None."""
+    tavanlar = []
+    if oracle_1 is not None and oracle_1 >= 14.9: tavanlar.append("1")
+    if oracle_x is not None and oracle_x >= 14.9: tavanlar.append("X")
+    if oracle_2 is not None and oracle_2 >= 14.9: tavanlar.append("2")
+    if len(tavanlar) != 2:
+        return None
+    return next(s for s in ["1", "X", "2"] if s not in tavanlar)
+
+
+def get_oracle_cift_tavan_comparison() -> list:
+    """Onbellekteki Oracle vs Volkano karsilastirmasindan, cift tavanli olanlari filtreler."""
+    rows = get_oracle_comparison_cached()
+    sonuc = []
+    for r in rows:
+        kalan = _cift_tavan_kalan_taraf(r["oracle_1"], r["oracle_x"], r["oracle_2"])
+        if kalan is None:
+            continue
+        vol_odds = {"1": r["volkano_1"], "X": r["volkano_x"], "2": r["volkano_2"]}
+        sonuc.append({**r, "kalan_taraf": kalan, "kalan_volkano_odd": vol_odds[kalan]})
+    return sonuc
+
+
+def record_oracle_cift_tavan_snapshot() -> None:
+    """Su anki cift tavanli maclari category='oracle_cift_tavan' olarak kaydeder --
+    ROI, VOLKANO'nun kalan taraftaki oranina gore hesaplanacak (kullanici talebiyle)."""
+    rows = get_oracle_cift_tavan_comparison()
+    if not rows:
+        return
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = [(
+            "oracle_cift_tavan", r["home"], r["away"], r["league"], r["time"],
+            r["kalan_taraf"], r["kalan_volkano_odd"], None, None, 0, now_iso,
+        ) for r in rows]
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows_to_insert)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_oracle_cift_tavan_performance(days: int = None) -> dict:
+    conn = _get_conn()
+    try:
+        params = []
+        date_sql = ""
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            date_sql = " AND match_time >= ?"
+            params.append(cutoff)
+        resolved = conn.execute(f"""
+            SELECT result, odd FROM picks WHERE category='oracle_cift_tavan' AND result IN ('won','lost'){date_sql}
+        """, params).fetchall()
+        pending = conn.execute(f"""
+            SELECT COUNT(*) FROM picks WHERE category='oracle_cift_tavan' AND result='pending'{date_sql}
+        """, params).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(resolved)
+    perf["pending"] = pending
+    return perf
+
+
+def get_oracle_cift_tavan_by_volkano_odd() -> dict:
+    """Kalan tarafin VOLKANO oranina gore basari kirilimi -- kullanicinin bulgusu:
+    Volkano da ayni tarafa dusuk oran veriyorsa (iki kaynak da hemfikirse) daha guvenilir."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT odd, result FROM picks WHERE category='oracle_cift_tavan' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    bantlar = [(1.0, 1.4), (1.4, 1.6), (1.6, 1.8), (1.8, 2.2), (2.2, 999)]
+    by_band = {}
+    for odd, result in rows:
+        for lo, hi in bantlar:
+            if lo <= odd < hi:
+                by_band.setdefault((lo, hi), []).append((result, odd))
+                break
+    result_out = {}
+    for lo, hi in bantlar:
+        items = by_band.get((lo, hi))
+        if items:
+            label = f"{lo}-{hi}" if hi < 999 else f"{lo}+"
+            result_out[label] = _perf_from_rows(items)
+    return result_out
