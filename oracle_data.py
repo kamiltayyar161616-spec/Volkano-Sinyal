@@ -247,7 +247,7 @@ def get_team_matches_from_league(team_id, league_key, limit: int = 20) -> list:
     return parsed[:limit]
 
 
-def get_oracle_match_data(home_key, away_key, league_key) -> dict:
+def get_oracle_match_data(home_key, away_key, league_key, num_matches: int = 6) -> dict:
     if not league_key or not home_key or not away_key:
         return None
     home_all = get_team_matches_from_league(home_key, league_key, 20)
@@ -258,13 +258,13 @@ def get_oracle_match_data(home_key, away_key, league_key) -> dict:
     home_venue = [m for m in home_all if m["is_home"]]
     away_venue = [m for m in away_all if not m["is_home"]]
     if len(home_venue) == 0:
-        home_venue = home_all[:6]
+        home_venue = home_all[:num_matches]
     if len(away_venue) == 0:
-        away_venue = away_all[:6]
+        away_venue = away_all[:num_matches]
 
     return {
-        "home_general": home_all[:6],
-        "home_venue": home_venue[:6],
-        "away_general": away_all[:6],
-        "away_venue": away_venue[:6],
+        "home_general": home_all[:num_matches],
+        "home_venue": home_venue[:num_matches],
+        "away_general": away_all[:num_matches],
+        "away_venue": away_venue[:num_matches],
     }

@@ -2943,17 +2943,19 @@ def _lookup_fixture_entry(home: str, away: str, match_time: str):
     return entry
 
 
-def get_oracle_prediction(home: str, away: str, match_time: str):
+def get_oracle_prediction(home: str, away: str, match_time: str, num_matches: int = 6):
     """Bir mac icin Oracle (Dixon-Coles) tahminini doner, yoksa None.
     LIG KISITLAMASI KALDIRILDI (kullanici talebiyle) -- artik Volkano'nun kapsadigi HER
     mac icin, AllSportsAPI'de yeterli takim_id/lig_id + gecmis mac verisi varsa hesaplanir.
     Tek kalan filtre: get_oracle_match_data() icindeki 'en az 3 gecmis mac' sarti (veri
-    yetersizse zaten anlamli bir tahmin uretilemez)."""
+    yetersizse zaten anlamli bir tahmin uretilemez).
+    num_matches: form hesabinda kac gecmis mac kullanilacak (varsayilan 6 -- normal Oracle;
+    'Oracle-3' varyanti bunu 3 vererek cagirir, karsilastirma icin)."""
     entry = _lookup_fixture_entry(home, away, match_time)
     if entry is None:
         return None
 
-    match_data = oracle_data.get_oracle_match_data(entry.get("home_key"), entry.get("away_key"), entry.get("league_key"))
+    match_data = oracle_data.get_oracle_match_data(entry.get("home_key"), entry.get("away_key"), entry.get("league_key"), num_matches=num_matches)
     if match_data is None:
         return None
 
@@ -2966,9 +2968,10 @@ def get_oracle_prediction(home: str, away: str, match_time: str):
         return None
 
 
-def get_oracle_vs_volkano_comparison(window_hours: int = 24) -> list:
+def get_oracle_vs_volkano_comparison(window_hours: int = 24, num_matches: int = 6) -> list:
     """Volkano'nun yakin zamanli tum maclarini tarar, her biri icin Oracle tahmini
-    varsa (lig filtresinden gecerse) canli karsilastirma satiri uretir."""
+    varsa (lig filtresinden gecerse) canli karsilastirma satiri uretir.
+    num_matches: 6 (normal Oracle) veya 3 (Oracle-3 varyanti)."""
     now = datetime.now(timezone.utc)
     window_end = now + timedelta(hours=window_hours)
 
@@ -2992,7 +2995,7 @@ def get_oracle_vs_volkano_comparison(window_hours: int = 24) -> list:
         if not (now <= dt <= window_end):
             continue
 
-        oracle = get_oracle_prediction(home, away, mt)
+        oracle = get_oracle_prediction(home, away, mt, num_matches=num_matches)
         if oracle is None:
             continue
 
@@ -3594,3 +3597,118 @@ def get_oracle_cift_tavan_by_guc_seviyesi() -> dict:
         if items:
             result_out[etiketler[seviye]] = _perf_from_rows(items)
     return result_out
+
+
+# ---------------------------------------------------------------------------
+# ORACLE-3 -- normal Oracle (son 6 mac) ile TAMAMEN AYNI model/mantik, tek fark:
+# form hesabinda son 6 yerine son 3 mac kullanilir. Amac: hangisinin daha isabetli
+# oldugunu zamanla karsilastirmak. Normal Oracle'a HICBIR SEKILDE dokunulmuyor,
+# tamamen paralel/bagimsiz bir kayit hattı.
+# ---------------------------------------------------------------------------
+
+_oracle3_comparison_cache = {"data": [], "updated_at": None}
+
+
+def record_oracle3_comparison_cache() -> None:
+    try:
+        rows = get_oracle_vs_volkano_comparison(num_matches=3)
+        _oracle3_comparison_cache["data"] = rows
+        _oracle3_comparison_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+        record_oracle3_favorite_snapshot(rows)
+        record_oracle3_cift_tavan_snapshot(rows)
+    except Exception:
+        pass
+
+
+def get_oracle3_comparison_cached() -> list:
+    return _oracle3_comparison_cache["data"]
+
+
+def record_oracle3_favorite_snapshot(rows: list) -> None:
+    """Oracle-3'un KENDI favorisini (en dusuk oran verdigi taraf) kaydeder --
+    normal Oracle'in 'oracle_favorite' kategorisiyle karsilastirmak icin."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = []
+        for r in rows:
+            o_odds = {"1": r["oracle_1"], "X": r["oracle_x"], "2": r["oracle_2"]}
+            o_side = min(o_odds, key=o_odds.get)
+            rows_to_insert.append(("oracle3_favorite", r["home"], r["away"], r["league"], r["time"],
+                                    o_side, o_odds[o_side], None, None, 0, now_iso))
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows_to_insert)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def record_oracle3_cift_tavan_snapshot(rows: list) -> None:
+    """Oracle-3'un cift tavan (2 taraf 15.0) verdigi maclari kaydeder -- normal
+    Oracle'in 'oracle_cift_tavan' kategorisiyle karsilastirmak icin."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = []
+        for r in rows:
+            kalan = _cift_tavan_kalan_taraf(r["oracle_1"], r["oracle_x"], r["oracle_2"])
+            if kalan is None:
+                continue
+            vol_odds = {"1": r["volkano_1"], "X": r["volkano_x"], "2": r["volkano_2"]}
+            rows_to_insert.append(("oracle3_cift_tavan", r["home"], r["away"], r["league"], r["time"],
+                                    kalan, vol_odds[kalan], None, None, 0, now_iso))
+        if rows_to_insert:
+            conn.executemany("""
+                INSERT OR IGNORE INTO picks
+                (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, rows_to_insert)
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_oracle3_favorite_performance() -> dict:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT result, odd FROM picks WHERE category='oracle3_favorite' AND result IN ('won','lost')
+        """).fetchall()
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM picks WHERE category='oracle3_favorite' AND result='pending'
+        """).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(rows)
+    perf["pending"] = pending
+    return perf
+
+
+def get_oracle3_cift_tavan_performance() -> dict:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT result, odd FROM picks WHERE category='oracle3_cift_tavan' AND result IN ('won','lost')
+        """).fetchall()
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM picks WHERE category='oracle3_cift_tavan' AND result='pending'
+        """).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(rows)
+    perf["pending"] = pending
+    return perf
+
+
+def get_oracle6_vs_oracle3_karsilastirma() -> dict:
+    """Normal Oracle (6 mac) ile Oracle-3'u yan yana getiren ozet -- hem genel
+    favori bazinda hem cift tavan bazinda."""
+    return {
+        "oracle6_favori": get_favorite_comparison_performance()["oracle"],
+        "oracle3_favori": get_oracle3_favorite_performance(),
+        "oracle6_cift_tavan": get_oracle_cift_tavan_performance(),
+        "oracle3_cift_tavan": get_oracle3_cift_tavan_performance(),
+    }

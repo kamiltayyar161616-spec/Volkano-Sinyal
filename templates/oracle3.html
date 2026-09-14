@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Oracle-3{% endblock %}
+{% block page_tag %}ORACLE-3{% endblock %}
+{% block subtitle %}Normal Oracle ile AYNI model, tek fark: form hesabında son 6 maç yerine son 3 maç kullanılıyor. Hangisi daha isabetli, zamanla burada karşılaştırıyoruz.{% endblock %}
+
+{% block extra_style %}
+<style>
+  .vs-card{ margin:16px; padding:16px; border-radius:var(--radius); background:linear-gradient(150deg, var(--navy-soft), var(--navy-deep)); border:1px solid var(--navy-line); }
+  .vs-title{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:12.5px; color:var(--chalk-dim); letter-spacing:0.04em; margin-bottom:12px; }
+  .vs-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .vs-box{ text-align:center; padding:14px 8px; background:var(--navy); border-radius:10px; border:1px solid var(--navy-line); }
+  .vs-label{ font-size:10px; color:var(--chalk-dim); font-weight:700; margin-bottom:8px; }
+  .vs-num{ font-size:20px; font-weight:800; font-family:'Space Grotesk', sans-serif; color:var(--chalk); }
+  .vs-sub{ font-size:9px; color:var(--chalk-faint); margin-top:4px; }
+  .cmp-card{ margin:0 16px 10px; padding:14px; border-radius:12px; background:linear-gradient(165deg, var(--navy-soft), var(--navy)); border:1px solid var(--navy-line); }
+  .cmp-teams{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; color:var(--chalk); }
+  .cmp-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="vs-card">
+  <div class="vs-title">🥊 FAVORİ TAHMİNİ: 6 MAÇ vs 3 MAÇ</div>
+  <div class="vs-grid">
+    <div class="vs-box">
+      <div class="vs-label">ORACLE (6 MAÇ)</div>
+      {% if karsilastirma.oracle6_favori.staked and karsilastirma.oracle6_favori.staked > 0 %}
+        <div class="vs-num">%{{ karsilastirma.oracle6_favori.win_rate }}</div>
+        <div class="vs-sub">n={{ karsilastirma.oracle6_favori.staked }} &middot; ROI {{ '+' if karsilastirma.oracle6_favori.roi_pct > 0 else '' }}%{{ karsilastirma.oracle6_favori.roi_pct }}</div>
+      {% else %}
+        <div class="vs-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+    <div class="vs-box">
+      <div class="vs-label">ORACLE-3 (3 MAÇ)</div>
+      {% if karsilastirma.oracle3_favori.staked and karsilastirma.oracle3_favori.staked > 0 %}
+        <div class="vs-num">%{{ karsilastirma.oracle3_favori.win_rate }}</div>
+        <div class="vs-sub">n={{ karsilastirma.oracle3_favori.staked }} &middot; ROI {{ '+' if karsilastirma.oracle3_favori.roi_pct > 0 else '' }}%{{ karsilastirma.oracle3_favori.roi_pct }}</div>
+      {% else %}
+        <div class="vs-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="vs-card">
+  <div class="vs-title">🎯 ÇİFT TAVAN: 6 MAÇ vs 3 MAÇ</div>
+  <div class="vs-grid">
+    <div class="vs-box">
+      <div class="vs-label">ORACLE (6 MAÇ)</div>
+      {% if karsilastirma.oracle6_cift_tavan.staked and karsilastirma.oracle6_cift_tavan.staked > 0 %}
+        <div class="vs-num">%{{ karsilastirma.oracle6_cift_tavan.win_rate }}</div>
+        <div class="vs-sub">n={{ karsilastirma.oracle6_cift_tavan.staked }} &middot; ROI {{ '+' if karsilastirma.oracle6_cift_tavan.roi_pct > 0 else '' }}%{{ karsilastirma.oracle6_cift_tavan.roi_pct }}</div>
+      {% else %}
+        <div class="vs-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+    <div class="vs-box">
+      <div class="vs-label">ORACLE-3 (3 MAÇ)</div>
+      {% if karsilastirma.oracle3_cift_tavan.staked and karsilastirma.oracle3_cift_tavan.staked > 0 %}
+        <div class="vs-num">%{{ karsilastirma.oracle3_cift_tavan.win_rate }}</div>
+        <div class="vs-sub">n={{ karsilastirma.oracle3_cift_tavan.staked }} &middot; ROI {{ '+' if karsilastirma.oracle3_cift_tavan.roi_pct > 0 else '' }}%{{ karsilastirma.oracle3_cift_tavan.roi_pct }}</div>
+      {% else %}
+        <div class="vs-sub">henüz veri yok</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<h2 class="section">🧪 ORACLE-3'ÜN AKTİF TAHMİNLERİ ({{ rows|length }})</h2>
+{% if rows %}
+  {% for r in rows %}
+  <div class="cmp-card">
+    <div class="cmp-teams">{{ r.home }} — {{ r.away }}</div>
+    <div class="cmp-meta">{{ r.league }} &middot; {{ r.time | localdatetime }} &middot; Oracle-3 tahmini: <b>{{ r.oracle_prediction }}</b> (güven %{{ r.oracle_confidence }})</div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Şu an aktif tahmin yok — 30 dakikalık güncellemeyi bekleyin.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block footer %}ORACLE-3, NORMAL ORACLE'IN AYNI MODELİDİR — SADECE FORM PENCERESİ 3 MAÇTIR <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}

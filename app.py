@@ -23,6 +23,8 @@ from match_analyzer import (
     get_oracle_cift_tavan_comparison, record_oracle_cift_tavan_snapshot,
     get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd,
     get_oracle_cift_tavan_by_guc_seviyesi,
+    get_oracle3_comparison_cached, get_oracle3_favorite_performance,
+    get_oracle3_cift_tavan_performance, get_oracle6_vs_oracle3_karsilastirma,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -107,6 +109,14 @@ def oracle_indir():
     if not os.path.exists(ORACLE_LOG_FILE):
         return "Henüz veri birikmedi.", 404
     return send_file(ORACLE_LOG_FILE, as_attachment=True, download_name="oracle_veri.json", mimetype="application/json")
+
+
+@app.route("/oracle3")
+def oracle3():
+    rows = list(get_oracle3_comparison_cached())
+    rows.sort(key=lambda r: r["time"])
+    karsilastirma = get_oracle6_vs_oracle3_karsilastirma()
+    return render_template("oracle3.html", rows=rows, karsilastirma=karsilastirma, active_page="oracle3")
 
 
 @app.route("/oracle-cift-tavan")
@@ -209,6 +219,7 @@ def _background_loop():
                 record_oracle_comparison_cache()
                 log_sonuc = record_oracle_log_results()
                 record_oracle_cift_tavan_snapshot()
+                record_oracle3_comparison_cache()
                 print(f"[background] Oracle karşılaştırması güncellendi | log sonuç kontrolü: {log_sonuc}")
             except Exception as e:
                 print(f"[background] Oracle hatası: {e}")
