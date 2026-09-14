@@ -48,6 +48,25 @@
   {% endif %}
 </div>
 
+<h2 class="section">⚡ GÜÇ SEVİYESİNE GÖRE BAŞARI</h2>
+<div class="section-sub">Volkano'nun kalan tarafa verdiği orana göre otomatik hesaplanan güven seviyesi.</div>
+{% if guc_perf %}
+  {% for label, p in guc_perf.items() %}
+  <div class="tier-row">
+    <div>
+      <div style="font-size:12px; color:var(--chalk); font-weight:600;">{{ label }}</div>
+      <div class="cmp-meta" style="margin:0;">n={{ p.staked }} &middot; {{ p.won }} kazandı / {{ p.lost }} kaybetti</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-weight:800; color:{{ 'var(--turf-bright)' if p.roi_pct and p.roi_pct > 0 else 'var(--clay)' }};">ROI {{ '+' if p.roi_pct and p.roi_pct > 0 else '' }}%{{ p.roi_pct }}</div>
+      <div class="cmp-meta" style="margin:0;">%{{ p.win_rate }} kazanma</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Henüz sonuçlanmış veri yok.</div>
+{% endif %}
+
 <h2 class="section">🔍 VOLKANO'NUN AYNI TARAFA VERDİĞİ ORANA GÖRE</h2>
 <div class="section-sub">Bulgumuz: Volkano da aynı tarafa düşük oran veriyorsa (iki kaynak hemfikirse), sinyal daha güvenilir.</div>
 {% if volkano_odd_perf %}
@@ -67,12 +86,20 @@
   <div class="empty">Henüz sonuçlanmış veri yok.</div>
 {% endif %}
 
+<div class="sort-tabs" style="display:flex; gap:3px; margin:16px; background:var(--navy); border:1px solid var(--navy-line); border-radius:12px; padding:4px;">
+  <a href="/oracle-cift-tavan?sort=guc" style="flex:1; text-align:center; padding:9px 4px; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:10.5px; border-radius:8px; {{ 'background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06;' if sort_by == 'guc' else 'color:var(--chalk-dim);' }}">GÜÇ SEVİYESİ</a>
+  <a href="/oracle-cift-tavan?sort=time" style="flex:1; text-align:center; padding:9px 4px; text-decoration:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:10.5px; border-radius:8px; {{ 'background:linear-gradient(135deg, var(--amber-bright), var(--amber)); color:#241a06;' if sort_by == 'time' else 'color:var(--chalk-dim);' }}">BAŞLAMA SAATİ</a>
+</div>
+
 <h2 class="section">🎯 AKTİF ÇİFT TAVAN MAÇLARI ({{ rows|length }})</h2>
 {% if rows %}
   {% for r in rows %}
   <div class="cmp-card">
     <div class="cmp-teams">{{ r.home }} — {{ r.away }}</div>
     <div class="cmp-meta">{{ r.league }} &middot; {{ r.time | localdatetime }}</div>
+    <div style="margin-bottom:8px;">
+      <span style="display:inline-block; padding:3px 9px; border-radius:6px; background:var(--navy); border:1px solid {{ r.renk }}; color:{{ r.renk }}; font-weight:800; font-size:10px; font-family:'Space Grotesk', sans-serif;">{{ r.etiket }}</span>
+    </div>
     <div>
       <span class="kalan-taraf">{{ r.kalan_taraf }}</span>
       <span class="kalan-odd">Volkano: {{ '%.2f'|format(r.kalan_volkano_odd) }}</span>

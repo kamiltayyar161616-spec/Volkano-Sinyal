@@ -3474,6 +3474,19 @@ def _cift_tavan_kalan_taraf(oracle_1, oracle_x, oracle_2):
     return next(s for s in ["1", "X", "2"] if s not in tavanlar)
 
 
+def get_cift_tavan_guc_seviyesi(volkano_odd: float) -> dict:
+    """Volkano'nun kalan taraftaki oranina gore guc seviyesi doner -- kullanicinin JSON
+    analiziyle bulunan gercek bantlara dayanir: <1.40 -> %80 kazanma (COK GUCLU),
+    1.40-2.20 -> ~%65 (GUCLU), >=2.20 -> %40 (ZAYIF). Bu esikler kucuk bir orneklemden
+    (n=32) cikarildi, veri buyudukce yeniden kalibre edilebilir."""
+    if volkano_odd < 1.40:
+        return {"seviye": "cok_guclu", "etiket": "🟢 ÇOK GÜÇLÜ", "renk": "var(--turf-bright)"}
+    elif volkano_odd < 2.20:
+        return {"seviye": "guclu", "etiket": "🟡 GÜÇLÜ", "renk": "var(--amber-bright)"}
+    else:
+        return {"seviye": "zayif", "etiket": "🔴 ZAYIF", "renk": "var(--clay)"}
+
+
 def get_oracle_cift_tavan_comparison() -> list:
     """Onbellekteki Oracle vs Volkano karsilastirmasindan, cift tavanli olanlari filtreler."""
     rows = get_oracle_comparison_cached()
@@ -3483,7 +3496,9 @@ def get_oracle_cift_tavan_comparison() -> list:
         if kalan is None:
             continue
         vol_odds = {"1": r["volkano_1"], "X": r["volkano_x"], "2": r["volkano_2"]}
-        sonuc.append({**r, "kalan_taraf": kalan, "kalan_volkano_odd": vol_odds[kalan]})
+        kalan_odd = vol_odds[kalan]
+        guc = get_cift_tavan_guc_seviyesi(kalan_odd)
+        sonuc.append({**r, "kalan_taraf": kalan, "kalan_volkano_odd": kalan_odd, **guc})
     return sonuc
 
 
@@ -3555,4 +3570,27 @@ def get_oracle_cift_tavan_by_volkano_odd() -> dict:
         if items:
             label = f"{lo}-{hi}" if hi < 999 else f"{lo}+"
             result_out[label] = _perf_from_rows(items)
+    return result_out
+
+
+def get_oracle_cift_tavan_by_guc_seviyesi() -> dict:
+    """Guc seviyesine (cok_guclu/guclu/zayif) gore basari/ROI kirilimi -- ROI VOLKANO
+    oranina gore hesaplanir (kullanici talebiyle)."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT odd, result FROM picks WHERE category='oracle_cift_tavan' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    gruplar = {"cok_guclu": [], "guclu": [], "zayif": []}
+    for odd, result in rows:
+        seviye = get_cift_tavan_guc_seviyesi(odd)["seviye"]
+        gruplar[seviye].append((result, odd))
+    etiketler = {"cok_guclu": "🟢 Çok Güçlü", "guclu": "🟡 Güçlü", "zayif": "🔴 Zayıf"}
+    result_out = {}
+    for seviye in ["cok_guclu", "guclu", "zayif"]:
+        items = gruplar[seviye]
+        if items:
+            result_out[etiketler[seviye]] = _perf_from_rows(items)
     return result_out

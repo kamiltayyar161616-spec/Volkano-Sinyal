@@ -22,6 +22,7 @@ from match_analyzer import (
     get_oracle_log_stats, ORACLE_LOG_FILE, record_oracle_log_results, get_oracle_log_success_summary,
     get_oracle_cift_tavan_comparison, record_oracle_cift_tavan_snapshot,
     get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd,
+    get_oracle_cift_tavan_by_guc_seviyesi,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -110,17 +111,22 @@ def oracle_indir():
 
 @app.route("/oracle-cift-tavan")
 def oracle_cift_tavan():
-    sort_by = request.args.get("sort", "time")
+    sort_by = request.args.get("sort", "guc")
     rows = get_oracle_cift_tavan_comparison()
     if sort_by == "time":
         rows.sort(key=lambda r: r["time"])
+    elif sort_by == "guc":
+        seviye_sira = {"cok_guclu": 0, "guclu": 1, "zayif": 2}
+        rows.sort(key=lambda r: (seviye_sira.get(r["seviye"], 9), r["kalan_volkano_odd"]))
     else:
         rows.sort(key=lambda r: -(r["oracle_confidence"] or 0))
     overall = get_oracle_cift_tavan_performance()
     overall_7d = get_oracle_cift_tavan_performance(days=7)
     volkano_odd_perf = get_oracle_cift_tavan_by_volkano_odd()
+    guc_perf = get_oracle_cift_tavan_by_guc_seviyesi()
     return render_template("oracle_cift_tavan.html", rows=rows, sort_by=sort_by, overall=overall,
-                            overall_7d=overall_7d, volkano_odd_perf=volkano_odd_perf, active_page="ciftavan")
+                            overall_7d=overall_7d, volkano_odd_perf=volkano_odd_perf,
+                            guc_perf=guc_perf, active_page="ciftavan")
 
 
 @app.route("/son-dakika")
