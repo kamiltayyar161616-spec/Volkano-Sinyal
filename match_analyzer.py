@@ -3123,8 +3123,10 @@ def record_oracle_comparison_cache() -> None:
         record_oracle_snapshot(rows)
         record_oracle_full_log(rows)
         record_favorite_comparison(rows)
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        print(f"[oracle_cache_hata] {e}")
+        traceback.print_exc()
 
 
 def get_oracle_comparison_cached() -> list:
@@ -3616,8 +3618,10 @@ def record_oracle3_comparison_cache() -> None:
         _oracle3_comparison_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
         record_oracle3_favorite_snapshot(rows)
         record_oracle3_cift_tavan_snapshot(rows)
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        print(f"[oracle3_cache_hata] {e}")
+        traceback.print_exc()
 
 
 def get_oracle3_comparison_cached() -> list:
