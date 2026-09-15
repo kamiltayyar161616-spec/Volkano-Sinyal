@@ -23,7 +23,7 @@ from match_analyzer import (
     get_oracle_cift_tavan_comparison, record_oracle_cift_tavan_snapshot,
     get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd,
     get_oracle_cift_tavan_by_guc_seviyesi,
-    get_oracle3_comparison_cached, get_oracle3_favorite_performance,
+    get_oracle3_comparison_cached, get_oracle3_favorite_performance, record_oracle3_comparison_cache,
     get_oracle3_cift_tavan_performance, get_oracle6_vs_oracle3_karsilastirma,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
@@ -113,6 +113,8 @@ def oracle_indir():
 
 @app.route("/oracle3")
 def oracle3():
+    if not get_oracle3_comparison_cached():
+        record_oracle3_comparison_cache()
     rows = list(get_oracle3_comparison_cached())
     rows.sort(key=lambda r: r["time"])
     karsilastirma = get_oracle6_vs_oracle3_karsilastirma()
