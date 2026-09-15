@@ -115,10 +115,14 @@ def oracle_indir():
 def oracle3():
     if not get_oracle3_comparison_cached():
         record_oracle3_comparison_cache()
+    sort_by = request.args.get("sort", "diff")
     rows = list(get_oracle3_comparison_cached())
-    rows.sort(key=lambda r: r["time"])
+    if sort_by == "time":
+        rows.sort(key=lambda r: r["time"])
+    else:
+        rows.sort(key=lambda r: -(r["max_abs_diff"] or 0))
     karsilastirma = get_oracle6_vs_oracle3_karsilastirma()
-    return render_template("oracle3.html", rows=rows, karsilastirma=karsilastirma, active_page="oracle3")
+    return render_template("oracle3.html", rows=rows, sort_by=sort_by, karsilastirma=karsilastirma, active_page="oracle3")
 
 
 @app.route("/oracle-cift-tavan")
