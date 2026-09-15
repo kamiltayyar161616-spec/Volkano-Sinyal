@@ -3618,6 +3618,7 @@ def record_oracle3_comparison_cache() -> None:
         _oracle3_comparison_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
         record_oracle3_favorite_snapshot(rows)
         record_oracle3_cift_tavan_snapshot(rows)
+        print(f"[oracle3_debug] bu turda bulunan mac sayisi: {len(rows)}")
     except Exception as e:
         import traceback
         print(f"[oracle3_cache_hata] {e}")
