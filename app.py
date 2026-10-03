@@ -25,6 +25,8 @@ from match_analyzer import (
     get_oracle_cift_tavan_by_guc_seviyesi,
     get_oracle3_comparison_cached, get_oracle3_favorite_performance, record_oracle3_comparison_cache,
     get_oracle3_cift_tavan_performance, get_oracle6_vs_oracle3_karsilastirma,
+    get_oracle9_comparison_cached, get_oracle9_favorite_performance, record_oracle9_comparison_cache,
+    get_oracle9_cift_tavan_performance, get_oracle_uclu_karsilastirma,
     record_late_snapshot, get_late_drops, record_late_drop_snapshot, get_late_drop_performance_by_tier,
     LATE_DROP_WINDOWS_MIN,
 )
@@ -121,8 +123,24 @@ def oracle3():
         rows.sort(key=lambda r: r["time"])
     else:
         rows.sort(key=lambda r: -(r["max_abs_diff"] or 0))
-    karsilastirma = get_oracle6_vs_oracle3_karsilastirma()
-    return render_template("oracle3.html", rows=rows, sort_by=sort_by, karsilastirma=karsilastirma, active_page="oracle3")
+    karsilastirma = get_oracle_uclu_karsilastirma()
+    return render_template("oracle3.html", rows=rows, sort_by=sort_by, karsilastirma=karsilastirma,
+                            model_adi="Oracle-3", mac_sayisi=3, active_page="oracle3")
+
+
+@app.route("/oracle9")
+def oracle9():
+    if not get_oracle9_comparison_cached():
+        record_oracle9_comparison_cache()
+    sort_by = request.args.get("sort", "diff")
+    rows = list(get_oracle9_comparison_cached())
+    if sort_by == "time":
+        rows.sort(key=lambda r: r["time"])
+    else:
+        rows.sort(key=lambda r: -(r["max_abs_diff"] or 0))
+    karsilastirma = get_oracle_uclu_karsilastirma()
+    return render_template("oracle3.html", rows=rows, sort_by=sort_by, karsilastirma=karsilastirma,
+                            model_adi="Oracle-9", mac_sayisi=9, active_page="oracle9")
 
 
 @app.route("/oracle-cift-tavan")
@@ -226,6 +244,7 @@ def _background_loop():
                 log_sonuc = record_oracle_log_results()
                 record_oracle_cift_tavan_snapshot()
                 record_oracle3_comparison_cache()
+                record_oracle9_comparison_cache()
                 print(f"[background] Oracle karşılaştırması güncellendi | log sonuç kontrolü: {log_sonuc}")
             except Exception as e:
                 print(f"[background] Oracle hatası: {e}")

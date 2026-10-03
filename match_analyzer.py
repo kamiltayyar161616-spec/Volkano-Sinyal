@@ -3717,3 +3717,123 @@ def get_oracle6_vs_oracle3_karsilastirma() -> dict:
         "oracle6_cift_tavan": get_oracle_cift_tavan_performance(),
         "oracle3_cift_tavan": get_oracle3_cift_tavan_performance(),
     }
+
+
+# ---------------------------------------------------------------------------
+# ORACLE-9 -- Oracle-3 ile BIREBIR AYNI yapı, tek fark: form hesabinda son 9 mac
+# kullanilir. Boylece 6/3/9 pencere boyutlarinin hangisinin daha isabetli oldugunu
+# zamanla karsilastirabiliriz. Normal Oracle (6) ve Oracle-3'e hicbir sekilde
+# dokunulmuyor, tamamen paralel/bagimsiz bir kayit hattı.
+# ---------------------------------------------------------------------------
+
+_oracle9_comparison_cache = {"data": [], "updated_at": None}
+
+
+def record_oracle9_comparison_cache() -> None:
+    try:
+        rows = get_oracle_vs_volkano_comparison(num_matches=9)
+        _oracle9_comparison_cache["data"] = rows
+        _oracle9_comparison_cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+        record_oracle9_favorite_snapshot(rows)
+        record_oracle9_cift_tavan_snapshot(rows)
+        print(f"[oracle9_debug] bu turda bulunan mac sayisi: {len(rows)}")
+    except Exception as e:
+        import traceback
+        print(f"[oracle9_cache_hata] {e}")
+        traceback.print_exc()
+
+
+def get_oracle9_comparison_cached() -> list:
+    return _oracle9_comparison_cache["data"]
+
+
+def record_oracle9_favorite_snapshot(rows: list) -> None:
+    """Oracle-9'un KENDI favorisini (en dusuk oran verdigi taraf) kaydeder --
+    normal Oracle (6) ve Oracle-3'un favori kategorileriyle karsilastirmak icin."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = []
+        for r in rows:
+            o_odds = {"1": r["oracle_1"], "X": r["oracle_x"], "2": r["oracle_2"]}
+            o_side = min(o_odds, key=o_odds.get)
+            rows_to_insert.append(("oracle9_favorite", r["home"], r["away"], r["league"], r["time"],
+                                    o_side, o_odds[o_side], None, None, 0, now_iso))
+        conn.executemany("""
+            INSERT OR IGNORE INTO picks
+            (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, rows_to_insert)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def record_oracle9_cift_tavan_snapshot(rows: list) -> None:
+    """Oracle-9'un cift tavan (2 taraf 15.0) verdigi maclari kaydeder."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        rows_to_insert = []
+        for r in rows:
+            kalan = _cift_tavan_kalan_taraf(r["oracle_1"], r["oracle_x"], r["oracle_2"])
+            if kalan is None:
+                continue
+            vol_odds = {"1": r["volkano_1"], "X": r["volkano_x"], "2": r["volkano_2"]}
+            rows_to_insert.append(("oracle9_cift_tavan", r["home"], r["away"], r["league"], r["time"],
+                                    kalan, vol_odds[kalan], None, None, 0, now_iso))
+        if rows_to_insert:
+            conn.executemany("""
+                INSERT OR IGNORE INTO picks
+                (category, home, away, league, match_time, side, odd, edge, prob, mf_confirmed, first_seen)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, rows_to_insert)
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_oracle9_favorite_performance() -> dict:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT result, odd FROM picks WHERE category='oracle9_favorite' AND result IN ('won','lost')
+        """).fetchall()
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM picks WHERE category='oracle9_favorite' AND result='pending'
+        """).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(rows)
+    perf["pending"] = pending
+    return perf
+
+
+def get_oracle9_cift_tavan_performance() -> dict:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT result, odd FROM picks WHERE category='oracle9_cift_tavan' AND result IN ('won','lost')
+        """).fetchall()
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM picks WHERE category='oracle9_cift_tavan' AND result='pending'
+        """).fetchone()[0]
+    finally:
+        conn.close()
+    perf = _perf_from_rows(rows)
+    perf["pending"] = pending
+    return perf
+
+
+def get_oracle_uclu_karsilastirma() -> dict:
+    """Oracle (6), Oracle-3 ve Oracle-9'u yan yana getiren tam ozet -- hem genel
+    favori bazinda hem cift tavan bazinda. Her uc sayfada da (oracle3, oracle9)
+    ayni tabloyu gostermek icin kullanilir."""
+    return {
+        "oracle6_favori": get_favorite_comparison_performance()["oracle"],
+        "oracle3_favori": get_oracle3_favorite_performance(),
+        "oracle9_favori": get_oracle9_favorite_performance(),
+        "oracle6_cift_tavan": get_oracle_cift_tavan_performance(),
+        "oracle3_cift_tavan": get_oracle3_cift_tavan_performance(),
+        "oracle9_cift_tavan": get_oracle9_cift_tavan_performance(),
+    }
