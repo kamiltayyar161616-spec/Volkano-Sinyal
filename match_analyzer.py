@@ -3479,14 +3479,15 @@ def _cift_tavan_kalan_taraf(oracle_1, oracle_x, oracle_2):
     return next(s for s in ["1", "X", "2"] if s not in tavanlar)
 
 
-def get_cift_tavan_guc_seviyesi(volkano_odd: float) -> dict:
-    """Volkano'nun kalan taraftaki oranina gore guc seviyesi doner -- kullanicinin JSON
-    analiziyle bulunan gercek bantlara dayanir: <1.40 -> %80 kazanma (COK GUCLU),
-    1.40-2.20 -> ~%65 (GUCLU), >=2.20 -> %40 (ZAYIF). Bu esikler kucuk bir orneklemden
-    (n=32) cikarildi, veri buyudukce yeniden kalibre edilebilir."""
+def get_cift_tavan_guc_seviyesi(volkano_odd: float, favori_mi: bool = True) -> dict:
+    """Volkano'nun kalan taraftaki oranina gore guc seviyesi. 3.748 maclik JSON analizi:
+    <1.40 -> %82 (DNB %91), 1.40-1.60 -> %71 (DNB %82), 1.60-2.20 -> %51 (ROI -8.5),
+    >=2.20 -> ~%29. Kalan taraf Volkano'nun favorisi degilse sinyal zayif (%36, n=11)."""
+    if not favori_mi:
+        return {"seviye": "zayif", "etiket": "🔴 ZAYIF", "renk": "var(--clay)"}
     if volkano_odd < 1.40:
         return {"seviye": "cok_guclu", "etiket": "🟢 ÇOK GÜÇLÜ", "renk": "var(--turf-bright)"}
-    elif volkano_odd < 2.20:
+    elif volkano_odd < 1.60:
         return {"seviye": "guclu", "etiket": "🟡 GÜÇLÜ", "renk": "var(--amber-bright)"}
     else:
         return {"seviye": "zayif", "etiket": "🔴 ZAYIF", "renk": "var(--clay)"}
@@ -3502,7 +3503,8 @@ def get_oracle_cift_tavan_comparison() -> list:
             continue
         vol_odds = {"1": r["volkano_1"], "X": r["volkano_x"], "2": r["volkano_2"]}
         kalan_odd = vol_odds[kalan]
-        guc = get_cift_tavan_guc_seviyesi(kalan_odd)
+        favori_mi = kalan_odd <= min(vol_odds.values())
+        guc = get_cift_tavan_guc_seviyesi(kalan_odd, favori_mi)
         sonuc.append({**r, "kalan_taraf": kalan, "kalan_volkano_odd": kalan_odd, **guc})
     return sonuc
 
@@ -3599,6 +3601,39 @@ def get_oracle_cift_tavan_by_guc_seviyesi() -> dict:
         if items:
             result_out[etiketler[seviye]] = _perf_from_rows(items)
     return result_out
+
+
+def get_oracle_cift_tavan_dnb() -> dict:
+    """Cift tavan DNB (beraberlik iade) basarisi: genel ve guc seviyesine gore."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT odd, result, final_score FROM picks
+            WHERE category='oracle_cift_tavan' AND result IN ('won','lost')
+        """).fetchall()
+    finally:
+        conn.close()
+    def _draw(sc):
+        try:
+            a, b = [int(x) for x in str(sc).replace(":", "-").split("-")[:2]]
+            return a == b
+        except Exception:
+            return False
+    gruplar = {"Tümü": []}
+    et = {"cok_guclu": "🟢 Çok Güçlü", "guclu": "🟡 Güçlü", "zayif": "🔴 Zayıf"}
+    for odd, result, sc in rows:
+        item = (result, _draw(sc))
+        gruplar["Tümü"].append(item)
+        gruplar.setdefault(et[get_cift_tavan_guc_seviyesi(odd)["seviye"]], []).append(item)
+    out = {}
+    for k, items in gruplar.items():
+        won = sum(1 for r, d in items if r == "won")
+        draws = sum(1 for r, d in items if d)
+        nd = len(items) - draws
+        out[k] = {"n": len(items), "won": won, "draws": draws,
+                  "normal": round(100 * won / len(items), 1) if items else 0,
+                  "dnb": round(100 * won / nd, 1) if nd else 0}
+    return out
 
 
 # ---------------------------------------------------------------------------

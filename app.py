@@ -21,7 +21,7 @@ from match_analyzer import (
     get_oracle_confident_performance, get_oracle_confident_performance_by_edge,
     get_oracle_log_stats, ORACLE_LOG_FILE, record_oracle_log_results, get_oracle_log_success_summary,
     get_oracle_cift_tavan_comparison, record_oracle_cift_tavan_snapshot,
-    get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd,
+    get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd, get_oracle_cift_tavan_dnb,
     get_oracle_cift_tavan_by_guc_seviyesi,
     get_oracle3_comparison_cached, get_oracle3_favorite_performance, record_oracle3_comparison_cache,
     get_oracle3_cift_tavan_performance, get_oracle6_vs_oracle3_karsilastirma,
@@ -158,7 +158,8 @@ def oracle_cift_tavan():
     overall_7d = get_oracle_cift_tavan_performance(days=7)
     volkano_odd_perf = get_oracle_cift_tavan_by_volkano_odd()
     guc_perf = get_oracle_cift_tavan_by_guc_seviyesi()
-    return render_template("oracle_cift_tavan.html", rows=rows, sort_by=sort_by, overall=overall,
+    dnb = get_oracle_cift_tavan_dnb()
+    return render_template("oracle_cift_tavan.html", dnb=dnb, rows=rows, sort_by=sort_by, overall=overall,
                             overall_7d=overall_7d, volkano_odd_perf=volkano_odd_perf,
                             guc_perf=guc_perf, active_page="ciftavan")
 

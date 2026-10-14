@@ -67,6 +67,25 @@
   <div class="empty">Henüz sonuçlanmış veri yok.</div>
 {% endif %}
 
+<h2 class="section">🤝 DNB (BERABERLİK İADE) BAŞARISI</h2>
+<div class="section-sub">Beraberlik iade sayılırsa kazanma oranı. Kayıpların ~%43'ü beraberlik.</div>
+{% if dnb and dnb['Tümü'].n %}
+  {% for label, p in dnb.items() %}
+  <div class="tier-row">
+    <div>
+      <div style="font-size:12px; color:var(--chalk); font-weight:600;">{{ label }}</div>
+      <div class="cmp-meta" style="margin:0;">n={{ p.n }} &middot; {{ p.draws }} beraberlik</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-weight:800; color:var(--turf-bright);">DNB %{{ p.dnb }}</div>
+      <div class="cmp-meta" style="margin:0;">normal %{{ p.normal }}</div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">Henüz sonuçlanmış veri yok.</div>
+{% endif %}
+
 <h2 class="section">🔍 VOLKANO'NUN AYNI TARAFA VERDİĞİ ORANA GÖRE</h2>
 <div class="section-sub">Bulgumuz: Volkano da aynı tarafa düşük oran veriyorsa (iki kaynak hemfikirse), sinyal daha güvenilir.</div>
 {% if volkano_odd_perf %}
