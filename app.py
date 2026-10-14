@@ -21,7 +21,7 @@ from match_analyzer import (
     get_oracle_confident_performance, get_oracle_confident_performance_by_edge,
     get_oracle_log_stats, ORACLE_LOG_FILE, record_oracle_log_results, get_oracle_log_success_summary,
     get_oracle_cift_tavan_comparison, record_oracle_cift_tavan_snapshot,
-    get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd, get_oracle_cift_tavan_dnb,
+    get_oracle_cift_tavan_performance, get_oracle_cift_tavan_by_volkano_odd, get_oracle_cift_tavan_dnb, filter_analysis_leagues,
     get_oracle_cift_tavan_by_guc_seviyesi,
     get_oracle3_comparison_cached, get_oracle3_favorite_performance, record_oracle3_comparison_cache,
     get_oracle3_cift_tavan_performance, get_oracle6_vs_oracle3_karsilastirma,
@@ -43,13 +43,13 @@ ORACLE_CACHE_INTERVAL_SEC = 1800  # Oracle hesaplamasi agir (lig fikstur cekimi)
 
 @app.route("/")
 def index():
-    data = get_analysis()
+    data = filter_analysis_leagues(get_analysis())
     return render_template("index.html", data=data, active_page="canli")
 
 
 @app.route("/oynanabilir")
 def oynanabilir():
-    data = get_analysis()
+    data = filter_analysis_leagues(get_analysis())
     playable_data = get_playable_picks(data)
     return render_template("oynanabilir.html", data=playable_data, generated_at=data["generated_at"], active_page="oynanabilir")
 

@@ -1512,6 +1512,42 @@ KUPON_MIN_EDGE_PTS = 8.0   # kazanma orani, o oranin basabas noktasindan (100/or
 KUPON_MAX_ODD = 2.00        # buyuk veri analizinde bulunan en guclu tek sinyal: 2.00 alti bantlar pozitif, ustu hep negatif
 
 
+# ---------------------------------------------------------------------------
+# LIG FILTRESI (bulten + kupon) -- kullanici talebi: her ulkeden sadece 1. ve 2. lig.
+# Volkano lig adi "<Ulke> <seviye>[-ek]" bicimindedir (orn. "Norveška 4-Grupa 1", "SAD 2").
+# Seviye'siz adlar kupa/uluslararasi yarismalardir (orn. "Engleska", "Copa Libertadores") ve
+# serbesttir. Eyalet/rezerv/alt lig adlari (Oberliga, Carioca, MLS Next Pro, NPL...) elenir.
+# Veri notu: 3.913 maclik JSON'da 3+ ligler ile 1-2 ligler Volkano favorisi <1.60 icin
+# AYNI basariyi veriyor (%71.5 vs %70.7); filtre hacmi azaltir, isabeti arttirdigi kanitli degil.
+# ---------------------------------------------------------------------------
+LIG_MAX_SEVIYE = 2
+LIG_MAX_SEVIYE_ULKE = {"Engleska": 4, "SAD": 1}  # Ingiltere 1-4 (Premier..League Two), ABD sadece 1 (MLS)
+_LIG_ELE_DESEN = re.compile(r"(Next Pro|Oberliga|Carioca|Piauiense|Capixaba|NPL)", re.I)
+_LIG_SEVIYE_RE = re.compile(r"^(.*?)\s+(\d+)(?:[-\s(].*)?$")
+
+
+def lig_izinli(league) -> bool:
+    if not league:
+        return True
+    l = str(league).strip()
+    if _LIG_ELE_DESEN.search(l):
+        return False
+    m = _LIG_SEVIYE_RE.match(l)
+    if not m:
+        return True  # kupa / uluslararasi / bicimi taninmayan -- dokunma
+    ulke, seviye = m.group(1).strip(), int(m.group(2))
+    return seviye <= LIG_MAX_SEVIYE_ULKE.get(ulke, LIG_MAX_SEVIYE)
+
+
+def filter_analysis_leagues(data: dict) -> dict:
+    """get_analysis() ciktisindaki listeleri lig filtresinden gecirir (sadece GOSTERIM icin;
+    arka plan kayitlari/istatistikler tum ligleri toplamaya devam eder)."""
+    out = dict(data)
+    for k in ("value_picks", "reverse_picks", "favorite_picks"):
+        out[k] = [r for r in data.get(k, []) if lig_izinli(r.get("league"))]
+    return out
+
+
 def _kupon_candidate_pool() -> list:
     """Sadece kanitlanmis karli havuzlardan (Favori+Value, Value+para akisi teyitli,
     sadece Volkano dusen oranlari, 4+ kaynakli Ortak Dusenler) aday cikartir, ROI'ye gore siralar.
@@ -1606,6 +1642,7 @@ def _kupon_candidate_pool() -> list:
 
     # ROI baraji (oran filtreleri artik yukarida her dala ozel uygulandi)
     pool = [p for p in pool if p.get("roi_pct") is not None and p["roi_pct"] >= KUPON_MIN_ROI_PCT]
+    pool = [p for p in pool if lig_izinli(p.get("league"))]
 
     # NOT: Daha once burada ayrica bir "puan bazli edge" filtresi vardi (kazanma orani - basabas
     # noktasi >= 8 puan). Bu, CIFTE SANS bahisleri icin yanlis cikti: cifte sansin basabas noktasi
@@ -1642,6 +1679,8 @@ def get_kupon_active(limit: int = KUPON_SIZE) -> list:
     active = []
     for row in rows:
         d = dict(zip(cols, row))
+        if not lig_izinli(d.get("league")):
+            continue  # lig filtresi: eski kayitlar da gosterilmez / kuponu doldurmayi etkilemez
         try:
             dt = _parse_to_local(d["match_time"])
         except Exception:
