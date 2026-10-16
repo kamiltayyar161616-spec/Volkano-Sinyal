@@ -204,8 +204,10 @@ def nowgoal_page():
     perf_7d = nowgoal.get_performance(days=7)
     calib = nowgoal.get_calibration()
     signals = nowgoal.get_signal_tests()
+    tip = nowgoal.get_tip_performance()
+    tip_7d = nowgoal.get_tip_performance(days=7)
     return render_template("nowgoal.html", d=data, perf=perf, perf_7d=perf_7d, calib=calib,
-                            signals=signals, hedef_bant=nowgoal.HEDEF_BANT, active_page="nowgoal")
+                            signals=signals, tip=tip, tip_7d=tip_7d, active_page="nowgoal")
 
 
 @app.route("/nowgoal/indir")

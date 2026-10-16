@@ -64,12 +64,12 @@ DC_RHO = -0.08
 MIN_SAMPLE = 4        # takim basina en az bu kadar oranli mac (ic/dis ayrik)
 PICK_MIN_EDGE = 0.05  # final_olasilik * volkano_orani - 1
 PICK_MIN_DELTA = 0.03 # final olasilik piyasadan en az bu kadar yuksek
-PICK_MAX_ODD = 6.0
+PICK_MAX_ODD = 100.0
 MAX_DELTA = 0.15      # model, piyasadan taraf basina en fazla bu kadar sapabilir (uc residual korumasi)
 
-HEDEF_BANT = (2.80, 3.20)
-BANDS = [("1.00-1.50", 1.0, 1.5), ("1.50-2.00", 1.5, 2.0), ("2.00-2.80", 2.0, 2.8),
-         ("2.80-3.20", 2.8, 3.2), ("3.20-4.50", 3.2, 4.5), ("4.50+", 4.5, 99.0)]
+# Oran bantlari: 1.01'den 100'e kadar tum araliklar (amac: kazanan tarafi dogru bilmek, oran fark etmez)
+BANDS = [("1.01-1.30", 1.0, 1.3), ("1.30-1.60", 1.3, 1.6), ("1.60-2.00", 1.6, 2.0), ("2.00-2.50", 2.0, 2.5),
+         ("2.50-3.50", 2.5, 3.5), ("3.50-5.00", 3.5, 5.0), ("5.00+", 5.0, 1000.0)]
 EDGE_BUCKETS = [("%5-10", 0.05, 0.10), ("%10-20", 0.10, 0.20), ("%20+", 0.20, 99.0)]
 
 _db_lock = threading.Lock()
@@ -108,6 +108,11 @@ def _conn():
         pick_at TEXT, pick_reasons TEXT, model_version TEXT,
         ft_h INTEGER, ft_a INTEGER, result_at TEXT)""")
     c.execute("CREATE INDEX IF NOT EXISTS ix_ng_kick ON ng_match(kickoff_utc)")
+    have = {r[1] for r in c.execute("PRAGMA table_info(ng_match)")}
+    for col, typ in (("tip_side", "TEXT"), ("tip_odd", "REAL"), ("tip_prob", "REAL"), ("tip_fav", "TEXT"),
+                     ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT")):
+        if col not in have:
+            c.execute(f"ALTER TABLE ng_match ADD COLUMN {col} {typ}")
     return c
 
 
@@ -548,18 +553,25 @@ def evaluate(log):
     now = _now()
     with _db_lock:
         c = _conn()
-        rows = c.execute("""SELECT mid, home, away, kickoff_utc, features_json FROM ng_match
-                            WHERE status='stats' AND pick_side IS NULL AND kickoff_utc > ?""",
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, features_json, pick_side FROM ng_match
+                            WHERE status='stats' AND kickoff_utc > ?""",
                          (_iso(now + timedelta(minutes=5)),)).fetchall()
         c.close()
-    n_vk = n_pick = 0
+    n_vk = n_pick = n_tip = 0
     for r in rows:
         feat = json.loads(r["features_json"])
         mk, vk = match_market(markets, r["home"] or "", r["away"] or "", r["kickoff_utc"])
         pred = predict(feat, mk["p"] if mk else None)
         pick = None
-        if vk and pred["final"] and mk:
+        tip = None
+        if pred["final"]:
+            ti = max(range(3), key=lambda i: pred["final"][i])
+            fav = "1X2"[max(range(3), key=lambda i: mk["p"][i])] if mk else None
+            tip = ("1X2"[ti], vk["odds"][ti] if vk else None, pred["final"][ti],
+                   mk["p"][ti] if mk else None, fav, ti)
+        if vk:
             n_vk += 1
+        if vk and pred["final"] and mk and r["pick_side"] is None:
             ok_sample = feat["H_venue"]["n_odds"] >= MIN_SAMPLE and feat["A_venue"]["n_odds"] >= MIN_SAMPLE
             best = None
             for i, side in enumerate(("1", "X", "2")):
@@ -578,6 +590,13 @@ def evaluate(log):
                       (_iso(_now()), json.dumps(pred), json.dumps(mk) if mk else None,
                        json.dumps(vk, ensure_ascii=False) if vk else None,
                        vk["league"] if vk else None, MODEL_VERSION, r["mid"]))
+            if tip:
+                side, odd, prob, mprob, fav, ti = tip
+                c.execute("""UPDATE ng_match SET tip_side=?, tip_odd=?, tip_prob=?, tip_market=?, tip_fav=?,
+                             tip_at=?, tip_reasons=? WHERE mid=?""",
+                          (side, odd, prob, mprob, fav, _iso(_now()),
+                           json.dumps(_reasons(feat, pred, ti), ensure_ascii=False), r["mid"]))
+                n_tip += 1
             if pick:
                 side, odd, edge, i = pick
                 c.execute("""UPDATE ng_match SET pick_side=?, pick_odd=?, pick_prob=?, pick_market=?, pick_edge=?,
@@ -587,7 +606,7 @@ def evaluate(log):
                 n_pick += 1
             c.commit()
             c.close()
-    log.append(f"değerlendirilen {len(rows)}, Volkano eşleşen {n_vk}, yeni tahmin {n_pick}")
+    log.append(f"değerlendirilen {len(rows)}, Volkano eşleşen {n_vk}, kazanan tahmini {n_tip}, yeni değer tahmini {n_pick}")
 
 
 def resolve(log):
@@ -654,18 +673,49 @@ def _result_idx(h, a):
     return 0 if h > a else 1 if h == a else 2
 
 
-def _perf(rows):
-    n = w = 0
+def _perf(rows, side_key="pick_side", odd_key="pick_odd"):
+    n = w = n_odd = 0
     profit = 0.0
     for r in rows:
         n += 1
-        won = "1X2"[_result_idx(r["ft_h"], r["ft_a"])] == r["pick_side"]
+        won = "1X2"[_result_idx(r["ft_h"], r["ft_a"])] == r[side_key]
         w += won
-        profit += (r["pick_odd"] - 1) if won else -1
+        if r[odd_key]:
+            n_odd += 1
+            profit += (r[odd_key] - 1) if won else -1
     if not n:
         return None
     return {"n": n, "won": w, "lost": n - w, "win_rate": round(100 * w / n, 1),
-            "roi_pct": round(100 * profit / n, 1), "profit": round(profit, 2)}
+            "roi_pct": round(100 * profit / n_odd, 1) if n_odd else 0.0, "profit": round(profit, 2)}
+
+
+def get_tip_performance(days=None):
+    """Kazanan tahmini: model her mac icin en olasi tarafi secer. Isabet + Volkano oranindan duz bahis ROI,
+    ve kiyas olarak 'her zaman piyasa favorisini sec' stratejisinin isabeti."""
+    q = "SELECT * FROM ng_match WHERE status='finished' AND tip_side IS NOT NULL"
+    args = ()
+    if days:
+        q += " AND kickoff_utc > ?"
+        args = (_iso(_now() - timedelta(days=days)),)
+    with _db_lock:
+        c = _conn()
+        rows = c.execute(q, args).fetchall()
+        c.close()
+    if not rows:
+        return None
+    out = {"all": _perf(rows, "tip_side", "tip_odd"), "bands": {}}
+    with_fav = [r for r in rows if r["tip_fav"]]
+    if with_fav:
+        fav_hit = sum("1X2"[_result_idx(r["ft_h"], r["ft_a"])] == r["tip_fav"] for r in with_fav)
+        out["fav_rate"] = round(100 * fav_hit / len(with_fav), 1)
+        out["fav_n"] = len(with_fav)
+        out["agree"] = _perf([r for r in with_fav if r["tip_side"] == r["tip_fav"]], "tip_side", "tip_odd")
+        out["surprise"] = _perf([r for r in with_fav if r["tip_side"] != r["tip_fav"]], "tip_side", "tip_odd")
+    for label, lo, hi in BANDS:
+        p = _perf([r for r in rows if r["tip_odd"] and lo <= r["tip_odd"] < hi], "tip_side", "tip_odd")
+        if p:
+            out["bands"][label] = p
+    return out
 
 
 def get_performance(days=None):
@@ -783,13 +833,19 @@ def _row_view(r):
          "pick_market": r["pick_market"], "pick_edge": r["pick_edge"],
          "reasons": json.loads(r["pick_reasons"]) if r["pick_reasons"] else [],
          "ft": [r["ft_h"], r["ft_a"]] if r["ft_h"] is not None else None,
-         "hv": feat.get("H_venue"), "av": feat.get("A_venue"), "x": feat.get("h2h")}
+         "hv": feat.get("H_venue"), "av": feat.get("A_venue"), "x": feat.get("h2h"),
+         "tip_side": r["tip_side"], "tip_odd": r["tip_odd"], "tip_prob": r["tip_prob"],
+         "tip_market": r["tip_market"], "tip_fav": r["tip_fav"],
+         "tip_reasons": json.loads(r["tip_reasons"]) if r["tip_reasons"] else []}
+    v["surprise"] = bool(v["tip_side"] and v["tip_fav"] and v["tip_side"] != v["tip_fav"])
     v["best_edge"] = None
     if v["final"] and v["vk"]:
         v["edges"] = [round(v["final"][i] * v["vk"][i] - 1, 3) for i in range(3)]
         v["best_edge"] = max(v["edges"])
     if v["ft"] and v["pick_side"]:
         v["won"] = "1X2"[_result_idx(*v["ft"])] == v["pick_side"]
+    if v["ft"] and v["tip_side"]:
+        v["tip_won"] = "1X2"[_result_idx(*v["ft"])] == v["tip_side"]
     return v
 
 
@@ -799,16 +855,15 @@ def get_page_data():
         c = _conn()
         upcoming = c.execute("""SELECT * FROM ng_match WHERE status='stats' AND kickoff_utc > ?
                                 ORDER BY kickoff_utc""", (_iso(now),)).fetchall()
-        recent = c.execute("""SELECT * FROM ng_match WHERE status='finished' AND pick_side IS NOT NULL
+        recent = c.execute("""SELECT * FROM ng_match WHERE status='finished' AND tip_side IS NOT NULL
                               ORDER BY kickoff_utc DESC LIMIT 40""").fetchall()
         counts = dict(c.execute("SELECT status, COUNT(*) FROM ng_match GROUP BY status").fetchall())
         c.close()
     up = [_row_view(r) for r in upcoming]
     picks = [v for v in up if v["pick_side"]]
-    hedef = [v for v in picks if HEDEF_BANT[0] <= v["pick_odd"] <= HEDEF_BANT[1]]
-    others = sorted([v for v in up if not v["pick_side"] and v["vk"] and v["final"]],
-                    key=lambda v: -(v["best_edge"] or -9))
-    return {"picks": picks, "hedef": hedef, "candidates": others[:40],
+    tips = [v for v in up if v["tip_side"] and v["vk"]]
+    surprises = sorted([v for v in tips if v["surprise"]], key=lambda v: -(v["tip_odd"] or 0))
+    return {"picks": picks, "tips": tips, "surprises": surprises,
             "recent": [_row_view(r) for r in recent], "counts": counts,
             "n_upcoming": len(up), "n_vk": sum(1 for v in up if v["vk"]),
             "last_cycle": _last_cycle}
