@@ -106,6 +106,7 @@ WATCH_BOOKS = [
     ("avrupa", "1xBet", ["1xBet"]),
     ("avrupa", "CoolBet", ["CoolBet"]),
     ("avrupa", "bet105", ["bet105"]),
+    ("gözlemci", "iddaa", ["iddaa"]),
 ]
 BOOK_MOVE = 0.03       # sirket bir tarafi acilistan >=3p artirdiysa "hareket" sayilir
 BOOK_MIN_N = 15        # karnede siralama icin en az bu kadar hareket      # model, piyasadan taraf basina en fazla bu kadar sapabilir (uc residual korumasi)
@@ -561,7 +562,7 @@ def odds_features(books):
         d = [round(pc[i] - po[i], 4) for i in range(3)]
         wb[disp] = {"g": grp, "o": b["open"], "c": b["cur"], "p": [round(x, 4) for x in pc], "d": d, "k": b["kelly"]}
         for i in range(3):
-            votes[i] += d[i] >= BOOK_MOVE
+            votes[i] += grp != "gözlemci" and d[i] >= BOOK_MOVE
     f["watch"] = wb
     f["n_watch"] = len(wb)
     f["votes"] = votes
