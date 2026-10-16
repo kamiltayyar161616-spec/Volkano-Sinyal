@@ -65,7 +65,14 @@ MIN_SAMPLE = 4        # takim basina en az bu kadar oranli mac (ic/dis ayrik)
 PICK_MIN_EDGE = 0.05  # final_olasilik * volkano_orani - 1
 PICK_MIN_DELTA = 0.03 # final olasilik piyasadan en az bu kadar yuksek
 PICK_MAX_ODD = 100.0
-MAX_DELTA = 0.15      # model, piyasadan taraf basina en fazla bu kadar sapabilir (uc residual korumasi)
+MAX_DELTA = 0.15
+# --- 1X2 oran karsilastirma verisi (goaloo 1x2 JS: ~370 bahisci, acilis+guncel+gecmis) ---
+ODDS_JS_URL = "https://1x2.goaloo908.com/{mid}.js"
+ODDS_FINAL_MIN = 90        # mactan bu kadar dk once son kez cekilir (son tahmin bu veriyle)
+MAX_ODDS_PER_CYCLE = 60
+# Keskin (sharp) kaynaklar: Pinnacle + borsalar + Asya buyukleri. Return ~%97-99.6 -> gercek olasiliga en yakin.
+SHARP_BOOKS = {"Pinnacle", "Betfair Exchange", "Betfair", "Matchbook", "Smarkets", "SX Bet",
+               "BetInAsia", "Sbobet", "Crown", "betfair exchange.AU", "Betfair AUS"}      # model, piyasadan taraf basina en fazla bu kadar sapabilir (uc residual korumasi)
 
 # Oran bantlari: 1.01'den 100'e kadar tum araliklar (amac: kazanan tarafi dogru bilmek, oran fark etmez)
 BANDS = [("1.01-1.30", 1.0, 1.3), ("1.30-1.60", 1.3, 1.6), ("1.60-2.00", 1.6, 2.0), ("2.00-2.50", 2.0, 2.5),
@@ -110,7 +117,8 @@ def _conn():
     c.execute("CREATE INDEX IF NOT EXISTS ix_ng_kick ON ng_match(kickoff_utc)")
     have = {r[1] for r in c.execute("PRAGMA table_info(ng_match)")}
     for col, typ in (("tip_side", "TEXT"), ("tip_odd", "REAL"), ("tip_prob", "REAL"), ("tip_fav", "TEXT"),
-                     ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT")):
+                     ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT"),
+                     ("odds_json", "TEXT"), ("odds_at", "TEXT"), ("odds_final", "INTEGER")):
         if col not in have:
             c.execute(f"ALTER TABLE ng_match ADD COLUMN {col} {typ}")
     return c
@@ -432,7 +440,73 @@ def _reasons(feat, pred, side_idx):
         rs.append(f"Poisson beklenen gol {lh:.2f}-{la:.2f}")
     if H.get("ah_cover") is not None and A.get("ah_cover") is not None:
         rs.append(f"AH tutma: {ht} evde {pct(H['ah_cover'])}, {at} dışarıda {pct(A['ah_cover'])}")
+    od = pred.get("odds") or {}
+    side = "1X2"[side_idx]
+    if od.get("sharp_cur"):
+        t = f"Keskin piyasa ({od['n_sharp']} kaynak) {side}: {pct(od['sharp_cur'][side_idx])}"
+        if od.get("drift_sharp"):
+            d = 100 * od["drift_sharp"][side_idx]
+            t += f", açılıştan {'+' if d >= 0 else ''}{d:.1f}p"
+        if od.get("sharp_soft"):
+            g = 100 * od["sharp_soft"][side_idx]
+            t += f", yumuşak bahisçilere göre {'+' if g >= 0 else ''}{g:.1f}p"
+        rs.append(t)
+    if od.get("drift_cons"):
+        d = 100 * od["drift_cons"][side_idx]
+        rs.append(f"Tüm bahisçi ortalaması ({od['n_books']}) {side}: açılıştan {'+' if d >= 0 else ''}{d:.1f}p kayma")
     return rs
+
+
+# ------------------------------------------------------------------ 1X2 oran karsilastirma (keskin piyasa)
+
+def fetch_odds_books(mid):
+    """goaloo 1x2 JS -> bahisci listesi. game satiri: id|oddsId|ad|acilisH|D|A|...|guncelH|D|A|...|kellyH|D|A|guncelleme|..."""
+    req = urllib.request.Request(ODDS_JS_URL.format(mid=mid), headers=dict(HEADERS, Referer="https://www.nowgoal.net/"))
+    with urllib.request.urlopen(req, timeout=25) as r:
+        body = r.read().decode("utf-8", errors="replace")
+    m = re.search(r"var game=Array\((.*?)\);", body, re.S)
+    if not m:
+        return []
+    books = []
+    for row in re.findall(r'"([^"]*)"', m.group(1)):
+        f = row.split("|")
+        if len(f) < 21:
+            continue
+        o, cur = [_f(x) for x in f[3:6]], [_f(x) for x in f[10:13]]
+        if not all(o) or not all(cur):
+            continue
+        books.append({"id": f[0], "name": f[2], "open": o, "cur": cur,
+                      "kelly": [_f(x) for x in f[17:20]], "upd": f[20]})
+    return books
+
+
+def _avg_novig(trs):
+    ps = [p for p in (_novig(t) for t in trs) if p]
+    if not ps:
+        return None
+    return [round(sum(p[i] for p in ps) / len(ps), 4) for i in range(3)]
+
+
+def odds_features(books):
+    if not books:
+        return None
+    sharp = [b for b in books if b["name"] in SHARP_BOOKS]
+    soft = [b for b in books if b["name"] not in SHARP_BOOKS]
+    pin = next((b for b in books if b["name"] == "Pinnacle"), None)
+    f = {"n_books": len(books), "n_sharp": len(sharp), "sharp_names": sorted(b["name"] for b in sharp),
+         "cons_open": _avg_novig([b["open"] for b in books]), "cons_cur": _avg_novig([b["cur"] for b in books]),
+         "sharp_open": _avg_novig([b["open"] for b in sharp]), "sharp_cur": _avg_novig([b["cur"] for b in sharp]),
+         "soft_cur": _avg_novig([b["cur"] for b in soft]),
+         "pin_open": _novig(pin["open"]) if pin else None, "pin_cur": _novig(pin["cur"]) if pin else None,
+         "max_cur": [max(b["cur"][i] for b in books) for i in range(3)],
+         "min_cur": [min(b["cur"][i] for b in books) for i in range(3)]}
+    if f["cons_open"] and f["cons_cur"]:
+        f["drift_cons"] = [round(f["cons_cur"][i] - f["cons_open"][i], 4) for i in range(3)]
+    if f["sharp_open"] and f["sharp_cur"]:
+        f["drift_sharp"] = [round(f["sharp_cur"][i] - f["sharp_open"][i], 4) for i in range(3)]
+    if f["sharp_cur"] and f["soft_cur"]:
+        f["sharp_soft"] = [round(f["sharp_cur"][i] - f["soft_cur"][i], 4) for i in range(3)]
+    return f
 
 
 # ------------------------------------------------------------------ Piyasa + Volkano eslestirme
@@ -553,15 +627,42 @@ def evaluate(log):
     now = _now()
     with _db_lock:
         c = _conn()
-        rows = c.execute("""SELECT mid, home, away, kickoff_utc, features_json, pick_side FROM ng_match
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, features_json, pick_side, odds_json, odds_final FROM ng_match
                             WHERE status='stats' AND kickoff_utc > ?""",
                          (_iso(now + timedelta(minutes=5)),)).fetchall()
         c.close()
-    n_vk = n_pick = n_tip = 0
+    n_vk = n_pick = n_tip = n_odds = 0
     for r in rows:
         feat = json.loads(r["features_json"])
-        mk, vk = match_market(markets, r["home"] or "", r["away"] or "", r["kickoff_utc"])
+        of = json.loads(r["odds_json"]) if r["odds_json"] else None
+        mins_left = (datetime.fromisoformat(r["kickoff_utc"]) - now).total_seconds() / 60
+        need = of is None or (not r["odds_final"] and mins_left <= ODDS_FINAL_MIN)
+        if need and n_odds < MAX_ODDS_PER_CYCLE:
+            try:
+                of = odds_features(fetch_odds_books(r["mid"])) or of
+                n_odds += 1
+                with _db_lock:
+                    c = _conn()
+                    c.execute("UPDATE ng_match SET odds_json=?, odds_at=?, odds_final=? WHERE mid=?",
+                              (json.dumps(of) if of else None, _iso(_now()),
+                               1 if mins_left <= ODDS_FINAL_MIN else 0, r["mid"]))
+                    c.commit()
+                    c.close()
+            except Exception as e:
+                log.append(f"oran {r['mid']} hata {e}")
+            time.sleep(BEKLE)
+        mk_b, vk = match_market(markets, r["home"] or "", r["away"] or "", r["kickoff_utc"])
+        if of and of.get("sharp_cur") and of["n_sharp"] >= 2:
+            mk = {"p": of["sharp_cur"], "sources": of["sharp_names"], "src": "keskin"}
+        elif of and of.get("cons_cur") and of["n_books"] >= 5:
+            mk = {"p": of["cons_cur"], "sources": [f"{of['n_books']} bahisçi ort."], "src": "ortalama"}
+        else:
+            mk = dict(mk_b, src="balkan") if mk_b else None
+        if mk:
+            mk["balkan"] = mk_b["p"] if mk_b else None
+            mk["odds"] = of
         pred = predict(feat, mk["p"] if mk else None)
+        pred["odds"] = of
         pick = None
         tip = None
         if pred["final"]:
@@ -606,7 +707,7 @@ def evaluate(log):
                 n_pick += 1
             c.commit()
             c.close()
-    log.append(f"değerlendirilen {len(rows)}, Volkano eşleşen {n_vk}, kazanan tahmini {n_tip}, yeni değer tahmini {n_pick}")
+    log.append(f"değerlendirilen {len(rows)}, oran çekilen {n_odds}, Volkano eşleşen {n_vk}, kazanan tahmini {n_tip}, yeni değer tahmini {n_pick}")
 
 
 def resolve(log):
@@ -785,6 +886,14 @@ SIGNAL_TESTS = [
      lambda f: f["A_venue"]["n_odds"] >= 5 and (f["A_venue"]["resW"] or 0) >= 0.10),
     ("H2H ev sahibi lehine (≥10p, n≥4) · ölçülen: ev kazanır (beklenti: +)", 0,
      lambda f: f["h2h"]["n_odds"] >= 4 and (f["h2h"]["resW"] or 0) >= 0.10),
+    ("Keskin piyasa açılıştan EV lehine ≥3p kaydı · ölçülen: ev kazanır (beklenti: +)", 0,
+     lambda f: (f["odds"]["drift_sharp"][0]) >= 0.03),
+    ("Keskin piyasa açılıştan DEP lehine ≥3p kaydı · ölçülen: dep. kazanır (beklenti: +)", 2,
+     lambda f: (f["odds"]["drift_sharp"][2]) >= 0.03),
+    ("Keskinler evi yumuşaklardan ≥3p yüksek görüyor · ölçülen: ev kazanır (beklenti: +)", 0,
+     lambda f: (f["odds"]["sharp_soft"][0]) >= 0.03),
+    ("Keskinler depı yumuşaklardan ≥3p yüksek görüyor · ölçülen: dep. kazanır (beklenti: +)", 2,
+     lambda f: (f["odds"]["sharp_soft"][2]) >= 0.03),
 ]
 
 
@@ -802,6 +911,8 @@ def get_signal_tests():
         exp = 0.0
         for r in rows:
             f = json.loads(r["features_json"])
+            mk0 = json.loads(r["market_json"])
+            f["odds"] = mk0.get("odds") or {}
             try:
                 if not cond(f):
                     continue
