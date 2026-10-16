@@ -154,7 +154,8 @@ def _conn():
     have = {r[1] for r in c.execute("PRAGMA table_info(ng_match)")}
     for col, typ in (("tip_side", "TEXT"), ("tip_odd", "REAL"), ("tip_prob", "REAL"), ("tip_fav", "TEXT"),
                      ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT"),
-                     ("odds_json", "TEXT"), ("odds_at", "TEXT"), ("odds_final", "INTEGER")):
+                     ("odds_json", "TEXT"), ("odds_at", "TEXT"), ("odds_final", "INTEGER"),
+                     ("odds_first", "TEXT")):
         if col not in have:
             c.execute(f"ALTER TABLE ng_match ADD COLUMN {col} {typ}")
     return c
@@ -701,9 +702,9 @@ def evaluate(log):
                 n_odds += 1
                 with _db_lock:
                     c = _conn()
-                    c.execute("UPDATE ng_match SET odds_json=?, odds_at=?, odds_final=? WHERE mid=?",
-                              (json.dumps(of) if of else None, _iso(_now()),
-                               1 if mins_left <= ODDS_FINAL_MIN else 0, r["mid"]))
+                    oj = json.dumps(of) if of else None
+                    c.execute("UPDATE ng_match SET odds_json=?, odds_at=?, odds_final=?, odds_first=COALESCE(odds_first, ?) WHERE mid=?",
+                              (oj, _iso(_now()), 1 if mins_left <= ODDS_FINAL_MIN else 0, oj, r["mid"]))
                     c.commit()
                     c.close()
             except Exception as e:

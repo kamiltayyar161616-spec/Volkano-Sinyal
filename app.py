@@ -32,6 +32,7 @@ from match_analyzer import (
 )
 from results_checker import check_pending_results
 import nowgoal
+import oranlar
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -206,10 +207,8 @@ def nowgoal_page():
     signals = nowgoal.get_signal_tests()
     tip = nowgoal.get_tip_performance()
     tip_7d = nowgoal.get_tip_performance(days=7)
-    books = nowgoal.get_book_report()
     return render_template("nowgoal.html", d=data, perf=perf, perf_7d=perf_7d, calib=calib,
-                            signals=signals, tip=tip, tip_7d=tip_7d, books=books,
-                            book_min_n=nowgoal.BOOK_MIN_N, active_page="nowgoal")
+                            signals=signals, tip=tip, tip_7d=tip_7d, active_page="nowgoal")
 
 
 @app.route("/nowgoal/indir")
@@ -221,6 +220,23 @@ def nowgoal_indir():
     name = "nowgoal_veri_tam.json" if full else "nowgoal_veri.json"
     return Response(body, mimetype="application/json",
                     headers={"Content-Disposition": f"attachment; filename={name}"})
+
+@app.route("/oranlar")
+def oranlar_page():
+    return render_template("oranlar.html", d=oranlar.get_page_data(), perf=oranlar.get_signal_perf(),
+                           perf_7d=oranlar.get_signal_perf(days=7), clv=oranlar.get_clv(),
+                           books=nowgoal.get_book_report(), book_min_n=nowgoal.BOOK_MIN_N,
+                           active_page="oranlar")
+
+
+@app.route("/oranlar/indir")
+def oranlar_indir():
+    import json as _json
+    from flask import Response
+    body = _json.dumps(oranlar.export_json(), ensure_ascii=False)
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=oranlar_veri.json"})
+
 
 
 @app.route("/api/matches")

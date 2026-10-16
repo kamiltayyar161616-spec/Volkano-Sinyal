@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Oranlar{% endblock %}
+{% block page_tag %}ORANLAR{% endblock %}
+{% block subtitle %}NowGoal 1X2 oranları: keskin piyasa (Pinnacle+borsalar), 30 izlenen şirketin hareketi, Kelly. Sadece orana dayalı tahminler ayrı takip edilir, NowGoal modeliyle yan yana. CLV ile bahisçiyi gerçekten yenip yenmediğimiz ölçülür.{% endblock %}
+
+{% block extra_style %}
+<style>
+  .ng-bar{ display:flex; gap:6px; flex-wrap:wrap; margin:14px 16px 0; }
+  .ng-chip{ background:var(--navy); border:1px solid var(--navy-line); border-radius:9px; padding:7px 10px; font-size:10.5px; color:var(--chalk-dim); }
+  .ng-chip b{ color:var(--chalk); }
+  .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
+  .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11.5px;
+    background:linear-gradient(135deg,var(--amber-bright),var(--amber)); color:#241a06; }
+  .ng-card{ margin:0 16px 10px; padding:13px 14px; border-radius:12px;
+    background:linear-gradient(165deg,var(--navy-soft),var(--navy)); border:1px solid var(--navy-line); }
+  .ng-card.hot{ border-color:var(--amber); }
+  .ng-teams{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .og{ display:grid; grid-template-columns:52px repeat(3,1fr); gap:3px; margin-top:8px; font-size:10.5px; }
+  .og div{ background:var(--navy-deep); border-radius:6px; padding:4px 5px; text-align:center; }
+  .og .h{ background:none; color:var(--chalk-faint); font-size:9px; text-align:left; padding-left:0; }
+  .og .sel{ outline:1px solid var(--amber); color:var(--amber-bright); font-weight:700; }
+  .tag{ display:inline-block; font-size:9px; font-weight:700; padding:2px 6px; border-radius:5px; margin:4px 4px 0 0; background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .tag.a{ border-color:var(--amber-dim); color:var(--amber-bright); }
+  .tag.w{ border-color:var(--turf); color:var(--turf-bright); } .tag.l{ border-color:var(--clay-dim); color:var(--clay); }
+  details{ margin-top:8px; } summary{ cursor:pointer; font-size:10.5px; color:var(--amber-bright); }
+  .wb{ display:grid; grid-template-columns:1.5fr repeat(3,1fr) .9fr; gap:2px; margin-top:6px; font-size:9.5px; }
+  .wb div{ padding:3px 4px; background:var(--navy-deep); border-radius:4px; text-align:center; }
+  .wb .n{ text-align:left; } .wb .hd{ background:none; color:var(--chalk-faint); }
+  .wb .gr{ grid-column:1/-1; background:none; text-align:left; color:var(--amber-bright); font-weight:700; padding-top:6px; }
+  .wb small{ display:block; font-size:8.5px; }
+  .tier-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 14px; margin:0 16px 6px;
+    background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; }
+  .tier-row.hl{ border-color:var(--amber); }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+</style>
+{% endblock %}
+
+{% macro pc(v) %}{% if v is not none %}{{ (v*100)|round(1) }}{% else %}-{% endif %}{% endmacro %}
+{% macro dp(v) %}{% if v is not none %}<span class="{{ 'pos' if v >= 0.03 else 'neg' if v <= -0.03 else '' }}">{{ '+' if v > 0 else '' }}{{ (v*100)|round(1) }}</span>{% else %}-{% endif %}{% endmacro %}
+
+{% macro sig_table(rows) %}
+{% for s in rows %}
+<div class="tier-row {{ 'hl' if s.n >= 30 and s.diff and s.diff > 0 else '' }}">
+  <div style="max-width:62%;"><div style="font-size:12px;font-weight:600;">{{ s.label }}</div>
+    <div class="ng-meta">{{ s.desc }}</div>
+    <div class="ng-meta">n={{ s.n }}{% if s.avg_odd %} &middot; ort. oran {{ s.avg_odd }}{% endif %}</div></div>
+  <div style="text-align:right;">
+    {% if s.n %}
+    <div style="font-weight:800;">%{{ s.real }} <span class="ng-meta">isabet</span></div>
+    <div class="ng-meta">piyasa %{{ s.market }} &middot; <span class="{{ 'pos' if s.diff > 0 else 'neg' }}">{{ '+' if s.diff > 0 else '' }}{{ s.diff }}p</span></div>
+    {% if s.roi is not none %}<div class="ng-meta">ROI <span class="{{ 'pos' if s.roi > 0 else 'neg' }}">{{ '+' if s.roi > 0 else '' }}%{{ s.roi }}</span></div>{% endif %}
+    {% else %}<div class="ng-meta">veri yok</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endmacro %}
+
+{% macro card(m) %}
+<div class="ng-card {{ 'hot' if m.sig else '' }}">
+  <div class="ng-teams">{{ m.home }} — {{ m.away }}{% if m.ft %} <span style="color:var(--chalk-dim);">{{ m.ft[0] }}-{{ m.ft[1] }}</span>{% endif %}</div>
+  <div class="ng-meta">{{ m.league or '' }} &middot; {{ m.kickoff | localdatetime }} &middot; {{ m.n_books }} bahisçi, {{ m.n_sharp }} keskin &middot; izlenen {{ m.n_watch }}{% if m.final %} &middot; kapanış{% endif %}</div>
+  <div class="og">
+    <div class="h"></div><div class="h" style="text-align:center">1</div><div class="h" style="text-align:center">X</div><div class="h" style="text-align:center">2</div>
+    {% if m.open %}<div class="h">açılış %</div>{% for i in range(3) %}<div>{{ pc(m.open[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.cur %}<div class="h">güncel %</div>{% for i in range(3) %}<div class="{{ 'sel' if m.fav == '1X2'[i] else '' }}">{{ pc(m.cur[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.drift %}<div class="h">kayma p</div>{% for i in range(3) %}<div>{{ dp(m.drift[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.ss %}<div class="h">keskin−yum.</div>{% for i in range(3) %}<div>{{ dp(m.ss[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.votes %}<div class="h">oy (≥3p)</div>{% for i in range(3) %}<div>{{ m.votes[i] }}/{{ m.n_watch }}</div>{% endfor %}{% endif %}
+    {% if m.ref %}<div class="h">Pinnacle</div>{% for i in range(3) %}<div>{{ m.ref[i] }}</div>{% endfor %}{% endif %}
+    {% if m.max %}<div class="h">en yüksek</div>{% for i in range(3) %}<div>{{ m.max[i] }}</div>{% endfor %}{% endif %}
+    {% if m.vk %}<div class="h">Volkano</div>{% for i in range(3) %}<div class="{{ 'sel' if m.tip == '1X2'[i] else '' }}">{{ m.vk[i] }}</div>{% endfor %}{% endif %}
+  </div>
+  <div>
+    {% if m.tip %}<span class="tag a">Model: {{ m.tip }}</span>{% endif %}
+    {% for s in m.sig %}<span class="tag {{ ('w' if s[2] else 'l') if s|length > 2 else 'a' }}">{{ s[0] }}: {{ s[1] }}</span>{% endfor %}
+  </div>
+  {% if m.watch %}
+  <details><summary>30 şirketin oranları ({{ m.n_watch }} bulundu)</summary>
+    <div class="wb">
+      <div class="hd n">şirket</div><div class="hd">1</div><div class="hd">X</div><div class="hd">2</div><div class="hd">Kelly</div>
+      {% set ns = namespace(g='') %}
+      {% for name, b in m.watch %}
+        {% if b.g != ns.g %}{% set ns.g = b.g %}<div class="gr">{{ b.g|upper }}</div>{% endif %}
+        <div class="n">{{ name }}</div>
+        {% for i in range(3) %}<div>{{ b.c[i] }}<small>{{ dp(b.d[i]) }}</small></div>{% endfor %}
+        <div><small>{% for k in b.k %}{{ k if k else '-' }}{{ ' ' if not loop.last }}{% endfor %}</small></div>
+      {% endfor %}
+    </div>
+    <div class="ng-meta">Hücre: güncel oran, altında olasılık kayması (p, açılıştan). Yeşil ≥+3p: şirket o tarafın oranını düşürmüş.</div>
+  </details>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="ng-bar">
+  <span class="ng-chip">yaklaşan <b>{{ d.upcoming|length }}</b></span>
+  <span class="ng-chip">sinyalli <b>{{ d.n_signal }}</b></span>
+  <span class="ng-chip">izlenen şirket <b>{{ d.watch_n }}</b></span>
+  {% if d.last_cycle.at %}<span class="ng-chip">son döngü <b>{{ d.last_cycle.at | localdatetime }}</b></span>{% endif %}
+</div>
+<div class="ng-dl"><a href="/oranlar/indir">⬇ Oran verisini indir (JSON)</a></div>
+
+<h2 class="section">🎯 SADECE ORAN TAHMİNLERİ — TÜM ZAMAN</h2>
+<div class="section-sub">Her sinyalin gösterdiği taraf ne sıklıkla kazandı? "Piyasa" = keskin piyasanın o taraf için beklediği. Fark pozitifse sinyal piyasanın bilmediği bir şey biliyor. ROI Pinnacle oranından düz bahis (yoksa Bet365). n≥30 olmadan karar verme.</div>
+{{ sig_table(perf) }}
+
+<h2 class="section">📅 SON 7 GÜN</h2>
+{{ sig_table(perf_7d) }}
+
+<h2 class="section">📐 CLV — BAHİSÇİYİ YENİYOR MUYUZ</h2>
+<div class="section-sub">CLV = girdiğimiz oran × kapanıştaki adil olasılık − 1. Pozitif ortalama, piyasanın bizden sonra bizim tarafa kaydığı anlamına gelir. Sonuçtan bağımsızdır ve az veriyle bile anlamlıdır. Uzun vadede kâr eden her bahisçinin ortak özelliğidir.</div>
+{% for label, c in clv %}
+<div class="tier-row {{ 'hl' if c and c.avg > 0 else '' }}">
+  <div><div style="font-size:12px;font-weight:600;">{{ label }}</div><div class="ng-meta">n={{ c.n if c else 0 }}</div></div>
+  <div style="text-align:right;">
+    {% if c %}<div style="font-weight:800;" class="{{ 'pos' if c.avg > 0 else 'neg' }}">{{ '+' if c.avg > 0 else '' }}%{{ c.avg }}</div>
+    <div class="ng-meta">%{{ c.pos }} pozitif</div>{% else %}<div class="ng-meta">kapanış verisi yok</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+
+<h2 class="section">🏦 ŞİRKET KARNESİ</h2>
+<div class="section-sub">Şirket bir tarafın oranını açılıştan düşürüp olasılığını ≥3p artırdığında o taraf ne sıklıkla kazandı? "Gerçek" − "kendi fiyatı" farkı pozitifse şirketin hareketleri bilgi taşıyor. Sıralama n≥{{ book_min_n }} olanlarda geçerli.</div>
+{% if books %}
+{% for b in books %}
+<div class="tier-row {{ 'hl' if b.ok and b.edge and b.edge > 0 else '' }}">
+  <div><div style="font-size:12px;font-weight:600;">{{ b.name }} <span class="ng-meta">{{ b.g }}</span></div>
+  <div class="ng-meta">{{ b.matches }} maç &middot; {{ b.n }} hareket{% if not b.ok %} &middot; az veri{% endif %}</div></div>
+  <div style="text-align:right;">
+    {% if b.n %}
+    <div style="font-weight:800;" class="{{ 'pos' if b.edge > 0 else 'neg' }}">{{ '+' if b.edge > 0 else '' }}{{ b.edge }}p</div>
+    <div class="ng-meta">gerçek %{{ b.real }} / kendi %{{ b.own }}{% if b.sharp is not none %} / keskin %{{ b.sharp }}{% endif %}</div>
+    {% else %}<div class="ng-meta">hareket yok</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty">Henüz oran verisi olan biten maç yok.</div>
+{% endif %}
+
+<h2 class="section">⏳ YAKLAŞAN MAÇLAR</h2>
+<div class="section-sub">Turuncu çerçeve: en az bir oran sinyali var. "30 şirketin oranları"na dokununca şirket şirket açılır.</div>
+{% for m in d.upcoming %}{{ card(m) }}{% else %}<div class="empty">Oran verisi olan yaklaşan maç yok.</div>{% endfor %}
+
+<h2 class="section">✅ SON SONUÇLANANLAR</h2>
+<div class="section-sub">Yeşil etiket: sinyal tuttu, kırmızı: tutmadı.</div>
+{% for m in d.recent %}{{ card(m) }}{% else %}<div class="empty">Henüz sonuçlanan maç yok.</div>{% endfor %}
+{% endblock %}
