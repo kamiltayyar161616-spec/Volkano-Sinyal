@@ -72,7 +72,41 @@ ODDS_FINAL_MIN = 90        # mactan bu kadar dk once son kez cekilir (son tahmin
 MAX_ODDS_PER_CYCLE = 60
 # Keskin (sharp) kaynaklar: Pinnacle + borsalar + Asya buyukleri. Return ~%97-99.6 -> gercek olasiliga en yakin.
 SHARP_BOOKS = {"Pinnacle", "Betfair Exchange", "Betfair", "Matchbook", "Smarkets", "SX Bet",
-               "BetInAsia", "Sbobet", "Crown", "betfair exchange.AU", "Betfair AUS"}      # model, piyasadan taraf basina en fazla bu kadar sapabilir (uc residual korumasi)
+               "BetInAsia", "Sbobet", "Crown", "betfair exchange.AU", "Betfair AUS"}
+# Izleme listesi: tek tek takip edilen sirketler (grup, gorunen ad, veri icindeki olasi adlar).
+# Hangisinin "nokta atisi" yaptigini tahmin etmiyoruz -- Sirket Karnesi biten maclarla OLCER.
+WATCH_BOOKS = [
+    ("keskin", "Pinnacle", ["Pinnacle"]),
+    ("keskin", "Betfair Exchange", ["Betfair Exchange", "Betfair"]),
+    ("keskin", "Matchbook", ["Matchbook"]),
+    ("keskin", "Smarkets", ["Smarkets"]),
+    ("keskin", "SX Bet", ["SX Bet"]),
+    ("keskin", "BetInAsia", ["BetInAsia"]),
+    ("asya", "Crown", ["Crown"]),
+    ("asya", "Sbobet", ["Sbobet"]),
+    ("asya", "Macauslot", ["Macauslot"]),
+    ("asya", "HK Jockey Club", ["HK Jockey Club"]),
+    ("asya", "Lottery Official", ["Lottery Official"]),
+    ("asya", "Mansion88", ["Mansion88", "M88"]),
+    ("asya", "12bet", ["12bet", "12BET"]),
+    ("asya", "188bet", ["188bet", "188Bet"]),
+    ("asya", "18Bet", ["18Bet"]),
+    ("asya", "Easybets", ["Easybets", "Easybet"]),
+    ("asya", "Vcbet", ["Vcbet"]),
+    ("asya", "Wewbet", ["Wewbet"]),
+    ("asya", "Manbetx", ["Manbetx"]),
+    ("asya", "IBCBET", ["IBCBET"]),
+    ("avrupa", "Bet365", ["Bet 365", "Bet365"]),
+    ("avrupa", "William Hill", ["William Hill"]),
+    ("avrupa", "Ladbrokes", ["Ladbrokes"]),
+    ("avrupa", "Bwin", ["Bwin"]),
+    ("avrupa", "Interwetten", ["Interwetten"]),
+    ("avrupa", "Unibet", ["Unibet"]),
+    ("avrupa", "Marathon", ["Marathon", "Marathonbet"]),
+    ("avrupa", "1xBet", ["1xBet"]),
+]
+BOOK_MOVE = 0.03       # sirket bir tarafi acilistan >=3p artirdiysa "hareket" sayilir
+BOOK_MIN_N = 15        # karnede siralama icin en az bu kadar hareket      # model, piyasadan taraf basina en fazla bu kadar sapabilir (uc residual korumasi)
 
 # Oran bantlari: 1.01'den 100'e kadar tum araliklar (amac: kazanan tarafi dogru bilmek, oran fark etmez)
 BANDS = [("1.01-1.30", 1.0, 1.3), ("1.30-1.60", 1.3, 1.6), ("1.60-2.00", 1.6, 2.0), ("2.00-2.50", 2.0, 2.5),
@@ -451,6 +485,11 @@ def _reasons(feat, pred, side_idx):
             g = 100 * od["sharp_soft"][side_idx]
             t += f", yumuşak bahisçilere göre {'+' if g >= 0 else ''}{g:.1f}p"
         rs.append(t)
+    if od.get("n_watch"):
+        v = od["votes"][side_idx]
+        movers = [n for n, b in (od.get("watch") or {}).items() if b["d"][side_idx] >= BOOK_MOVE]
+        rs.append(f"İzlenen {od['n_watch']} şirketten {v}'i {side} lehine ≥3p kaydı"
+                  + (f": {', '.join(movers[:8])}" if movers else ""))
     if od.get("drift_cons"):
         d = 100 * od["drift_cons"][side_idx]
         rs.append(f"Tüm bahisçi ortalaması ({od['n_books']}) {side}: açılıştan {'+' if d >= 0 else ''}{d:.1f}p kayma")
@@ -506,6 +545,23 @@ def odds_features(books):
         f["drift_sharp"] = [round(f["sharp_cur"][i] - f["sharp_open"][i], 4) for i in range(3)]
     if f["sharp_cur"] and f["soft_cur"]:
         f["sharp_soft"] = [round(f["sharp_cur"][i] - f["soft_cur"][i], 4) for i in range(3)]
+    # izlenen sirketler: tek tek acilis/guncel/kayma/kelly + yon oylamasi
+    by_name = {b["name"].lower(): b for b in books}
+    wb, votes = {}, [0, 0, 0]
+    for grp, disp, aliases in WATCH_BOOKS:
+        b = next((by_name[a.lower()] for a in aliases if a.lower() in by_name), None)
+        if not b:
+            continue
+        po, pc = _novig(b["open"]), _novig(b["cur"])
+        if not po or not pc:
+            continue
+        d = [round(pc[i] - po[i], 4) for i in range(3)]
+        wb[disp] = {"g": grp, "o": b["open"], "c": b["cur"], "p": [round(x, 4) for x in pc], "d": d, "k": b["kelly"]}
+        for i in range(3):
+            votes[i] += d[i] >= BOOK_MOVE
+    f["watch"] = wb
+    f["n_watch"] = len(wb)
+    f["votes"] = votes
     return f
 
 
@@ -926,6 +982,43 @@ def get_signal_tests():
                     "real": round(100 * hit / n, 1) if n else None,
                     "market": round(100 * exp / n, 1) if n else None,
                     "diff": round(100 * (hit - exp) / n, 1) if n else None})
+    return out
+
+
+def get_book_report():
+    """Sirket karnesi: her izlenen sirket bir tarafi acilistan >=3p artirdiginda (oran dusurdugunde)
+    o taraf ne siklikla kazandi -- sirketin KENDI guncel olasiligina ve keskin piyasaya gore."""
+    with _db_lock:
+        c = _conn()
+        rows = c.execute("""SELECT odds_json, ft_h, ft_a FROM ng_match
+                            WHERE status='finished' AND odds_json IS NOT NULL""").fetchall()
+        c.close()
+    stats = {}
+    for r in rows:
+        od = json.loads(r["odds_json"]) or {}
+        res = _result_idx(r["ft_h"], r["ft_a"])
+        sharp = od.get("sharp_cur")
+        for name, b in (od.get("watch") or {}).items():
+            s = stats.setdefault(name, {"g": b["g"], "matches": 0, "n": 0, "hit": 0, "own": 0.0, "sharp": 0.0, "sn": 0})
+            s["matches"] += 1
+            for i in range(3):
+                if b["d"][i] >= BOOK_MOVE:
+                    s["n"] += 1
+                    s["hit"] += res == i
+                    s["own"] += b["p"][i]
+                    if sharp:
+                        s["sharp"] += sharp[i]
+                        s["sn"] += 1
+    out = []
+    for name, s in stats.items():
+        n = s["n"]
+        out.append({"name": name, "g": s["g"], "matches": s["matches"], "n": n,
+                    "real": round(100 * s["hit"] / n, 1) if n else None,
+                    "own": round(100 * s["own"] / n, 1) if n else None,
+                    "sharp": round(100 * s["sharp"] / s["sn"], 1) if s["sn"] else None,
+                    "edge": round(100 * (s["hit"] - s["own"]) / n, 1) if n else None,
+                    "ok": n >= BOOK_MIN_N})
+    out.sort(key=lambda x: (not x["ok"], -(x["edge"] if x["edge"] is not None else -999)))
     return out
 
 

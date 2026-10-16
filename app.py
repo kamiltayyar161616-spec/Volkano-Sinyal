@@ -206,8 +206,10 @@ def nowgoal_page():
     signals = nowgoal.get_signal_tests()
     tip = nowgoal.get_tip_performance()
     tip_7d = nowgoal.get_tip_performance(days=7)
+    books = nowgoal.get_book_report()
     return render_template("nowgoal.html", d=data, perf=perf, perf_7d=perf_7d, calib=calib,
-                            signals=signals, tip=tip, tip_7d=tip_7d, active_page="nowgoal")
+                            signals=signals, tip=tip, tip_7d=tip_7d, books=books,
+                            book_min_n=nowgoal.BOOK_MIN_N, active_page="nowgoal")
 
 
 @app.route("/nowgoal/indir")

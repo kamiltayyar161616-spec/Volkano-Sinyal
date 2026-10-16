@@ -132,6 +132,25 @@
 <div class="empty">Henüz biten maç yok.</div>
 {% endif %}
 
+<h2 class="section">🏦 ŞİRKET KARNESİ</h2>
+<div class="section-sub">Şirket bir tarafın oranını açılıştan düşürüp olasılığını ≥3p artırdığında o taraf ne sıklıkla kazandı? "Gerçek" − "kendi fiyatı" farkı pozitifse şirketin hareketleri bilgi taşıyor. Sıralama n≥{{ book_min_n }} olanlarda geçerli.</div>
+{% if books %}
+{% for b in books %}
+<div class="tier-row {{ 'hl' if b.ok and b.edge and b.edge > 0 else '' }}">
+  <div><div style="font-size:12px;font-weight:600;">{{ b.name }} <span class="ng-meta">{{ b.g }}</span></div>
+  <div class="ng-meta">{{ b.matches }} maç &middot; {{ b.n }} hareket{% if not b.ok %} &middot; az veri{% endif %}</div></div>
+  <div style="text-align:right;">
+    {% if b.n %}
+    <div style="font-weight:800;" class="{{ 'pos' if b.edge > 0 else 'neg' }}">{{ '+' if b.edge > 0 else '' }}{{ b.edge }}p</div>
+    <div class="ng-meta">gerçek %{{ b.real }} / kendi %{{ b.own }}{% if b.sharp is not none %} / keskin %{{ b.sharp }}{% endif %}</div>
+    {% else %}<div class="ng-meta">hareket yok</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty">Henüz oran verisi olan biten maç yok.</div>
+{% endif %}
+
 <h2 class="section">🔎 GÖZLEM TESTLERİ</h2>
 <div class="section-sub">Her gözlem tek başına işe yarıyor mu? Sinyal varken tarafın gerçek kazanma oranı vs piyasanın beklediği.</div>
 {% for s in signals %}
