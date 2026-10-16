@@ -510,7 +510,7 @@ def collect(log):
         with _db_lock:
             c = _conn()
             c.execute("INSERT OR IGNORE INTO ng_match (mid, kickoff_utc, first_seen, status) VALUES (?,?,?,?)",
-                      (mid, ko, _iso(_now()), "new"))
+                      (mid, ko, _iso(_now()), "past" if ko and ko < _iso(_now()) else "new"))
             c.commit()
             c.close()
         time.sleep(BEKLE)
@@ -594,7 +594,7 @@ def resolve(log):
     now = _now()
     with _db_lock:
         c = _conn()
-        rows = c.execute("""SELECT mid, kickoff_utc FROM ng_match WHERE status IN ('new','stats')
+        rows = c.execute("""SELECT mid, kickoff_utc FROM ng_match WHERE status='stats'
                             AND kickoff_utc < ? ORDER BY kickoff_utc LIMIT ?""",
                          (_iso(now - timedelta(minutes=RESULT_AFTER_MIN)), MAX_RESULT_PER_CYCLE)).fetchall()
         c.close()
