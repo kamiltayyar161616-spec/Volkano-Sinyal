@@ -106,6 +106,8 @@ WATCH_BOOKS = [
     ("avrupa", "1xBet", ["1xBet"]),
     ("avrupa", "CoolBet", ["CoolBet"]),
     ("avrupa", "bet105", ["bet105"]),
+    ("avrupa", "Bet-at-home", ["Bet-at-home"]),
+    ("avrupa", "Betcity", ["Betcity"]),
     ("gözlemci", "iddaa", ["iddaa"]),
 ]
 BOOK_MOVE = 0.03       # sirket bir tarafi acilistan >=3p artirdiysa "hareket" sayilir
