@@ -99,13 +99,13 @@ WATCH_BOOKS = [
     ("avrupa", "Bet365", ["Bet 365", "Bet365"]),
     ("avrupa", "William Hill", ["William Hill"]),
     ("avrupa", "Ladbrokes", ["Ladbrokes"]),
-    ("avrupa", "Bwin", ["Bwin"]),
+    ("avrupa", "SBK", ["SBK"]),
     ("avrupa", "Interwetten", ["Interwetten"]),
     ("avrupa", "Unibet", ["Unibet"]),
     ("avrupa", "Marathon", ["Marathon", "Marathonbet"]),
     ("avrupa", "1xBet", ["1xBet"]),
-    ("avrupa", "MeridianBet", ["MeridianBet", "Meridianbet"]),
-    ("avrupa", "Mozzart", ["Mozzart"]),
+    ("avrupa", "CoolBet", ["CoolBet"]),
+    ("avrupa", "bet105", ["bet105"]),
 ]
 BOOK_MOVE = 0.03       # sirket bir tarafi acilistan >=3p artirdiysa "hareket" sayilir
 BOOK_MIN_N = 15        # karnede siralama icin en az bu kadar hareket      # model, piyasadan taraf basina en fazla bu kadar sapabilir (uc residual korumasi)
