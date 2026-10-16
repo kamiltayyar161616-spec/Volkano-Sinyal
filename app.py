@@ -31,6 +31,7 @@ from match_analyzer import (
     LATE_DROP_WINDOWS_MIN,
 )
 from results_checker import check_pending_results
+import nowgoal
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -196,6 +197,28 @@ def istatistik():
     return render_template("stats.html", stats=stats, recent=recent, active_page="karne")
 
 
+@app.route("/nowgoal")
+def nowgoal_page():
+    data = nowgoal.get_page_data()
+    perf = nowgoal.get_performance()
+    perf_7d = nowgoal.get_performance(days=7)
+    calib = nowgoal.get_calibration()
+    signals = nowgoal.get_signal_tests()
+    return render_template("nowgoal.html", d=data, perf=perf, perf_7d=perf_7d, calib=calib,
+                            signals=signals, hedef_bant=nowgoal.HEDEF_BANT, active_page="nowgoal")
+
+
+@app.route("/nowgoal/indir")
+def nowgoal_indir():
+    import json as _json
+    from flask import Response
+    full = request.args.get("tam") == "1"
+    body = _json.dumps(nowgoal.export_json(full=full), ensure_ascii=False)
+    name = "nowgoal_veri_tam.json" if full else "nowgoal_veri.json"
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": f"attachment; filename={name}"})
+
+
 @app.route("/api/matches")
 def api_matches():
     return jsonify(get_analysis())
@@ -257,4 +280,5 @@ def _background_loop():
 if __name__ == "__main__":
     t = threading.Thread(target=_background_loop, daemon=True)
     t.start()
+    nowgoal.start_background()
     app.run(host="0.0.0.0", port=8080)

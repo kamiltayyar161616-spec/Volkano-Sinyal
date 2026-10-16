@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}SAHA — NowGoal{% endblock %}
+{% block page_tag %}NOWGOAL{% endblock %}
+{% block subtitle %}NowGoal maç öncesi istatistikleri + piyasaya karşı performans (residual) + Poisson. Tahminler Volkano oranıyla karşılaştırılır, başarı ayrı takip edilir.{% endblock %}
+
+{% block extra_style %}
+<style>
+  .ng-bar{ display:flex; gap:6px; flex-wrap:wrap; margin:14px 16px 0; }
+  .ng-chip{ background:var(--navy); border:1px solid var(--navy-line); border-radius:9px; padding:7px 10px; font-size:10.5px; color:var(--chalk-dim); }
+  .ng-chip b{ color:var(--chalk); }
+  .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
+  .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11.5px;
+    background:linear-gradient(135deg,var(--amber-bright),var(--amber)); color:#241a06; }
+  .ng-dl a.alt{ background:var(--navy); color:var(--amber-bright); border:1px solid var(--amber-dim); }
+  .ng-card{ margin:0 16px 10px; padding:13px 14px; border-radius:12px;
+    background:linear-gradient(165deg,var(--navy-soft),var(--navy)); border:1px solid var(--navy-line); }
+  .ng-card.hedef{ border-color:var(--amber); box-shadow:0 0 0 1px rgba(242,169,59,0.25); }
+  .ng-card.won{ border-color:var(--turf); } .ng-card.lost{ border-color:var(--clay-dim); }
+  .ng-teams{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .ng-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:9px; font-size:10.5px; }
+  .ng-grid div{ background:var(--navy-deep); border-radius:6px; padding:5px 6px; text-align:center; }
+  .ng-grid .h{ color:var(--chalk-faint); font-size:9px; }
+  .ng-grid .sel{ outline:1px solid var(--amber); color:var(--amber-bright); font-weight:700; }
+  .ng-pick{ display:flex; justify-content:space-between; align-items:center; margin-top:9px; }
+  .ng-big{ font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:800; color:var(--amber-bright); }
+  .ng-why{ margin:8px 0 0; padding-left:15px; font-size:10px; color:var(--chalk-dim); line-height:1.6; }
+  .tier-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 14px; margin:0 16px 6px;
+    background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; }
+  .tier-row.hedef{ border-color:var(--amber); }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+</style>
+{% endblock %}
+
+{% macro pct(v) %}{% if v is not none %}%{{ (v*100)|round|int }}{% else %}-{% endif %}{% endmacro %}
+
+{% macro perf_row(label, p, hedef=False) %}
+<div class="tier-row {{ 'hedef' if hedef else '' }}">
+  <div>
+    <div style="font-size:12px;font-weight:600;">{{ label }}</div>
+    <div class="ng-meta">n={{ p.n }} &middot; {{ p.won }} kazandı / {{ p.lost }} kaybetti</div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-weight:800;" class="{{ 'pos' if p.roi_pct > 0 else 'neg' }}">{{ '+' if p.roi_pct > 0 else '' }}%{{ p.roi_pct }}</div>
+    <div class="ng-meta">%{{ p.win_rate }} kazanma</div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro match_card(m, cls='') %}
+<div class="ng-card {{ cls }}">
+  <div class="ng-teams">{{ m.home }} — {{ m.away }}{% if m.ft %} <span style="color:var(--chalk-dim);">{{ m.ft[0] }}-{{ m.ft[1] }}</span>{% endif %}</div>
+  <div class="ng-meta">{{ m.league or '' }} &middot; {{ m.kickoff | localdatetime }} &middot; piyasa: {{ m.n_src }} kaynak</div>
+  <div class="ng-grid">
+    <div class="h">&nbsp;</div><div class="h">1</div><div class="h">X</div><div class="h">2</div>
+    <div class="h">Volkano</div>
+    {% for i in range(3) %}<div class="{{ 'sel' if m.pick_side == '1X2'[i] else '' }}">{{ m.vk[i] if m.vk else '-' }}</div>{% endfor %}
+    <div class="h">Piyasa</div>
+    {% for i in range(3) %}<div>{{ pct(m.market[i]) if m.market else '-' }}</div>{% endfor %}
+    <div class="h">Model</div>
+    {% for i in range(3) %}<div>{{ pct(m.final[i]) if m.final else '-' }}</div>{% endfor %}
+  </div>
+  {% if m.lam %}<div class="ng-meta" style="margin-top:6px;">Beklenen gol {{ m.lam[0] }}-{{ m.lam[1] }} &middot; Ü2.5 {{ pct(m.o25) }} &middot; KG {{ pct(m.btts) }}</div>{% endif %}
+  {% if m.pick_side %}
+  <div class="ng-pick">
+    <div class="ng-meta">Tahmin <b style="color:var(--chalk);">{{ m.pick_side }}</b> @ {{ m.pick_odd }} &middot; model {{ pct(m.pick_prob) }} / piyasa {{ pct(m.pick_market) }}</div>
+    <div class="ng-big">+%{{ (m.pick_edge*100)|round(1) }}</div>
+  </div>
+  {% if m.reasons %}<ul class="ng-why">{% for r in m.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% block content %}
+
+<div class="ng-bar">
+  <div class="ng-chip">Yaklaşan <b>{{ d.n_upcoming }}</b></div>
+  <div class="ng-chip">Volkano eşleşen <b>{{ d.n_vk }}</b></div>
+  <div class="ng-chip">Aktif tahmin <b>{{ d.picks|length }}</b></div>
+  <div class="ng-chip">Biten <b>{{ d.counts.get('finished', 0) }}</b></div>
+</div>
+<div class="ng-meta" style="margin:8px 16px 0;">Son tur: {{ d.last_cycle.at | localdatetime if d.last_cycle.at else 'henüz çalışmadı' }}{% if d.last_cycle.log %} — {{ d.last_cycle.log }}{% endif %}</div>
+
+<div class="ng-dl">
+  <a href="/nowgoal/indir">⬇ Veri + tahminler (JSON)</a>
+  <a class="alt" href="/nowgoal/indir?tam=1">⬇ Tam ham veri</a>
+</div>
+
+<h2 class="section">📈 BAŞARI</h2>
+{% if perf.all %}
+  {{ perf_row('Tümü', perf.all) }}
+  {% if perf_7d.all %}{{ perf_row('Son 7 gün', perf_7d.all) }}{% endif %}
+  <h3 class="section" style="font-size:12px;">ORAN BANDINA GÖRE</h3>
+  {% for label, p in perf.bands.items() %}{{ perf_row(label, p, label == '2.80-3.20') }}{% endfor %}
+  <h3 class="section" style="font-size:12px;">AVANTAJ (EDGE) BÜYÜKLÜĞÜNE GÖRE</h3>
+  {% for label, p in perf.edges.items() %}{{ perf_row(label, p) }}{% endfor %}
+  <h3 class="section" style="font-size:12px;">TARAFA GÖRE</h3>
+  {% for label, p in perf.sides.items() %}{{ perf_row('Taraf ' ~ label, p) }}{% endfor %}
+{% else %}
+  <div class="empty">Henüz sonuçlanmış tahmin yok — veri birikince dolacak.</div>
+{% endif %}
+
+<h2 class="section">🧠 MODEL PİYASAYI GEÇİYOR MU?</h2>
+<div class="section-sub">Biten tüm maçlarda Brier skoru (düşük = daha iyi tahmin). Model, piyasadan düşükse gerçek bir bilgi katıyor demektir.</div>
+{% if calib %}
+<div class="tier-row"><div>Piyasa (vig'siz)</div><div><b>{{ calib.market }}</b></div></div>
+<div class="tier-row {{ 'hedef' if calib.model_better else '' }}"><div>Model (final)</div><div><b class="{{ 'pos' if calib.model_better else 'neg' }}">{{ calib.model }}</b></div></div>
+{% if calib.poisson %}<div class="tier-row"><div>Sadece Poisson</div><div><b>{{ calib.poisson }}</b></div></div>{% endif %}
+<div class="ng-meta" style="margin:0 16px;">n={{ calib.n }} maç</div>
+{% else %}
+<div class="empty">Henüz biten maç yok.</div>
+{% endif %}
+
+<h2 class="section">🔎 GÖZLEM TESTLERİ</h2>
+<div class="section-sub">Her gözlem tek başına işe yarıyor mu? Sinyal varken tarafın gerçek kazanma oranı vs piyasanın beklediği.</div>
+{% for s in signals %}
+<div class="tier-row">
+  <div style="max-width:70%;"><div style="font-size:11px;">{{ s.name }}</div><div class="ng-meta">n={{ s.n }}</div></div>
+  <div style="text-align:right;">
+    {% if s.n %}
+    <div style="font-weight:800;" class="{{ 'pos' if s.diff > 0 else 'neg' }}">{{ '+' if s.diff > 0 else '' }}{{ s.diff }}p</div>
+    <div class="ng-meta">gerçek %{{ s.real }} / piyasa %{{ s.market }}</div>
+    {% else %}<div class="ng-meta">veri yok</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+
+<h2 class="section">🎯 HEDEF BANT {{ hedef_bant[0] }}–{{ hedef_bant[1] }} ({{ d.hedef|length }})</h2>
+{% for m in d.hedef %}{{ match_card(m, 'hedef') }}{% else %}<div class="empty">Şu an bu bantta tahmin yok.</div>{% endfor %}
+
+<h2 class="section">✅ AKTİF TAHMİNLER ({{ d.picks|length }})</h2>
+{% for m in d.picks %}{{ match_card(m) }}{% else %}<div class="empty">Şu an eşiği geçen tahmin yok.</div>{% endfor %}
+
+<h2 class="section">👀 ADAYLAR (eşiğin altında, en yüksek edge)</h2>
+{% for m in d.candidates[:20] %}{{ match_card(m) }}{% else %}<div class="empty">Volkano ile eşleşen yaklaşan maç yok.</div>{% endfor %}
+
+<h2 class="section">🧾 SON SONUÇLANANLAR</h2>
+{% for m in d.recent %}{{ match_card(m, 'won' if m.won else 'lost') }}{% else %}<div class="empty">Henüz yok.</div>{% endfor %}
+
+{% endblock %}
+
+{% block footer %}NOWGOAL VERİSİ 15 DK'DA BİR GÜNCELLENİR <span class="sep">&middot;</span> TAHMİN MOTORU {{ 'v1' }} — VERİ BİRİKİNCE KALİBRE EDİLECEK <span class="sep">&middot;</span> YATIRIM TAVSİYESİ DEĞİLDİR{% endblock %}
