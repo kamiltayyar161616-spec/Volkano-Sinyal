@@ -50,7 +50,8 @@ LOOKAHEAD_H = 36             # bu kadar saat icindeki maclarin istatistigi cekil
 RESULT_AFTER_MIN = 130       # baslamadan bu kadar dk sonra skor sorulur
 VOID_AFTER_H = 30            # bu kadar saat gecti, skor yoksa 'void'
 
-MODEL_VERSION = "v1"
+MODEL_VERSION = "v2"
+MODEL_ALPHA = 0.3      # v2: 440 macta modelin piyasadan sapmasi 0.25-0.3 kadar kucultulunce log-loss en iyi
 B365_E, B365_H = 281, 8      # Vs_eOdds / Vs_hOdds icindeki Bet365 sirket id'leri (sayfayla dogrulandi)
 
 # --- Motor parametreleri (baslangic: muhafazakar; veri birikince kalibre edilecek) ---
@@ -453,6 +454,8 @@ def predict(feat, market_p):
     s = sum(p)
     p = [v / s for v in p]
     if market_p:
+        out["raw"] = [round(v, 4) for v in p]
+        p = [market_p[i] + MODEL_ALPHA * (p[i] - market_p[i]) for i in range(3)]
         p = [min(max(p[i], market_p[i] - MAX_DELTA), market_p[i] + MAX_DELTA) for i in range(3)]
         s = sum(p)
         p = [v / s for v in p]
@@ -1095,6 +1098,6 @@ def export_json(full=False):
         out.append(d)
     return {"exported_at": _iso(_now()), "model_version": MODEL_VERSION,
             "params": {"SHRINK_K": SHRINK_K, "H2H_SHRINK_K": H2H_SHRINK_K, "W_RESID": W_RESID, "W_H2H": W_H2H,
-                       "W_POIS": W_POIS, "MAX_DELTA": MAX_DELTA, "PICK_MIN_EDGE": PICK_MIN_EDGE, "PICK_MIN_DELTA": PICK_MIN_DELTA,
+                       "W_POIS": W_POIS, "MAX_DELTA": MAX_DELTA, "MODEL_ALPHA": MODEL_ALPHA, "PICK_MIN_EDGE": PICK_MIN_EDGE, "PICK_MIN_DELTA": PICK_MIN_DELTA,
                        "MIN_SAMPLE": MIN_SAMPLE},
             "n": len(out), "matches": out}

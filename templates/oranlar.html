@@ -111,7 +111,7 @@
 {{ sig_table(perf_7d) }}
 
 <h2 class="section">📐 CLV — BAHİSÇİYİ YENİYOR MUYUZ</h2>
-<div class="section-sub">CLV = girdiğimiz oran × kapanıştaki adil olasılık − 1. Pozitif ortalama, piyasanın bizden sonra bizim tarafa kaydığı anlamına gelir. Sonuçtan bağımsızdır ve az veriyle bile anlamlıdır. Uzun vadede kâr eden her bahisçinin ortak özelliğidir.</div>
+<div class="section-sub">CLV = aynı şirketin (Pinnacle) sinyal anındaki oranı ÷ kapanış oranı − 1. Değer tahminlerinde ise Volkano oranı × keskin kapanış olasılığı − 1, yani beklenen değer. Pozitif ortalama, piyasanın bizden sonra bizim tarafa kaydığı anlamına gelir. Sonuçtan bağımsızdır ve az veriyle bile anlamlıdır. Uzun vadede kâr eden her bahisçinin ortak özelliğidir.</div>
 {% for label, c in clv %}
 <div class="tier-row {{ 'hl' if c and c.avg > 0 else '' }}">
   <div><div style="font-size:12px;font-weight:600;">{{ label }}</div><div class="ng-meta">n={{ c.n if c else 0 }}</div></div>

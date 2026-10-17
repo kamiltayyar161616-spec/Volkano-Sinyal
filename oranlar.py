@@ -13,6 +13,9 @@ FLOW_MIN = 0.02   # para akisi: keskin olasilik acilistan >=2p artmis
 SS_MIN = 0.02     # keskin-yumusak: keskinler tarafi yumusaklardan >=2p yuksek goruyor
 VOTE_MIN = 5      # sirket cogunlugu: en az 5 izlenen sirket ayni tarafa >=3p kaydirmis
 VOTE_LEAD = 2     # ...ve ikinci taraftan en az 2 oy onde
+# 17 Ekim analizi (440 mac): bu sirketlerin >=3p hareketleri keskin kapanisi gecti (HKJC 13 hareket 11 isabet).
+# Az veri: ileriye donuk test icin ayri sinyal olarak izleniyor, modele girmiyor.
+ELITE = ["HK Jockey Club", "CoolBet", "bet105", "Macauslot", "Bet-at-home"]
 
 SIGNALS = [
     ("fav", "Keskin favori", "Keskin piyasanın (Pinnacle+borsalar) en olası tarafı. Kıyas çizgisi."),
@@ -22,6 +25,9 @@ SIGNALS = [
     ("vote", "Şirket çoğunluğu", "İzlenen 30 şirketten ≥5'i aynı tarafa ≥3p kaydırmış, 2 oy önde."),
     ("vote_dog", "Şirket çoğunluğu → favori DIŞI", "Çoğunluk favori olmayan tarafa kaymış."),
     ("flow_vote", "Para akışı + çoğunluk aynı yön", "İki sinyal birbirini doğruluyor."),
+    ("hkjc", "HK Jockey Club hareketi", "HKJC bir tarafı ≥3p artırmış. İlk 440 maçta 13 hareketin 11'i tuttu; şimdi ileriye dönük test."),
+    ("elite", "Elit şirketler", "HKJC, CoolBet, bet105, Macauslot, Bet-at-home: ≥3p hareketlerin çoğunluğu aynı tarafta."),
+    ("elite_dog", "Elit şirketler → favori DIŞI", "Elit şirketler favori olmayan tarafa kaymış."),
     ("model", "NowGoal modeli (kazanan)", "İstatistik+oran modelinin kazanan tahmini. Kıyas için."),
     ("model_flow", "Model + para akışı aynı yön", "Model ile keskin para aynı tarafı gösteriyor."),
 ]
@@ -71,6 +77,20 @@ def signals(od, tip_side=None):
             out[k + "_dog"] = out[k]
     if "flow" in out and out.get("vote") == out["flow"]:
         out["flow_vote"] = out["flow"]
+    w = od.get("watch") or {}
+    hk = w.get("HK Jockey Club")
+    if hk and hk["d"][_argmax(hk["d"])] >= ng.BOOK_MOVE:
+        out["hkjc"] = _argmax(hk["d"])
+    ev = [0, 0, 0]
+    for b in ELITE:
+        if b in w:
+            for i in range(3):
+                ev[i] += w[b]["d"][i] >= ng.BOOK_MOVE
+    s2 = sorted(ev, reverse=True)
+    if s2[0] >= 1 and s2[0] > s2[1]:
+        out["elite"] = _argmax(ev)
+        if out["elite"] != fav:
+            out["elite_dog"] = out["elite"]
     if tip_side:
         out["model"] = "1X2".index(tip_side)
         if out.get("flow") == out["model"]:
@@ -129,7 +149,9 @@ def _clv_stat(vals):
 
 
 def get_clv():
-    """CLV = giris_orani x kapanis_adil_olasiligi - 1. Pozitifse piyasa bizden sonra bizim tarafa kaydi:
+    """Sinyaller: CLV = ayni sirketin (Pinnacle, yoksa Bet365) ilk orani / kapanis orani - 1.
+    Deger tahminleri: Volkano orani x keskin kapanis adil olasiligi - 1 (beklenen deger).
+    Pozitifse piyasa bizden sonra bizim tarafa kaydi:
     uzun vadede bahisciyi yenmenin en guvenilir olcusu (sonuctan bagimsiz, az veriyle anlamli).
     Kapanis = mactan <=90 dk once cekilen son oran (odds_final=1), keskin no-vig."""
     rows = _rows("odds_final=1 AND odds_json IS NOT NULL AND status IN ('stats','finished')")
@@ -141,19 +163,23 @@ def get_clv():
         if r["pick_side"] and r["pick_odd"]:
             pick.append(r["pick_odd"] * close["1X2".index(r["pick_side"])] - 1)
         first = json.loads(r["odds_first"]) if r["odds_first"] else None
-        ref = _ref_odds(first) if first else None
-        if not ref:
+        if not first:
             continue
+        # ayni sirketin ilk orani / kapanis orani - 1 (marj iki tarafta da var, birbirini goturur)
+        fw, cw = first.get("watch") or {}, (json.loads(r["odds_json"]) or {}).get("watch") or {}
+        bk = next((k for k in ("Pinnacle", "Bet365") if k in fw and k in cw), None)
+        if not bk:
+            continue
+        clv = lambda i: fw[bk]["c"][i] / cw[bk]["c"][i] - 1
         if r["tip_side"]:
-            i = "1X2".index(r["tip_side"])
-            tip.append(ref[i] * close[i] - 1)
+            tip.append(clv("1X2".index(r["tip_side"])))
         s = signals(first)
         if "flow" in s:
-            flow.append(ref[s["flow"]] * close[s["flow"]] - 1)
+            flow.append(clv(s["flow"]))
         if "vote" in s:
-            vote.append(ref[s["vote"]] * close[s["vote"]] - 1)
-    return [("Değer tahminleri (Volkano oranı)", _clv_stat(pick)),
-            ("Kazanan tahmini (ilk Pinnacle oranı)", _clv_stat(tip)),
+            vote.append(clv(s["vote"]))
+    return [("Değer tahminleri: Volkano oranı × keskin kapanış (beklenen değer)", _clv_stat(pick)),
+            ("Kazanan tahmini (Pinnacle ilk → kapanış)", _clv_stat(tip)),
             ("Para akışı ilk görüldüğünde", _clv_stat(flow)),
             ("Şirket çoğunluğu ilk görüldüğünde", _clv_stat(vote))]
 
