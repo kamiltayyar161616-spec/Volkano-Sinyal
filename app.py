@@ -33,6 +33,7 @@ from match_analyzer import (
 from results_checker import check_pending_results
 import nowgoal
 import oranlar
+import sdoran
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -237,6 +238,21 @@ def oranlar_indir():
     return Response(body, mimetype="application/json",
                     headers={"Content-Disposition": "attachment; filename=oranlar_veri.json"})
 
+@app.route("/sd-oran")
+def sdoran_page():
+    return render_template("sdoran.html", d=sdoran.get_page_data(), perf=sdoran.get_signal_perf(),
+                           card=sdoran.get_book_card(), active_page="sdoran")
+
+
+@app.route("/sd-oran/indir")
+def sdoran_indir():
+    import json as _json
+    from flask import Response
+    body = _json.dumps(sdoran.export_json(), ensure_ascii=False)
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=sd_oran_veri.json"})
+
+
 
 
 @app.route("/api/matches")
@@ -301,4 +317,5 @@ if __name__ == "__main__":
     t = threading.Thread(target=_background_loop, daemon=True)
     t.start()
     nowgoal.start_background()
+    sdoran.start_background()
     app.run(host="0.0.0.0", port=8080)

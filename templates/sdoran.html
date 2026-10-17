@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}SAHA — SD Oran{% endblock %}
+{% block page_tag %}SON DAKİKA ORAN{% endblock %}
+{% block subtitle %}Maç başlarken her şirketin dakika dakika oran geçmişi çekilir: açılış, açılış Kelly'si, son 60/30/10 dakika ve kapanış. Hangi şirketin hangi oran aralığındaki son dakika hareketi hangi sonucu veriyor, burada ölçülür.{% endblock %}
+{% block extra_style %}
+<style>
+  .ng-bar{ display:flex; gap:6px; flex-wrap:wrap; margin:14px 16px 0; }
+  .ng-chip{ background:var(--navy); border:1px solid var(--navy-line); border-radius:9px; padding:7px 10px; font-size:10.5px; color:var(--chalk-dim); }
+  .ng-chip b{ color:var(--chalk); }
+  .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
+  .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11.5px;
+    background:linear-gradient(135deg,var(--amber-bright),var(--amber)); color:#241a06; }
+  .ng-card{ margin:0 16px 10px; padding:13px 14px; border-radius:12px;
+    background:linear-gradient(165deg,var(--navy-soft),var(--navy)); border:1px solid var(--navy-line); }
+  .ng-card.hot{ border-color:var(--amber); }
+  .ng-teams{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .og{ display:grid; grid-template-columns:52px repeat(3,1fr); gap:3px; margin-top:8px; font-size:10.5px; }
+  .og div{ background:var(--navy-deep); border-radius:6px; padding:4px 5px; text-align:center; }
+  .og .h{ background:none; color:var(--chalk-faint); font-size:9px; text-align:left; padding-left:0; }
+  .og .sel{ outline:1px solid var(--amber); color:var(--amber-bright); font-weight:700; }
+  .tag{ display:inline-block; font-size:9px; font-weight:700; padding:2px 6px; border-radius:5px; margin:4px 4px 0 0; background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .tag.a{ border-color:var(--amber-dim); color:var(--amber-bright); }
+  .tag.w{ border-color:var(--turf); color:var(--turf-bright); } .tag.l{ border-color:var(--clay-dim); color:var(--clay); }
+  details{ margin-top:8px; } summary{ cursor:pointer; font-size:10.5px; color:var(--amber-bright); }
+  .wb{ display:grid; grid-template-columns:1.5fr repeat(3,1fr) .9fr; gap:2px; margin-top:6px; font-size:9.5px; }
+  .wb div{ padding:3px 4px; background:var(--navy-deep); border-radius:4px; text-align:center; }
+  .wb .n{ text-align:left; } .wb .hd{ background:none; color:var(--chalk-faint); }
+  .wb .gr{ grid-column:1/-1; background:none; text-align:left; color:var(--amber-bright); font-weight:700; padding-top:6px; }
+  .wb small{ display:block; font-size:8.5px; }
+  .tier-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 14px; margin:0 16px 6px;
+    background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; }
+  .tier-row.hl{ border-color:var(--amber); }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+</style>
+{% endblock %}
+
+{% macro pc(v) %}{% if v is not none %}{{ (v*100)|round(1) }}{% else %}-{% endif %}{% endmacro %}
+{% macro dp(v) %}{% if v is not none %}<span class="{{ 'pos' if v >= 0.03 else 'neg' if v <= -0.03 else '' }}">{{ '+' if v > 0 else '' }}{{ (v*100)|round(1) }}</span>{% else %}-{% endif %}{% endmacro %}
+
+{% macro sig_table(rows) %}
+{% for s in rows %}
+<div class="tier-row {{ 'hl' if s.n >= 30 and s.diff and s.diff > 0 else '' }}">
+  <div style="max-width:62%;"><div style="font-size:12px;font-weight:600;">{{ s.label }}</div>
+    <div class="ng-meta">{{ s.desc }}</div>
+    <div class="ng-meta">n={{ s.n }}{% if s.avg_odd %} &middot; ort. oran {{ s.avg_odd }}{% endif %}</div></div>
+  <div style="text-align:right;">
+    {% if s.n %}
+    <div style="font-weight:800;">%{{ s.real }} <span class="ng-meta">isabet</span></div>
+    <div class="ng-meta">piyasa %{{ s.market }} &middot; <span class="{{ 'pos' if s.diff > 0 else 'neg' }}">{{ '+' if s.diff > 0 else '' }}{{ s.diff }}p</span></div>
+    {% if s.nl is not none %}<div class="ng-meta">kaybetmeme %{{ s.nl }} / piy %{{ s.nl_mk }} <span class="{{ 'pos' if s.nl > s.nl_mk else 'neg' }}">{{ '+' if s.nl > s.nl_mk else '' }}{{ (s.nl - s.nl_mk)|round(1) }}p</span></div>{% endif %}
+    {% if s.roi is not none %}<div class="ng-meta">ROI <span class="{{ 'pos' if s.roi > 0 else 'neg' }}">{{ '+' if s.roi > 0 else '' }}%{{ s.roi }}</span></div>{% endif %}
+    {% else %}<div class="ng-meta">veri yok</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endmacro %}
+
+
+{% block content %}
+<div class="ng-bar">
+  <span class="ng-chip">işlenen maç <b>{{ d.n_ok }}</b></span>
+  <span class="ng-chip">dosyası olmayan <b>{{ d.n_fail }}</b></span>
+  {% if d.last.at %}<span class="ng-chip">son tur <b>{{ d.last.at | localdatetime }}</b></span>{% endif %}
+</div>
+{% if d.last.log %}<div class="ng-meta" style="margin:6px 16px 0;">{{ d.last.log }}</div>{% endif %}
+<div class="ng-dl"><a href="/sd-oran/indir">⬇ Son dakika verisini indir (JSON)</a></div>
+
+<h2 class="section">⏱ SON DAKİKA SİNYALLERİ</h2>
+<div class="section-sub">"Piyasa" = limitsiz şirketlerin (Pinnacle, borsalar, Sbobet, Crown...) KAPANIŞ fiyatı. Fark pozitifse sinyal kapanışın bile bilmediği bir şey biliyor. Negatif ve büyükse sinyal TERS çalışıyor demektir; o da işe yarar.</div>
+{{ sig_table(perf) }}
+
+<h2 class="section">🏦 ŞİRKET × SON 30 DK HAREKETİ × ORAN ARALIĞI</h2>
+<div class="section-sub">Şirket bir tarafın oranını son 30 dakikada ≥%3 düşürdüğünde (ya da uzattığında), o oran aralığında taraf ne yaptı? En güçlü sapmalar üstte (fark × √n). n küçükken tesadüf olabilir.</div>
+{% for c in card[:60] %}
+<div class="tier-row {{ 'hl' if c.n >= 15 and c.diff > 0 else '' }}">
+  <div><div style="font-size:12px;font-weight:600;">{{ c.book }} <span class="ng-meta">{{ c.g }}</span></div>
+    <div class="ng-meta">oran {{ c.move }} · {{ c.band }} · n={{ c.n }}</div></div>
+  <div style="text-align:right;">
+    <div style="font-weight:800;" class="{{ 'pos' if c.diff > 0 else 'neg' }}">{{ '+' if c.diff > 0 else '' }}{{ c.diff }}p</div>
+    <div class="ng-meta">kazanma %{{ c.real }} / piy %{{ c.market }}</div>
+    <div class="ng-meta">kaybetmeme %{{ c.nl }} / piy %{{ c.nl_mk }}</div>
+  </div>
+</div>
+{% else %}<div class="empty">Henüz yeterli veri yok.</div>{% endfor %}
+
+<h2 class="section">📋 SON MAÇLAR</h2>
+<div class="section-sub">Kırmızı oran: son 30 dakikada düştü (o tarafa para girdi). Yeşil etiket: sinyal tuttu.</div>
+{% for m in d.matches %}
+<div class="ng-card {{ 'hot' if m.sig else '' }}">
+  <div class="ng-teams">{{ m.home }} — {{ m.away }}{% if m.ft %} <span style="color:var(--chalk-dim);">{{ m.ft[0] }}-{{ m.ft[1] }}</span>{% endif %}</div>
+  <div class="ng-meta">{{ m.league or '' }} &middot; {{ m.kickoff | localdatetime }} &middot; {{ m.n_books }} şirket{% if m.tip %} &middot; model: {{ m.tip }}{% endif %}</div>
+  <div class="og">
+    <div class="h"></div><div class="h" style="text-align:center">1</div><div class="h" style="text-align:center">X</div><div class="h" style="text-align:center">2</div>
+    {% if m.base %}<div class="h">kapanış %</div>{% for i in range(3) %}<div>{{ pc(m.base[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.drift %}<div class="h">limitsiz 60dk</div>{% for i in range(3) %}<div>{{ dp(m.drift[i]) }}</div>{% endfor %}{% endif %}
+    <div class="h">düşen 30dk</div>{% for i in range(3) %}<div>{{ m.short30[i] }}</div>{% endfor %}
+    <div class="h">düşen 10dk</div>{% for i in range(3) %}<div>{{ m.short10[i] }}</div>{% endfor %}
+  </div>
+  <div>{% for s in m.sig %}<span class="tag {{ ('w' if s[2] else 'l') if s|length > 2 else 'a' }}">{{ s[0] }}: {{ s[1] }}</span>{% endfor %}</div>
+  {% if m.movers %}
+  <details><summary>Son 30 dk hareket eden şirketler ({{ m.movers|length }})</summary>
+    <div class="wb" style="grid-template-columns:1.6fr .5fr 1fr 1fr .9fr;">
+      <div class="hd n">şirket</div><div class="hd">taraf</div><div class="hd">T-30</div><div class="hd">kapanış</div><div class="hd">%</div>
+      {% for mv in m.movers %}<div class="n">{{ mv[0] }}</div><div>{{ mv[1] }}</div><div>{{ mv[2] }}</div><div>{{ mv[3] }}</div><div class="{{ 'neg' if mv[4] < 0 else 'pos' }}">{{ mv[4] }}</div>{% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</div>
+{% else %}<div class="empty">Henüz işlenen maç yok. İlk tur sunucu açıldıktan ~1 dk sonra çalışır, geçmiş maçlar da geriye dönük dolar.</div>{% endfor %}
+{% endblock %}
