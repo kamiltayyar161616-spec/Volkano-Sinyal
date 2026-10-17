@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Strateji Testi{% endblock %}
+{% block page_tag %}STRATEJİ TESTİ{% endblock %}
+{% block subtitle %}Keşif verisinde bahisçiyi geçme ihtimali görünen stratejiler, {{ baslangic[:10] }} sonrası maçlarda ileriye dönük, sanal {{ bahis|int }} € sabit bahisle ayrı ayrı test edilir. Karar "İLERİ" sütununa göre verilir; "KEŞİF" sadece kıyas.{% endblock %}
+{% block extra_style %}
+<style>
+  .ng-bar{ display:flex; gap:6px; flex-wrap:wrap; margin:14px 16px 0; }
+  .ng-chip{ background:var(--navy); border:1px solid var(--navy-line); border-radius:9px; padding:7px 10px; font-size:10.5px; color:var(--chalk-dim); }
+  .ng-chip b{ color:var(--chalk); }
+  .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
+  .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11.5px;
+    background:linear-gradient(135deg,var(--amber-bright),var(--amber)); color:#241a06; }
+  .ng-card{ margin:0 16px 10px; padding:13px 14px; border-radius:12px;
+    background:linear-gradient(165deg,var(--navy-soft),var(--navy)); border:1px solid var(--navy-line); }
+  .ng-card.hot{ border-color:var(--amber); }
+  .ng-teams{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .og{ display:grid; grid-template-columns:52px repeat(3,1fr); gap:3px; margin-top:8px; font-size:10.5px; }
+  .og div{ background:var(--navy-deep); border-radius:6px; padding:4px 5px; text-align:center; }
+  .og .h{ background:none; color:var(--chalk-faint); font-size:9px; text-align:left; padding-left:0; }
+  .og .sel{ outline:1px solid var(--amber); color:var(--amber-bright); font-weight:700; }
+  .tag{ display:inline-block; font-size:9px; font-weight:700; padding:2px 6px; border-radius:5px; margin:4px 4px 0 0; background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .tag.a{ border-color:var(--amber-dim); color:var(--amber-bright); }
+  .tag.w{ border-color:var(--turf); color:var(--turf-bright); } .tag.l{ border-color:var(--clay-dim); color:var(--clay); }
+  details{ margin-top:8px; } summary{ cursor:pointer; font-size:10.5px; color:var(--amber-bright); }
+  .wb{ display:grid; grid-template-columns:1.5fr repeat(3,1fr) .9fr; gap:2px; margin-top:6px; font-size:9.5px; }
+  .wb div{ padding:3px 4px; background:var(--navy-deep); border-radius:4px; text-align:center; }
+  .wb .n{ text-align:left; } .wb .hd{ background:none; color:var(--chalk-faint); }
+  .wb .gr{ grid-column:1/-1; background:none; text-align:left; color:var(--amber-bright); font-weight:700; padding-top:6px; }
+  .wb small{ display:block; font-size:8.5px; }
+  .tier-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 14px; margin:0 16px 6px;
+    background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; }
+  .tier-row.hl{ border-color:var(--amber); }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .sw{ display:flex; gap:6px; margin:10px 16px 0; flex-wrap:wrap; }
+  .sw a{ padding:7px 11px; border-radius:9px; font-size:11px; text-decoration:none; background:var(--navy); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .sw a.on{ border-color:var(--amber); color:var(--amber-bright); font-weight:700; }
+  .two{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; }
+  .two div{ background:var(--navy-deep); border-radius:8px; padding:7px; font-size:10.5px; }
+  .two b{ font-family:'Space Grotesk',sans-serif; font-size:15px; }
+</style>
+{% endblock %}
+{% macro pc(v) %}{% if v is not none %}{{ (v*100)|round|int }}{% else %}-{% endif %}{% endmacro %}
+
+{% block content %}
+<h2 class="section">🧪 STRATEJİLER</h2>
+<div class="section-sub">ROI: Pinnacle kapanış oranından düz bahis (yoksa Bet365). "Volkano" satırı: Volkano oranı olan maçlarda gerçek oynanabilir ROI. n≥100 olmadan kesin karar yok.</div>
+{% for s in perf %}
+<div class="ng-card {{ 'hot' if s.ileri.n >= 30 and s.ileri.roi and s.ileri.roi > 0 else '' }}">
+  <div class="ng-teams">{{ s.label }}</div>
+  <div class="ng-meta">{{ s.desc }}</div>
+  <div class="two">
+    <div><div class="ng-meta">İLERİ (gerçek test)</div>
+      {% if s.ileri.n %}<b class="{{ 'pos' if s.ileri.roi and s.ileri.roi > 0 else 'neg' }}">{{ '+' if s.ileri.roi and s.ileri.roi > 0 else '' }}%{{ s.ileri.roi }}</b>
+      <div>n={{ s.ileri.n }} · %{{ s.ileri.real }} isabet (piy %{{ s.ileri.market }})</div>
+      <div>{{ '+' if s.ileri.eur > 0 else '' }}{{ s.ileri.eur }} € · ort. oran {{ s.ileri.avg_odd }}</div>
+      {% if s.ileri.n_vk %}<div>Volkano: n={{ s.ileri.n_vk }} ROI %{{ s.ileri.roi_vk }}</div>{% endif %}
+      {% else %}<div class="ng-meta">henüz maç yok</div>{% endif %}</div>
+    <div><div class="ng-meta">KEŞİF (kıyas)</div>
+      {% if s.kesif.n %}<b>{{ '+' if s.kesif.roi and s.kesif.roi > 0 else '' }}%{{ s.kesif.roi }}</b>
+      <div>n={{ s.kesif.n }} · %{{ s.kesif.real }} isabet (piy %{{ s.kesif.market }})</div>
+      {% if s.kesif.n_vk %}<div>Volkano: n={{ s.kesif.n_vk }} ROI %{{ s.kesif.roi_vk }}</div>{% endif %}
+      {% else %}<div class="ng-meta">-</div>{% endif %}</div>
+  </div>
+</div>
+{% endfor %}
+
+<h2 class="section">📅 ÖNÜMÜZDEKİ 48 SAAT</h2>
+<div class="section-sub">Model tahmini ve şu an tetiklenen oran stratejileri. Son dakika stratejileri (limitsiz 10 dk, favori dışı düşüş) maç başlarken hesaplanır, burada görünmez.</div>
+<div class="sw">
+  <a href="?sirala=saat{{ '&sadece=1' if only else '' }}" class="{{ 'on' if sort == 'saat' else '' }}">⏰ Başlama saatine göre</a>
+  <a href="?sirala=olasilik{{ '&sadece=1' if only else '' }}" class="{{ 'on' if sort == 'olasilik' else '' }}">🎯 Kazanma olasılığına göre</a>
+  <a href="?sirala={{ sort }}{{ '' if only else '&sadece=1' }}" class="{{ 'on' if only else '' }}">🧪 Sadece stratejisi olanlar</a>
+</div>
+<div class="ng-meta" style="margin:6px 16px;">{{ up|length }} maç</div>
+{% for m in up %}
+<div class="ng-card {{ 'hot' if m.strat else '' }}">
+  <div class="ng-teams">{{ m.home }} — {{ m.away }}</div>
+  <div class="ng-meta">{{ m.league or '' }} &middot; {{ m.kickoff | localdatetime }}</div>
+  <div class="og">
+    <div class="h"></div><div class="h" style="text-align:center">1</div><div class="h" style="text-align:center">X</div><div class="h" style="text-align:center">2</div>
+    {% if m.final %}<div class="h">model %</div>{% for i in range(3) %}<div class="{{ 'sel' if m.tip == '1X2'[i] else '' }}">{{ pc(m.final[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.ref %}<div class="h">Pinnacle</div>{% for i in range(3) %}<div>{{ m.ref[i] }}</div>{% endfor %}{% endif %}
+    {% if m.vk %}<div class="h">Volkano</div>{% for i in range(3) %}<div>{{ m.vk[i] }}</div>{% endfor %}{% endif %}
+  </div>
+  <div>{% if m.tip %}<span class="tag a">Model: {{ m.tip }} %{{ pc(m.prob) }}</span>{% endif %}{% for s in m.strat %}<span class="tag w">{{ s[0] }}: {{ s[1] }}</span>{% endfor %}</div>
+</div>
+{% else %}<div class="empty">Önümüzdeki 48 saatte istatistiği çekilmiş maç yok.</div>{% endfor %}
+<div class="ng-dl"><a href="/strateji/indir">⬇ Strateji verisini indir (JSON)</a></div>
+{% endblock %}

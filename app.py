@@ -34,6 +34,7 @@ from results_checker import check_pending_results
 import nowgoal
 import oranlar
 import sdoran
+import strateji
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -251,6 +252,24 @@ def sdoran_indir():
     body = _json.dumps(sdoran.export_json(), ensure_ascii=False)
     return Response(body, mimetype="application/json",
                     headers={"Content-Disposition": "attachment; filename=sd_oran_veri.json"})
+
+@app.route("/strateji")
+def strateji_page():
+    sort = request.args.get("sirala", "saat")
+    only = request.args.get("sadece") == "1"
+    return render_template("strateji.html", perf=strateji.get_performance(),
+                           up=strateji.get_upcoming(sort=sort, only=only), sort=sort, only=only,
+                           baslangic=strateji.BASLANGIC, bahis=strateji.BAHIS, active_page="strateji")
+
+
+@app.route("/strateji/indir")
+def strateji_indir():
+    import json as _json
+    from flask import Response
+    body = _json.dumps(strateji.export_json(), ensure_ascii=False)
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=strateji_veri.json"})
+
 
 
 
