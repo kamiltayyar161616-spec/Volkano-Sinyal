@@ -95,6 +95,8 @@
     <div class="h"></div><div class="h" style="text-align:center">1</div><div class="h" style="text-align:center">X</div><div class="h" style="text-align:center">2</div>
     {% if m.base %}<div class="h">kapanış %</div>{% for i in range(3) %}<div>{{ pc(m.base[i]) }}</div>{% endfor %}{% endif %}
     {% if m.drift %}<div class="h">limitsiz 60dk</div>{% for i in range(3) %}<div>{{ dp(m.drift[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.drift10 %}<div class="h">limitsiz 10dk</div>{% for i in range(3) %}<div>{{ dp(m.drift10[i]) }}</div>{% endfor %}{% endif %}
+    {% if m.exch %}<div class="h">borsa 60dk</div>{% for i in range(3) %}<div>{{ dp(m.exch[i]) }}</div>{% endfor %}{% endif %}
     <div class="h">düşen 30dk</div>{% for i in range(3) %}<div>{{ m.short30[i] }}</div>{% endfor %}
     <div class="h">düşen 10dk</div>{% for i in range(3) %}<div>{{ m.short10[i] }}</div>{% endfor %}
   </div>

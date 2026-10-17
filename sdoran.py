@@ -22,7 +22,14 @@ MAX_RECENT = 40          # bir turda yeni baslamis mac
 MAX_BACKFILL = 15        # bir turda gecmis mac
 BACKFILL_DAYS = 3
 GMT8 = timezone(timedelta(hours=8))
-LIMITLESS = ["Pinnacle", "Betfair Exchange", "Sbobet", "Crown", "BetInAsia", "Matchbook", "Smarkets", "SX Bet"]
+# Kazanan oyuncuyu limitlemeyen / buyuk bahis kabul eden yerler. Son dakika "akilli para" buralarda gorunur.
+EXCHANGES = ["Betfair Exchange", "Betfair", "betfair exchange.AU", "betfair exchange.ES", "Matchbook", "Smarkets",
+             "SX Bet", "BetDEX", "Overtime Markets", "bookmaker.XYZ (Polygon)"]          # borsa / esler arasi
+LIMIT_BOOKS = ["Pinnacle", "BetInAsia", "Sbobet", "Crown", "IBCBET", "Betonline", "Cloudbet", "Betcity",
+               "Marathon", "Marathonbet"]                                                   # yuksek limitli bahisci
+LIMITLESS = EXCHANGES + LIMIT_BOOKS
+_EXCH = {x.lower() for x in EXCHANGES}
+_LIM = {x.lower() for x in LIMITLESS}
 ASIA_KELLY = ["Sbobet", "Crown", "HK Jockey Club", "Macauslot", "12bet", "Mansion88"]
 MOVE = 0.03              # oran %3 dustu/uzadi -> hareket
 BANDS = [("1.01-1.50", 1.0, 1.5), ("1.50-2.00", 1.5, 2.0), ("2.00-3.00", 2.0, 3.0),
@@ -30,6 +37,8 @@ BANDS = [("1.01-1.50", 1.0, 1.5), ("1.50-2.00", 1.5, 2.0), ("2.00-3.00", 2.0, 3.
 
 SIGNALS = [
     ("late_sharp", "Limitsiz şirketler son 60 dk", "Pinnacle, borsalar, Sbobet, Crown... ortalaması son 60 dakikada bir tarafa ≥2p kaymış."),
+    ("late_lim10", "Limitsiz şirketler SON 10 DK", "Limitsiz şirketlerin ortalaması son 10 dakikada bir tarafa ≥1.5p kaymış ya da ≥3'ü o tarafın oranını ≥%3 düşürmüş. Büyük oyuncu / bilgi parası."),
+    ("late_exch", "Borsalar son 60 dk", "Betfair, Matchbook, Smarkets, SX Bet, BetDEX... ortalaması son 60 dakikada bir tarafa ≥2p kaymış."),
     ("late_mass30", "Toplu düşüş son 30 dk", "≥10 şirket son 30 dakikada aynı tarafın oranını ≥%3 düşürmüş (karşı tarafın 2 katı)."),
     ("late_mass10", "Toplu düşüş son 10 dk", "≥8 şirket son 10 dakikada aynı tarafın oranını ≥%3 düşürmüş."),
     ("late_dog", "Son dakika → favori DIŞI", "Son 30 dk toplu düşüş favori olmayan tarafa."),
@@ -45,7 +54,7 @@ for _g, _d, _al in ng.WATCH_BOOKS:
     for _a in _al:
         _NAME2DISP[_a.lower()] = (_g, _d)
 for _n in LIMITLESS:
-    _NAME2DISP.setdefault(_n.lower(), ("keskin", _n))
+    _NAME2DISP.setdefault(_n.lower(), ("borsa" if _n.lower() in _EXCH else "limitsiz", _n))
 
 
 def _conn():
@@ -98,6 +107,7 @@ def parse(body, ko):
                 k, v = x.split("^", 1)
                 det[k] = v
     books, short30, short10, cons, lim_c, lim_60 = {}, [0, 0, 0], [0, 0, 0], [], [], []
+    lim_10, ex_c, ex_60, lim_short10 = [], [], [], [0, 0, 0]
     n = 0
     for row in re.findall(r'"([^"]*)"', gm.group(1)):
         f = row.split("|")
@@ -130,9 +140,15 @@ def parse(body, ko):
             short30[i] += c[i] <= t30[i] * (1 - MOVE)
             short10[i] += c[i] <= t10[i] * (1 - MOVE)
         name = f[2]
-        if name in LIMITLESS or (name == "Betfair" and "Betfair Exchange" in LIMITLESS):
+        if name.lower() in _LIM:
             lim_c.append(_novig(c))
             lim_60.append(_novig(t60))
+            lim_10.append(_novig(t10))
+            for i in range(3):
+                lim_short10[i] += c[i] <= t10[i] * (1 - MOVE)
+            if name.lower() in _EXCH:
+                ex_c.append(_novig(c))
+                ex_60.append(_novig(t60))
         gd = _NAME2DISP.get(name.lower())
         if gd and gd[1] not in books:
             n60 = sum(1 for tt, _ in h if tt > ko - timedelta(minutes=60))
@@ -141,10 +157,13 @@ def parse(body, ko):
                             "n60": n60, "last": last}
     if not n:
         return None
-    lc, l60 = _avg(lim_c), _avg(lim_60)
+    lc, l60, l10, ec, e60 = _avg(lim_c), _avg(lim_60), _avg(lim_10), _avg(ex_c), _avg(ex_60)
     return {"n_books": n, "short30": short30, "short10": short10, "cons_close": _avg(cons),
             "lim_close": lc if len(lim_c) >= 2 else None, "n_lim": len(lim_c),
             "lim_drift60": [round(lc[i] - l60[i], 4) for i in range(3)] if lc and l60 and len(lim_c) >= 2 else None,
+            "lim_drift10": [round(lc[i] - l10[i], 4) for i in range(3)] if lc and l10 and len(lim_c) >= 2 else None,
+            "lim_short10": lim_short10, "n_exch": len(ex_c),
+            "exch_drift60": [round(ec[i] - e60[i], 4) for i in range(3)] if ec and e60 and len(ex_c) >= 2 else None,
             "books": books}
 
 
@@ -163,6 +182,20 @@ def signals(d):
         i = max(range(3), key=lambda i: dr[i])
         if dr[i] >= 0.02:
             out["late_sharp"] = i
+    d10 = d.get("lim_drift10")
+    ls = d.get("lim_short10") or [0, 0, 0]
+    if d10:
+        i = max(range(3), key=lambda i: d10[i])
+        j = 0 if ls[0] >= ls[2] else 2
+        if d10[i] >= 0.015:
+            out["late_lim10"] = i
+        elif ls[j] >= 3 and ls[2 - j] == 0:
+            out["late_lim10"] = j
+    ex = d.get("exch_drift60")
+    if ex:
+        i = max(range(3), key=lambda i: ex[i])
+        if ex[i] >= 0.02:
+            out["late_exch"] = i
     for key, src, need in (("late_mass30", "short30", 10), ("late_mass10", "short10", 8)):
         v = d.get(src) or [0, 0, 0]
         i = 0 if v[0] >= v[2] else 2
@@ -339,7 +372,8 @@ def _view(r):
     movers.sort(key=lambda x: x[4])
     v = {"home": r["home"], "away": r["away"], "kickoff": r["kickoff_utc"], "league": r["league_vk"] or r["league_ng"],
          "n_books": d["n_books"], "short30": d["short30"], "short10": d["short10"], "base": base(d),
-         "drift": d.get("lim_drift60"), "movers": movers[:12], "tip": r["tip_side"],
+         "drift": d.get("lim_drift60"), "drift10": d.get("lim_drift10"), "exch": d.get("exch_drift60"),
+         "movers": movers[:12], "tip": r["tip_side"],
          "sig": [(SIG_LABEL[k], "1X2"[i]) for k, i in s.items()],
          "ft": [r["ft_h"], r["ft_a"]] if r["ft_h"] is not None else None}
     if v["ft"]:
