@@ -47,6 +47,9 @@ MAX_FLASH_PER_CYCLE = 150    # yeni maclarin saat sorgusu
 MAX_H2H_PER_CYCLE = 80       # analiz sayfasi cekimi
 MAX_RESULT_PER_CYCLE = 80
 LOOKAHEAD_H = 36             # bu kadar saat icindeki maclarin istatistigi cekilir
+NEIGHBOR = 8                 # bilinen mac ID'sinin +-8 komsusu yoklanir (ayni lig/hafta ID'leri ardisik)
+MAX_PROBE_PER_CYCLE = 250    # tur basina komsu yoklama
+PROBE_WINDOW_H = 48          # bu kadar saat icindeki maclar eklenir
 RESULT_AFTER_MIN = 130       # baslamadan bu kadar dk sonra skor sorulur
 VOID_AFTER_H = 30            # bu kadar saat gecti, skor yoksa 'void'
 
@@ -155,6 +158,7 @@ def _conn():
         pick_at TEXT, pick_reasons TEXT, model_version TEXT,
         ft_h INTEGER, ft_a INTEGER, result_at TEXT)""")
     c.execute("CREATE INDEX IF NOT EXISTS ix_ng_kick ON ng_match(kickoff_utc)")
+    c.execute("CREATE TABLE IF NOT EXISTS ng_probe (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT)")
     have = {r[1] for r in c.execute("PRAGMA table_info(ng_match)")}
     for col, typ in (("tip_side", "TEXT"), ("tip_odd", "REAL"), ("tip_prob", "REAL"), ("tip_fav", "TEXT"),
                      ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT"),
@@ -637,8 +641,66 @@ def match_market(markets, home, away, ko_iso):
 
 # ------------------------------------------------------------------ Dongu adimlari
 
+def _home_ids():
+    """Ana sayfadaki 'Popular Matches Today' -- sitemap'in GMT+8 gun siniri yuzunden kacan aksam maclari."""
+    try:
+        html = _get("/", valid=lambda b: "/match/" in b)
+        return list(dict.fromkeys(int(x) for x in re.findall(r"/match/(?:live|h2h)-(\d+)", html)))
+    except Exception:
+        return []
+
+
+def _flash_quick(mid):
+    """Tek site, tek deneme (komsu yoklama icin; olmayan ID'de iki siteyi yormasin)."""
+    req = urllib.request.Request(f"{SITES[0]}/flashdata/get?id={mid}&t={int(time.time() * 1000)}",
+                                 headers=dict(HEADERS, Referer=SITES[0] + "/"))
+    with urllib.request.urlopen(req, timeout=15) as r:
+        ham = r.read().decode("utf-8", errors="replace")
+    bas = ham.split("!")[0].split("^")
+    ko = next((_tarih(x) for x in bas if _tarih(x)), None)
+    return _iso(ko) if ko else None
+
+
+def _probe_neighbors(log):
+    """NowGoal'da ayni lig/haftanin maclari ardisik ID alir. Yaklasan maclarin +-NEIGHBOR komsularini
+    flashdata ile yoklayip sitemap'te olmayan (GMT+8 gun siniri disindaki) maclari bulur."""
+    now = _now()
+    with _db_lock:
+        c = _conn()
+        known = {r[0] for r in c.execute("SELECT mid FROM ng_match")}
+        probed = {r[0] for r in c.execute("SELECT mid FROM ng_probe")}
+        seeds = [r[0] for r in c.execute(
+            "SELECT mid FROM ng_match WHERE kickoff_utc BETWEEN ? AND ? ORDER BY kickoff_utc DESC",
+            (_iso(now - timedelta(hours=12)), _iso(now + timedelta(hours=PROBE_WINDOW_H))))]
+        c.close()
+    cand = []
+    for sd in seeds:
+        for k in range(1, NEIGHBOR + 1):
+            for x in (sd + k, sd - k):
+                if x not in known and x not in probed and x not in cand:
+                    cand.append(x)
+    cand = cand[:MAX_PROBE_PER_CYCLE]
+    found = 0
+    for mid in cand:
+        try:
+            ko = _flash_quick(mid)
+        except Exception:
+            ko = None
+        with _db_lock:
+            c = _conn()
+            c.execute("INSERT OR REPLACE INTO ng_probe VALUES (?,?,?)", (mid, _iso(_now()), ko))
+            if ko and _iso(now - timedelta(hours=3)) < ko < _iso(now + timedelta(hours=PROBE_WINDOW_H)):
+                c.execute("INSERT OR IGNORE INTO ng_match (mid, kickoff_utc, first_seen, status) VALUES (?,?,?,?)",
+                          (mid, ko, _iso(_now()), "past" if ko < _iso(_now()) else "new"))
+                found += 1
+            c.commit()
+            c.close()
+        time.sleep(0.5)
+    log.append(f"komşu yoklama {len(cand)}, bulunan {found}")
+
+
 def collect(log):
-    ids = _sitemap_ids()
+    ids = list(dict.fromkeys(_sitemap_ids() + _home_ids()))
     with _db_lock:
         c = _conn()
         known = {r[0] for r in c.execute("SELECT mid FROM ng_match")}
@@ -809,7 +871,7 @@ def resolve(log):
 
 def run_cycle():
     log = []
-    for step in (collect, evaluate, resolve):
+    for step in (_probe_neighbors, collect, evaluate, resolve):
         try:
             step(log)
         except Exception as e:
