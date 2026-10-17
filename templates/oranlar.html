@@ -50,6 +50,7 @@
     {% if s.n %}
     <div style="font-weight:800;">%{{ s.real }} <span class="ng-meta">isabet</span></div>
     <div class="ng-meta">piyasa %{{ s.market }} &middot; <span class="{{ 'pos' if s.diff > 0 else 'neg' }}">{{ '+' if s.diff > 0 else '' }}{{ s.diff }}p</span></div>
+    {% if s.nl is not none %}<div class="ng-meta">kaybetmeme %{{ s.nl }} / piy %{{ s.nl_mk }} <span class="{{ 'pos' if s.nl > s.nl_mk else 'neg' }}">{{ '+' if s.nl > s.nl_mk else '' }}{{ (s.nl - s.nl_mk)|round(1) }}p</span></div>{% endif %}
     {% if s.roi is not none %}<div class="ng-meta">ROI <span class="{{ 'pos' if s.roi > 0 else 'neg' }}">{{ '+' if s.roi > 0 else '' }}%{{ s.roi }}</span></div>{% endif %}
     {% else %}<div class="ng-meta">veri yok</div>{% endif %}
   </div>

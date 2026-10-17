@@ -28,6 +28,9 @@ SIGNALS = [
     ("hkjc", "HK Jockey Club hareketi", "HKJC bir tarafı ≥3p artırmış. İlk 440 maçta 13 hareketin 11'i tuttu; şimdi ileriye dönük test."),
     ("elite", "Elit şirketler", "HKJC, CoolBet, bet105, Macauslot, Bet-at-home: ≥3p hareketlerin çoğunluğu aynı tarafta."),
     ("elite_dog", "Elit şirketler → favori DIŞI", "Elit şirketler favori olmayan tarafa kaymış."),
+    ("quiet_sharp", "Sessiz keskin hareket", "Keskinler bir tarafı ≥3p artırmış, yumuşaklar henüz takip etmemiş. İlk 440 maç: n=22, %54.5 (piyasa %41.2)."),
+    ("herd_draw", "Herkes aynı yöne → BERABERLİK", "≥5 yumuşak + keskinler aynı tarafa kaymış; o taraf fazla fiyatlanıyor mu? İlk 440 maç: beraberlik %30 (piyasa %24.5), n=120."),
+    ("trap", "YEM: yumuşaklar bir yöne, keskin TERSE", "≥5 yumuşak bir tarafın oranını düşürmüş ama keskin para o taraftan çıkıyor (≤−1p). Sinyal karşı tarafı gösterir."),
     ("model", "NowGoal modeli (kazanan)", "İstatistik+oran modelinin kazanan tahmini. Kıyas için."),
     ("model_flow", "Model + para akışı aynı yön", "Model ile keskin para aynı tarafı gösteriyor."),
 ]
@@ -91,6 +94,24 @@ def signals(od, tip_side=None):
         out["elite"] = _argmax(ev)
         if out["elite"] != fav:
             out["elite_dog"] = out["elite"]
+    # yumusak/keskin ayrimi: izlenen listedeki grup etiketinden
+    sv = [0, 0, 0]
+    for b in w.values():
+        if b["g"] in ("asya", "avrupa"):
+            j = _argmax(b["d"])
+            if b["d"][j] >= ng.BOOK_MOVE:
+                sv[j] += 1
+    j = 0 if sv[0] >= sv[2] else 2
+    soft = j if sv[j] >= 5 and sv[j] > sv[2 - j] + 1 else None
+    if d:
+        k = 0 if d[0] >= d[2] else 2
+        if d[k] >= 0.03 and soft != k and sv[k] <= 2:
+            out["quiet_sharp"] = k
+        if soft is not None:
+            if d[soft] >= 0.01:
+                out["herd_draw"] = 1
+            elif d[soft] <= -0.01:
+                out["trap"] = 2 - soft
     if tip_side:
         out["model"] = "1X2".index(tip_side)
         if out.get("flow") == out["model"]:
@@ -112,7 +133,8 @@ def get_signal_perf(days=None):
     if days:
         q += " AND kickoff_utc > ?"
         args = (ng._iso(ng._now() - timedelta(days=days)),)
-    acc = {k: {"n": 0, "hit": 0, "exp": 0.0, "n_odd": 0, "profit": 0.0, "odd_sum": 0.0} for k, _, _ in SIGNALS}
+    acc = {k: {"n": 0, "hit": 0, "exp": 0.0, "n_odd": 0, "profit": 0.0, "odd_sum": 0.0,
+               "nl_n": 0, "nl": 0, "nl_exp": 0.0} for k, _, _ in SIGNALS}
     for r in _rows(q, args):
         od = json.loads(r["odds_json"]) or {}
         base = _base(od)
@@ -125,6 +147,10 @@ def get_signal_perf(days=None):
             a["n"] += 1
             a["hit"] += res == i
             a["exp"] += base[i]
+            if i != 1:   # kaybetmeme (cifte sans): taraf kazanir veya berabere
+                a["nl_n"] += 1
+                a["nl"] += res != 2 - i
+                a["nl_exp"] += base[i] + base[1]
             if ref:
                 a["n_odd"] += 1
                 a["odd_sum"] += ref[i]
@@ -137,7 +163,9 @@ def get_signal_perf(days=None):
                     "market": round(100 * a["exp"] / n, 1) if n else None,
                     "diff": round(100 * (a["hit"] - a["exp"]) / n, 1) if n else None,
                     "roi": round(100 * a["profit"] / a["n_odd"], 1) if a["n_odd"] else None,
-                    "avg_odd": round(a["odd_sum"] / a["n_odd"], 2) if a["n_odd"] else None})
+                    "avg_odd": round(a["odd_sum"] / a["n_odd"], 2) if a["n_odd"] else None,
+                    "nl": round(100 * a["nl"] / a["nl_n"], 1) if a["nl_n"] else None,
+                    "nl_mk": round(100 * a["nl_exp"] / a["nl_n"], 1) if a["nl_n"] else None})
     return out
 
 
