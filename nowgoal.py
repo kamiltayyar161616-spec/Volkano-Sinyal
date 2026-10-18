@@ -754,16 +754,18 @@ def evaluate(log):
     now = _now()
     with _db_lock:
         c = _conn()
-        rows = c.execute("""SELECT mid, home, away, kickoff_utc, features_json, pick_side, odds_json, odds_final FROM ng_match
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, features_json, pick_side, odds_json, odds_final, odds_at FROM ng_match
                             WHERE status='stats' AND kickoff_utc > ?""",
                          (_iso(now + timedelta(minutes=5)),)).fetchall()
         c.close()
-    n_vk = n_pick = n_tip = n_odds = 0
+    n_vk = n_pick = n_tip = n_odds = n_404 = 0
     for r in rows:
         feat = json.loads(r["features_json"])
         of = json.loads(r["odds_json"]) if r["odds_json"] else None
         mins_left = (datetime.fromisoformat(r["kickoff_utc"]) - now).total_seconds() / 60
-        need = of is None or (not r["odds_final"] and mins_left <= ODDS_FINAL_MIN)
+        # oran dosyasi henuz yoksa (404: kucuk lig / cok erken) her turda degil 3 saatte bir tekrar dene
+        retry_ok = r["odds_at"] is None or datetime.fromisoformat(r["odds_at"]) < now - timedelta(hours=3)
+        need = (of is None and (retry_ok or mins_left <= ODDS_FINAL_MIN)) or (of is not None and not r["odds_final"] and mins_left <= ODDS_FINAL_MIN)
         if need and n_odds < MAX_ODDS_PER_CYCLE:
             try:
                 of = odds_features(fetch_odds_books(r["mid"])) or of
@@ -776,7 +778,14 @@ def evaluate(log):
                     c.commit()
                     c.close()
             except Exception as e:
-                log.append(f"oran {r['mid']} hata {e}")
+                n_404 += "404" in str(e)
+                if "404" not in str(e):
+                    log.append(f"oran {r['mid']} hata {e}")
+                with _db_lock:
+                    c = _conn()
+                    c.execute("UPDATE ng_match SET odds_at=? WHERE mid=? AND odds_json IS NULL", (_iso(_now()), r["mid"]))
+                    c.commit()
+                    c.close()
             time.sleep(BEKLE)
         mk_b, vk = match_market(markets, r["home"] or "", r["away"] or "", r["kickoff_utc"])
         if of and of.get("sharp_cur") and of["n_sharp"] >= 2:
@@ -834,7 +843,7 @@ def evaluate(log):
                 n_pick += 1
             c.commit()
             c.close()
-    log.append(f"değerlendirilen {len(rows)}, oran çekilen {n_odds}, Volkano eşleşen {n_vk}, kazanan tahmini {n_tip}, yeni değer tahmini {n_pick}")
+    log.append(f"değerlendirilen {len(rows)}, oran çekilen {n_odds} (dosyası olmayan {n_404}), Volkano eşleşen {n_vk}, kazanan tahmini {n_tip}, yeni değer tahmini {n_pick}")
 
 
 def resolve(log):
