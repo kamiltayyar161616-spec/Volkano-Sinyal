@@ -28,6 +28,8 @@ STRATEGIES = [
      "Keskin piyasa tarafı yumuşak bahisçilerden ≥2p yüksek görüyor. Keşif: n=59, %61 isabet (piyasa %52), ROI +%11.", "oran"),
     ("herd_draw", "Herkes aynı yöne → BERABERLİK",
      "≥5 yumuşak + keskinler aynı tarafa kaymış; beraberlik oynanır. Keşif: n=197, ROI +%9.", "oran"),
+    ("herd_draw_hi", "BERABERLİK — sadece X oranı ≥3.80",
+     "Herkes aynı yöne + Pinnacle beraberlik oranı ≥3.80 (net favorili maçlar). 18 Ekim: keşif n=99 ROI +%18, ileri n=67 ROI +%32; dengeli maçlarda (X<3.8) strateji eksi.", "oran"),
     ("home_band", "Ev sahibi 1.50–2.00",
      "Pinnacle ev oranı 1.50–2.00 arasında. Keşif: n=207, %58.5 isabet (piyasa %52.6), ROI +%2.4.", "oran"),
 ]
@@ -62,6 +64,8 @@ def picks(row, late=None):
             out["ss"] = (s["ss"], ref)
         if "herd_draw" in s:
             out["herd_draw"] = (1, ref)
+            if ref and ref[1] >= 3.8:
+                out["herd_draw_hi"] = (1, ref)
         if ref and HOME_BAND[0] <= ref[0] < HOME_BAND[1]:
             out["home_band"] = (0, ref)
     if late:
