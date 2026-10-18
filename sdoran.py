@@ -32,6 +32,16 @@ _EXCH = {x.lower() for x in EXCHANGES}
 _LIM = {x.lower() for x in LIMITLESS}
 ASIA_KELLY = ["Sbobet", "Crown", "HK Jockey Club", "Macauslot", "12bet", "Mansion88"]
 MOVE = 0.03              # oran %3 dustu/uzadi -> hareket
+LIVE_MAX_MIN = 70        # dosya baslamadan sonra bu kadar dk icinde cekildiyse "canli" kayit.
+# 18 Ekim: geriye donuk (gunler sonra) cekilen dosyalarda gecmis seyreliyor (171 vs 232 sirket, son 60 dk
+# degisim yarisi). Son dakika sinyalleri sadece canli kayitlarla olculur.
+
+
+def is_live(fetched_at, kickoff):
+    try:
+        return (datetime.fromisoformat(fetched_at) - datetime.fromisoformat(kickoff)).total_seconds() <= LIVE_MAX_MIN * 60
+    except (TypeError, ValueError):
+        return False
 BANDS = [("1.01-1.50", 1.0, 1.5), ("1.50-2.00", 1.5, 2.0), ("2.00-3.00", 2.0, 3.0),
          ("3.00-5.00", 3.0, 5.0), ("5.00+", 5.0, 999.0)]
 
@@ -281,7 +291,7 @@ def start_background():
 # ------------------------------------------------------------------ rapor
 
 def _rows(finished=True, limit=None):
-    q = """SELECT l.mid, l.kickoff_utc, l.data_json, m.home, m.away, m.league_vk, m.league_ng, m.ft_h, m.ft_a,
+    q = """SELECT l.mid, l.kickoff_utc, l.data_json, l.fetched_at, m.home, m.away, m.league_vk, m.league_ng, m.ft_h, m.ft_a,
                   m.status, m.tip_side FROM ng_late l JOIN ng_match m ON m.mid = l.mid WHERE l.ok = 1"""
     if finished:
         q += " AND m.status = 'finished' AND m.ft_h IS NOT NULL"
@@ -298,6 +308,8 @@ def _rows(finished=True, limit=None):
 def get_signal_perf():
     acc = {k: [0, 0, 0.0, 0, 0, 0.0, 0, 0.0] for k, _, _ in SIGNALS}
     for r in _rows():
+        if not is_live(r["fetched_at"], r["kickoff_utc"]):
+            continue
         d = json.loads(r["data_json"])
         b = base(d)
         res = ng._result_idx(r["ft_h"], r["ft_a"])
@@ -331,6 +343,8 @@ def get_book_card(min_n=4):
     """Sirket x hareket (son 30 dk dustu / uzadi) x oran araligi -> o taraf ne yapti."""
     st = {}
     for r in _rows():
+        if not is_live(r["fetched_at"], r["kickoff_utc"]):
+            continue
         d = json.loads(r["data_json"])
         b = base(d)
         res = ng._result_idx(r["ft_h"], r["ft_a"])
@@ -388,7 +402,9 @@ def get_page_data():
         c = _conn()
         cnt = dict(c.execute("SELECT ok, COUNT(*) FROM ng_late GROUP BY ok").fetchall())
         c.close()
-    return {"matches": [_view(r) for r in rows], "n_ok": cnt.get(1, 0), "n_fail": cnt.get(0, 0), "last": _last}
+    n_live = sum(1 for r in _rows() if is_live(r["fetched_at"], r["kickoff_utc"]))
+    return {"matches": [_view(r) for r in rows], "n_ok": cnt.get(1, 0), "n_fail": cnt.get(0, 0), "last": _last,
+            "n_live": n_live}
 
 
 def export_json():
@@ -397,5 +413,6 @@ def export_json():
         d = json.loads(r["data_json"])
         out.append({"mid": r["mid"], "home": r["home"], "away": r["away"], "kickoff_utc": r["kickoff_utc"],
                     "status": r["status"], "ft": [r["ft_h"], r["ft_a"]], "tip_side": r["tip_side"],
+                    "fetched_at": r["fetched_at"], "live": is_live(r["fetched_at"], r["kickoff_utc"]),
                     "signals": {k: "1X2"[i] for k, i in signals(d).items()}, "late": d})
     return {"exported_at": ng._iso(ng._now()), "n": len(out), "matches": out}

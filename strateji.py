@@ -76,7 +76,7 @@ def picks(row, late=None):
 def _rows(where, args=()):
     with ng._db_lock:
         c = sdoran._conn()
-        rows = c.execute("""SELECT m.*, l.data_json AS late_json FROM ng_match m
+        rows = c.execute("""SELECT m.*, l.data_json AS late_json, l.fetched_at AS late_at FROM ng_match m
                             LEFT JOIN ng_late l ON l.mid = m.mid AND l.ok = 1 WHERE """ + where, args).fetchall()
         c.close()
     return rows
@@ -90,7 +90,7 @@ def get_performance():
     rows = _rows("m.status='finished' AND m.ft_h IS NOT NULL AND m.odds_json IS NOT NULL")
     acc = {"ileri": {k: _empty() for k, *_ in STRATEGIES}, "kesif": {k: _empty() for k, *_ in STRATEGIES}}
     for r in rows:
-        late = json.loads(r["late_json"]) if r["late_json"] else None
+        late = json.loads(r["late_json"]) if r["late_json"] and sdoran.is_live(r["late_at"], r["kickoff_utc"]) else None
         od = json.loads(r["odds_json"])
         mk = oranlar._base(od)
         if late:
@@ -161,7 +161,7 @@ def export_json():
     rows = _rows("m.odds_json IS NOT NULL AND m.status IN ('stats','finished') AND m.kickoff_utc >= ?", (BASLANGIC,))
     out = []
     for r in rows:
-        late = json.loads(r["late_json"]) if r["late_json"] else None
+        late = json.loads(r["late_json"]) if r["late_json"] and sdoran.is_live(r["late_at"], r["kickoff_utc"]) else None
         out.append({"mid": r["mid"], "home": r["home"], "away": r["away"], "kickoff_utc": r["kickoff_utc"],
                     "status": r["status"], "ft": [r["ft_h"], r["ft_a"]],
                     "picks": {k: {"side": "1X2"[i], "ref": ref} for k, (i, ref) in picks(r, late).items()}})

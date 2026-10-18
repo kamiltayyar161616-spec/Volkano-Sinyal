@@ -44,6 +44,7 @@
 {% macro pc(v) %}{% if v is not none %}{{ (v*100)|round|int }}{% else %}-{% endif %}{% endmacro %}
 
 {% block content %}
+<div class="ng-dl"><a href="/strateji/indir">⬇ Strateji verisini indir (JSON)</a></div>
 <h2 class="section">🧪 STRATEJİLER</h2>
 <div class="section-sub">ROI: Pinnacle kapanış oranından düz bahis (yoksa Bet365). "Volkano" satırı: Volkano oranı olan maçlarda gerçek oynanabilir ROI. n≥100 olmadan kesin karar yok.</div>
 {% for s in perf %}
@@ -87,5 +88,4 @@
   <div>{% if m.tip %}<span class="tag a">Model: {{ m.tip }} %{{ pc(m.prob) }}</span>{% endif %}{% for s in m.strat %}<span class="tag w">{{ s[0] }}: {{ s[1] }}</span>{% endfor %}</div>
 </div>
 {% else %}<div class="empty">Önümüzdeki 48 saatte istatistiği çekilmiş maç yok.</div>{% endfor %}
-<div class="ng-dl"><a href="/strateji/indir">⬇ Strateji verisini indir (JSON)</a></div>
 {% endblock %}

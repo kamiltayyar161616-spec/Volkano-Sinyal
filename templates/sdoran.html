@@ -61,6 +61,7 @@
 {% block content %}
 <div class="ng-bar">
   <span class="ng-chip">işlenen maç <b>{{ d.n_ok }}</b></span>
+  <span class="ng-chip">canlı kayıt (biten) <b>{{ d.n_live }}</b></span>
   <span class="ng-chip">dosyası olmayan <b>{{ d.n_fail }}</b></span>
   {% if d.last.at %}<span class="ng-chip">son tur <b>{{ d.last.at | localdatetime }}</b></span>{% endif %}
 </div>
@@ -68,7 +69,7 @@
 <div class="ng-dl"><a href="/sd-oran/indir">⬇ Son dakika verisini indir (JSON)</a></div>
 
 <h2 class="section">⏱ SON DAKİKA SİNYALLERİ</h2>
-<div class="section-sub">"Piyasa" = limitsiz şirketlerin (Pinnacle, borsalar, Sbobet, Crown...) KAPANIŞ fiyatı. Fark pozitifse sinyal kapanışın bile bilmediği bir şey biliyor. Negatif ve büyükse sinyal TERS çalışıyor demektir; o da işe yarar.</div>
+<div class="section-sub">Sadece maç başlarken (≤70 dk) çekilen CANLI kayıtlar sayılır; günler sonra geriye dönük çekilen dosyalarda son dakika geçmişi seyreliyor. "Piyasa" = limitsiz şirketlerin (Pinnacle, borsalar, Sbobet, Crown...) KAPANIŞ fiyatı. Fark pozitifse sinyal kapanışın bile bilmediği bir şey biliyor. Negatif ve büyükse sinyal TERS çalışıyor demektir; o da işe yarar.</div>
 {{ sig_table(perf) }}
 
 <h2 class="section">🏦 ŞİRKET × SON 30 DK HAREKETİ × ORAN ARALIĞI</h2>
