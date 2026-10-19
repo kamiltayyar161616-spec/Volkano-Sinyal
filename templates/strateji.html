@@ -70,13 +70,14 @@
 <h2 class="section">📅 ÖNÜMÜZDEKİ 48 SAAT</h2>
 <div class="section-sub">Model tahmini ve şu an tetiklenen oran stratejileri. Son dakika stratejileri (limitsiz 10 dk, favori dışı düşüş) maç başlarken hesaplanır, burada görünmez.</div>
 <div class="sw">
-  <a href="?sirala=saat{{ '&sadece=1' if only else '' }}" class="{{ 'on' if sort == 'saat' else '' }}">⏰ Başlama saatine göre</a>
-  <a href="?sirala=olasilik{{ '&sadece=1' if only else '' }}" class="{{ 'on' if sort == 'olasilik' else '' }}">🎯 Kazanma olasılığına göre</a>
+  <a href="?sirala=saat{{ '&sadece=1' if only else ('&sadece=ana' if ana else '') }}" class="{{ 'on' if sort == 'saat' else '' }}">⏰ Başlama saatine göre</a>
+  <a href="?sirala=olasilik{{ '&sadece=1' if only else ('&sadece=ana' if ana else '') }}" class="{{ 'on' if sort == 'olasilik' else '' }}">🎯 Kazanma olasılığına göre</a>
   <a href="?sirala={{ sort }}{{ '' if only else '&sadece=1' }}" class="{{ 'on' if only else '' }}">🧪 Sadece stratejisi olanlar</a>
+  <a href="?sirala={{ sort }}{{ '' if ana else '&sadece=ana' }}" class="{{ 'on' if ana else '' }}">⭐ Sadece ANA strateji (X)</a>
 </div>
 <div class="ng-meta" style="margin:6px 16px;">{{ up|length }} maç</div>
 {% for m in up %}
-<div class="ng-card {{ 'hot' if m.strat else '' }}">
+<div class="ng-card {{ 'hot' if m.strat else '' }}"{% if m.ana %} style="border:2px solid #f5b301;"{% endif %}>
   <div class="ng-teams">{{ m.home }} — {{ m.away }}</div>
   <div class="ng-meta">{{ m.league or '' }} &middot; {{ m.kickoff | localdatetime }}</div>
   <div class="og">
@@ -86,6 +87,7 @@
     {% if m.vk %}<div class="h">Volkano</div>{% for i in range(3) %}<div>{{ m.vk[i] }}</div>{% endfor %}{% endif %}
   </div>
   <div>{% if m.tip %}<span class="tag a">Model: {{ m.tip }} %{{ pc(m.prob) }}</span>{% endif %}{% for s in m.strat %}<span class="tag w">{{ s[0] }}: {{ s[1] }}</span>{% endfor %}</div>
+  {% if m.ana %}<div style="margin-top:6px;font-weight:700;color:#f5b301;">⭐ ANA STRATEJİ → düz X oyna</div>{% endif %}
 </div>
 {% else %}<div class="empty">Önümüzdeki 48 saatte istatistiği çekilmiş maç yok.</div>{% endfor %}
 {% endblock %}

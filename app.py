@@ -257,8 +257,9 @@ def sdoran_indir():
 def strateji_page():
     sort = request.args.get("sirala", "saat")
     only = request.args.get("sadece") == "1"
+    ana = request.args.get("sadece") == "ana"
     return render_template("strateji.html", perf=strateji.get_performance(),
-                           up=strateji.get_upcoming(sort=sort, only=only), sort=sort, only=only,
+                           up=strateji.get_upcoming(sort=sort, only=only, ana=ana), sort=sort, only=only, ana=ana,
                            baslangic=strateji.BASLANGIC, bahis=strateji.BAHIS, active_page="strateji")
 
 

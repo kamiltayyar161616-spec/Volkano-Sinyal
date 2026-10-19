@@ -30,6 +30,8 @@ STRATEGIES = [
      "≥5 yumuşak + keskinler aynı tarafa kaymış; beraberlik oynanır. Keşif: n=197, ROI +%9.", "oran"),
     ("herd_draw_hi", "BERABERLİK — sadece X oranı ≥3.80",
      "Herkes aynı yöne + Pinnacle beraberlik oranı ≥3.80 (net favorili maçlar). 18 Ekim: keşif n=99 ROI +%18, ileri n=67 ROI +%32; dengeli maçlarda (X<3.8) strateji eksi.", "oran"),
+    ("herd_draw_vk", "⭐ ANA: BERABERLİK + Volkano'da var + X ≥3.80",
+     "Herkes aynı yöne + Pinnacle X ≥3.80 + maç Volkano'da listeli (büyük ligler). 19 Ekim: keşif n=64 ROI +%35, ileri n=61 ROI +%47, toplam n=125 +%41. Volkano'da olmayan maçlarda beraberlik sinyali −%18.", "oran"),
     ("home_band", "Ev sahibi 1.50–2.00",
      "Pinnacle ev oranı 1.50–2.00 arasında. Keşif: n=207, %58.5 isabet (piyasa %52.6), ROI +%2.4.", "oran"),
 ]
@@ -66,6 +68,9 @@ def picks(row, late=None):
             out["herd_draw"] = (1, ref)
             if ref and ref[1] >= 3.8:
                 out["herd_draw_hi"] = (1, ref)
+                vko = (json.loads(row["volkano_json"]) or {}).get("odds") if row["volkano_json"] else None
+                if vko and all(vko):
+                    out["herd_draw_vk"] = (1, ref)
         if ref and HOME_BAND[0] <= ref[0] < HOME_BAND[1]:
             out["home_band"] = (0, ref)
     if late:
@@ -134,7 +139,7 @@ def get_performance():
     return out
 
 
-def get_upcoming(sort="saat", only=False, hours=48):
+def get_upcoming(sort="saat", only=False, hours=48, ana=False):
     now = ng._now()
     rows = _rows("m.status='stats' AND m.kickoff_utc > ? AND m.kickoff_utc < ?",
                  (ng._iso(now), ng._iso(now + timedelta(hours=hours))))
@@ -147,12 +152,15 @@ def get_upcoming(sort="saat", only=False, hours=48):
         p = picks(r)
         if only and not p:
             continue
+        if ana and "herd_draw_vk" not in p:
+            continue
         ti = max(range(3), key=lambda i: fin[i]) if fin else None
         ref = _ref((od or {}).get("watch"))
         out.append({"kickoff": r["kickoff_utc"], "home": r["home"], "away": r["away"],
                     "league": r["league_vk"] or r["league_ng"],
                     "tip": "1X2"[ti] if ti is not None else None, "prob": fin[ti] if fin else None,
                     "final": fin, "vk": vk, "ref": ref,
+                    "ana": "herd_draw_vk" in p,
                     "strat": [(LABEL[k], "1X2"[i]) for k, (i, _) in p.items()]})
     if sort == "olasilik":
         out.sort(key=lambda x: -(x["prob"] or 0))
