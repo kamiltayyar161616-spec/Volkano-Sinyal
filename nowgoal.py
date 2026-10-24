@@ -163,7 +163,7 @@ def _conn():
     for col, typ in (("tip_side", "TEXT"), ("tip_odd", "REAL"), ("tip_prob", "REAL"), ("tip_fav", "TEXT"),
                      ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT"),
                      ("odds_json", "TEXT"), ("odds_at", "TEXT"), ("odds_final", "INTEGER"),
-                     ("odds_first", "TEXT")):
+                     ("odds_first", "TEXT"), ("ht_h", "INTEGER"), ("ht_a", "INTEGER")):
         if col not in have:
             c.execute(f"ALTER TABLE ng_match ADD COLUMN {col} {typ}")
     return c
@@ -190,15 +190,21 @@ def _tarih(alan):
         return None
 
 
-def _flash(mid):
-    """-> (kickoff_utc_iso, ev_skor, dep_skor)"""
+def _flash_full(mid):
+    """flashdata ilk parca alanlari (19 Eki dogrulandi): 6/7 skor, 8 durum (0 baslamadi, 1 ilk yari,
+    2 devre, 3 ikinci yari, 4 uzatma, -1 bitti, -10..-14 iptal/ertelendi), 15/16 ilk yari skoru."""
     ham = _get(f"/flashdata/get?id={mid}&t={int(time.time() * 1000)}",
                valid=lambda b: any(_tarih(x) for x in b.split("!")[0].split("^")))
     bas = ham.split("!")[0].split("^")
+    g = lambda i: bas[i] if len(bas) > i else None
     ko = next((_tarih(x) for x in bas if _tarih(x)), None)
-    ev = bas[6] if len(bas) > 6 else None
-    dep = bas[7] if len(bas) > 7 else None
-    return (_iso(ko) if ko else None), ev, dep
+    return {"ko": _iso(ko) if ko else None, "h": g(6), "a": g(7), "state": g(8), "hth": g(15), "hta": g(16)}
+
+
+def _flash(mid):
+    """-> (kickoff_utc_iso, ev_skor, dep_skor)"""
+    f = _flash_full(mid)
+    return f["ko"], f["h"], f["a"]
 
 
 def _sitemap_ids():
@@ -857,7 +863,8 @@ def resolve(log):
     done = 0
     for r in rows:
         try:
-            ko, es, ds = _flash(r["mid"])
+            f = _flash_full(r["mid"])
+            ko, es, ds = f["ko"], f["h"], f["a"]
         except Exception as e:
             log.append(f"sonuç {r['mid']} hata {e}")
             time.sleep(BEKLE)
@@ -866,9 +873,13 @@ def resolve(log):
             c = _conn()
             if ko and ko != r["kickoff_utc"] and datetime.fromisoformat(ko) > now:
                 c.execute("UPDATE ng_match SET kickoff_utc=? WHERE mid=?", (ko, r["mid"]))  # ertelendi
+            elif f["state"] in ("1", "2", "3", "4", "5"):
+                pass   # mac hala oynaniyor (gecikmeli baslama / uzatma) -> sonraki turda tekrar sor
             elif es and ds and es.isdigit() and ds.isdigit():
-                c.execute("UPDATE ng_match SET ft_h=?, ft_a=?, result_at=?, status='finished' WHERE mid=?",
-                          (int(es), int(ds), _iso(_now()), r["mid"]))
+                hth, hta = f["hth"], f["hta"]
+                ht = (int(hth), int(hta)) if hth and hta and hth.isdigit() and hta.isdigit() else (None, None)
+                c.execute("UPDATE ng_match SET ft_h=?, ft_a=?, ht_h=?, ht_a=?, result_at=?, status='finished' WHERE mid=?",
+                          (int(es), int(ds), ht[0], ht[1], _iso(_now()), r["mid"]))
                 done += 1
             elif datetime.fromisoformat(r["kickoff_utc"]) < now - timedelta(hours=VOID_AFTER_H):
                 c.execute("UPDATE ng_match SET status='void' WHERE mid=?", (r["mid"],))
