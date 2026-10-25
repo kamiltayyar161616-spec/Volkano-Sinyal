@@ -117,6 +117,22 @@ def oracle_indir():
     return send_file(ORACLE_LOG_FILE, as_attachment=True, download_name="oracle_veri.json", mimetype="application/json")
 
 
+@app.route("/oracle-tahminler/indir")
+def oracle_tahminler_indir():
+    """Oracle (6), Oracle-3, Oracle-9 ve cift tavan kayitlari (picks tablosu) + sonuclari."""
+    import json as _json
+    import sqlite3 as _sq
+    from match_analyzer import DB_FILE as _PICKS_DB
+    c = _sq.connect(_PICKS_DB)
+    c.row_factory = _sq.Row
+    rows = [dict(r) for r in c.execute(
+        "SELECT * FROM picks WHERE category LIKE 'oracle%' OR category LIKE '%cift%' ORDER BY match_time")]
+    c.close()
+    body = _json.dumps({"n": len(rows), "picks": rows}, ensure_ascii=False)
+    return app.response_class(body, mimetype="application/json",
+                              headers={"Content-Disposition": "attachment; filename=oracle_tahminler.json"})
+
+
 @app.route("/oracle3")
 def oracle3():
     if not get_oracle3_comparison_cached():
