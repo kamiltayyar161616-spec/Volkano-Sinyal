@@ -1,6 +1,6 @@
 """
-AllSportsAPI (allsportsapi.com) üzerinden bitmiş maçların skorunu çekip
-picks tablosunu günceller.
+Bitmiş maçların skorunu çekip picks tablosunu günceller.
+25 Eki 2026'dan beri kaynak: SAHA'nın NowGoal veritabanı (AllSports deneme anahtarı bitti).
 
 Kullanım: ortam değişkeni ALLSPORTS_API_KEY set edilmeli.
     export ALLSPORTS_API_KEY="senin_key'in"
@@ -12,6 +12,8 @@ o tarihten sonra yeni bir key alınmadıkça sonuç kontrolü sessizce durur
 
 import os
 import re
+import json
+import sqlite3
 import difflib
 from datetime import datetime, timezone, timedelta
 
@@ -34,23 +36,42 @@ def _norm(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip()
 
 
+NG_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nowgoal.db")
+
+
 def _fetch_fixtures_by_date(date_str: str) -> list:
-    if not API_KEY:
+    """25 Eki 2026: AllSports yerine SAHA'nin NowGoal veritabani (ag istegi yok).
+    Eski AllSports alan adlariyla dondurur; her maci hem NowGoal hem Volkano adlariyla verir
+    (picks tablosundaki adlar cogunlukla Volkano'dan gelir)."""
+    if not os.path.exists(NG_DB):
         return []
     try:
-        resp = httpx.get(
-            API_BASE,
-            params={"met": "Fixtures", "APIkey": API_KEY, "from": date_str, "to": date_str},
-            timeout=25,
-        )
-        if resp.status_code != 200:
-            return []
-        data = resp.json()
-        if data.get("success") != 1:
-            return []
-        return data.get("result") or []
+        day = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        c = sqlite3.connect(f"file:{NG_DB}?mode=ro", uri=True, timeout=20)
+        rows = c.execute("""SELECT home, away, status, ft_h, ft_a, volkano_json FROM ng_match
+                            WHERE kickoff_utc >= ? AND kickoff_utc < ?""",
+                         ((day - timedelta(hours=6)).isoformat(), (day + timedelta(hours=30)).isoformat())).fetchall()
+        c.close()
     except Exception:
         return []
+    out = []
+    for home, away, status, fh, fa, vj in rows:
+        if status == "finished" and fh is not None:
+            st, res = "Finished", f"{fh} - {fa}"
+        elif status == "void":
+            st, res = "Postponed", ""
+        else:
+            continue
+        names = [(home, away)]
+        try:
+            vk = json.loads(vj) if vj else {}
+            if vk.get("home") and vk.get("away"):
+                names.append((vk["home"], vk["away"]))
+        except Exception:
+            pass
+        for h, a in names:
+            out.append({"event_home_team": h, "event_away_team": a, "event_status": st, "event_final_result": res})
+    return out
 
 
 def _parse_result(result_str):
@@ -98,9 +119,6 @@ def _fuzzy_find_fixture(key, fx_index):
 
 
 def check_pending_results() -> dict:
-    if not API_KEY:
-        return {"checked": 0, "updated": 0, "skipped_no_key": True}
-
     now = datetime.now(timezone.utc)
     conn = _get_conn()
     updated = 0

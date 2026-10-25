@@ -2990,11 +2990,12 @@ def get_oracle_prediction(home: str, away: str, match_time: str, num_matches: in
     yetersizse zaten anlamli bir tahmin uretilemez).
     num_matches: form hesabinda kac gecmis mac kullanilacak (varsayilan 6 -- normal Oracle;
     'Oracle-3' varyanti bunu 3 vererek cagirir, karsilastirma icin)."""
-    entry = _lookup_fixture_entry(home, away, match_time)
-    if entry is None:
+    # 25 Eki 2026: veri NowGoal'dan (SAHA nowgoal.db) -- AllSports deneme anahtari bitti
+    try:
+        ko_utc = _parse_to_local(match_time).astimezone(timezone.utc)
+    except Exception:
         return None
-
-    match_data = oracle_data.get_oracle_match_data(entry.get("home_key"), entry.get("away_key"), entry.get("league_key"), num_matches=num_matches)
+    match_data = oracle_data.get_oracle_match_data_ng(home, away, ko_utc, _name_matches, num_matches=num_matches)
     if match_data is None:
         return None
 

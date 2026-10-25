@@ -268,3 +268,104 @@ def get_oracle_match_data(home_key, away_key, league_key, num_matches: int = 6) 
         "away_general": away_all[:num_matches],
         "away_venue": away_venue[:num_matches],
     }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# NOWGOAL VERI KAYNAGI (AllSports deneme anahtari bitti -> 25 Eki 2026'dan beri)
+# Mac + takim gecmisi SAHA'nin NowGoal veritabanindan (data/nowgoal.db) okunur; ag istegi yok.
+# ════════════════════════════════════════════════════════════════════════════
+import json as _json
+import sqlite3 as _sqlite3
+from collections import Counter as _Counter
+
+NG_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nowgoal.db")
+_NG_CUP = ("CUP", "Cup", "FAC", "FAT", "LC", "C", "SC", "YCup")
+
+
+def _ng_is_cup(code):
+    code = code or ""
+    return code == "INT CF" or any(p in code.split() for p in _NG_CUP)
+
+
+def _ng_team(rows):
+    c = _Counter()
+    for r in rows:
+        c[r.get("home")] += 1
+        c[r.get("away")] += 1
+    c.pop(None, None)
+    return c.most_common(1)[0][0] if c else None
+
+
+def _ng_league(st):
+    hc = _Counter(r["lg"] for r in st.get("home_last", []) if r.get("lg"))
+    ac = _Counter(r["lg"] for r in st.get("away_last", []) if r.get("lg"))
+    common = [k for k, _ in (hc + ac).most_common() if k in hc and k in ac]
+    for k in common:
+        if not _ng_is_cup(k):
+            return k
+    return common[0] if common else None
+
+
+def _ng_history(rows, team, code):
+    lg, allm = [], []
+    for r in rows:
+        ft = r.get("ft")
+        if not ft or team not in (r.get("home"), r.get("away")):
+            continue
+        is_home = r.get("home") == team
+        s, k = (ft[0], ft[1]) if is_home else (ft[1], ft[0])
+        m = {"goals_scored": s, "goals_conceded": k, "is_home": is_home, "date": r.get("date") or ""}
+        if r.get("lg") == code:
+            lg.append(m)
+        if not _ng_is_cup(r.get("lg")):
+            allm.append(m)
+    lg.sort(key=lambda x: x["date"], reverse=True)
+    allm.sort(key=lambda x: x["date"], reverse=True)
+    return lg if len(lg) >= 3 else allm
+
+
+def find_ng_match(home, away, kickoff_utc, name_match, hours=3):
+    """Volkano mac adi + saati -> NowGoal satiri (once Volkano eslesmesindeki birebir adlar, sonra bulanik)."""
+    if not os.path.exists(NG_DB):
+        return None
+    try:
+        c = _sqlite3.connect(f"file:{NG_DB}?mode=ro", uri=True, timeout=20)
+        c.row_factory = _sqlite3.Row
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, status, ft_h, ft_a, volkano_json, stats_json
+                            FROM ng_match WHERE kickoff_utc BETWEEN ? AND ?""",
+                         ((kickoff_utc - datetime.timedelta(hours=hours)).isoformat(),
+                          (kickoff_utc + datetime.timedelta(hours=hours)).isoformat())).fetchall()
+        c.close()
+    except Exception:
+        return None
+    fuzzy = None
+    for r in rows:
+        vk = _json.loads(r["volkano_json"]) if r["volkano_json"] else {}
+        if vk.get("home") == home and vk.get("away") == away:
+            return r
+        if fuzzy is None and ((name_match(home, r["home"]) and name_match(away, r["away"])) or
+                              (vk.get("home") and name_match(home, vk["home"]) and name_match(away, vk.get("away") or ""))):
+            fuzzy = r
+    return fuzzy
+
+
+def get_oracle_match_data_ng(home, away, kickoff_utc, name_match, num_matches: int = 6):
+    r = find_ng_match(home, away, kickoff_utc, name_match)
+    if r is None or not r["stats_json"]:
+        return None
+    st = _json.loads(r["stats_json"])
+    code = _ng_league(st)
+    ht = _ng_team(st.get("home_last", [])) or st.get("home_team")
+    at = _ng_team(st.get("away_last", [])) or st.get("away_team")
+    home_all = _ng_history(st.get("home_last", []), ht, code)
+    away_all = _ng_history(st.get("away_last", []), at, code)
+    if len(home_all) < 3 or len(away_all) < 3:
+        return None
+    home_venue = [m for m in home_all if m["is_home"]] or home_all[:num_matches]
+    away_venue = [m for m in away_all if not m["is_home"]] or away_all[:num_matches]
+    return {
+        "home_general": home_all[:num_matches],
+        "home_venue": home_venue[:num_matches],
+        "away_general": away_all[:num_matches],
+        "away_venue": away_venue[:num_matches],
+    }
