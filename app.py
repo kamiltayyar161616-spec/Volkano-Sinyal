@@ -125,8 +125,12 @@ def oracle_tahminler_indir():
     from match_analyzer import DB_FILE as _PICKS_DB
     c = _sq.connect(_PICKS_DB)
     c.row_factory = _sq.Row
-    rows = [dict(r) for r in c.execute(
-        "SELECT * FROM picks WHERE category LIKE 'oracle%' OR category LIKE '%cift%' ORDER BY match_time")]
+    rows = [dict(r) for r in c.execute("""
+        SELECT p.*, o.opening_1 AS vk_ac_1, o.opening_x AS vk_ac_x, o.opening_2 AS vk_ac_2,
+               o.current_1 AS vk_1, o.current_x AS vk_x, o.current_2 AS vk_2
+        FROM picks p LEFT JOIN odds_tracking o
+          ON o.source='volcano' AND o.home=p.home AND o.away=p.away AND o.match_time=p.match_time
+        WHERE p.category LIKE 'oracle%' OR p.category LIKE '%cift%' ORDER BY p.match_time""")]
     c.close()
     body = _json.dumps({"n": len(rows), "picks": rows}, ensure_ascii=False)
     return app.response_class(body, mimetype="application/json",
