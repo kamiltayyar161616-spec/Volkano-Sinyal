@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 
 from match_analyzer import _load_source_matches, _name_matches, _parse_to_local
+import vk_alias
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "data", "nowgoal.db")
@@ -623,7 +624,10 @@ def match_market(markets, home, away, ko_iso):
     except Exception:
         return None, None
     vk = None
-    e = _find(markets.get("volcano", []), home, away, ko)
+    try:
+        e = vk_alias.find(markets.get("volcano", []), home, away, ko)   # ogrenen eslestirme
+    except Exception:
+        e = _find(markets.get("volcano", []), home, away, ko)
     if e:
         t = _triple(e.get("odds") or {})
         if t:
@@ -849,6 +853,14 @@ def evaluate(log):
                 n_pick += 1
             c.commit()
             c.close()
+    try:
+        yeni = len(vk_alias.learned_now)
+        vk_alias.save()
+        if yeni:
+            log.append(f"Volkano isim sözlüğü: +{yeni} yeni ({', '.join(f'{a}={b}' for a, b in vk_alias.learned_now[:5])})")
+        vk_alias.learned_now.clear()
+    except Exception as e:
+        log.append(f"isim sözlüğü hata {e}")
     log.append(f"değerlendirilen {len(rows)}, oran çekilen {n_odds} (dosyası olmayan {n_404}), Volkano eşleşen {n_vk}, kazanan tahmini {n_tip}, yeni değer tahmini {n_pick}")
 
 
