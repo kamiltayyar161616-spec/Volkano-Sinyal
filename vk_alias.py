@@ -120,7 +120,7 @@ def strong(ng, vk):
     return _alias(ng, vk) or _name_matches(ng or "", vk or "")
 
 
-def loose(ng, vk):
+def loose(ng, vk, strict=False):
     if _marks(ng) != _marks(vk):
         return False
     a, b = _norm(ng or ""), _norm(vk or "")
@@ -137,7 +137,8 @@ def loose(ng, vk):
         for y in tb:
             if len(x) >= 5 and len(y) >= 5 and (x in y or y in x or difflib.SequenceMatcher(None, x, y).ratio() >= 0.8):
                 return True
-    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.6
+    # sadece harf benzerligi (ortak kelime yok): 'crawley town'~'yate town' (0.67) gibi yanlislari onlemek icin 0.75
+    return not strict and difflib.SequenceMatcher(None, a, b).ratio() >= 0.75
 
 
 def find(evs, home, away, ko_dt, do_learn=True):
@@ -180,7 +181,7 @@ def find(evs, home, away, ko_dt, do_learn=True):
             learn(home, H(e)); learn(away, W(e))
         return e
     # 3) ikisi de gevsek + ayni dakika (+-5), tek aday
-    c3 = [e for d, e in near if d <= 5 * 60 and loose(home, H(e)) and loose(away, W(e))]
+    c3 = [e for d, e in near if d <= 5 * 60 and loose(home, H(e), True) and loose(away, W(e), True)]
     if len(c3) == 1:
         e = c3[0]
         if do_learn:
@@ -190,6 +191,26 @@ def find(evs, home, away, ko_dt, do_learn=True):
 
 
 # ------------------------------------------------------------------ komut satiri: toplu ogrenme
+
+def forget(names):
+    """Yanlis ogrenilmis isimleri sozlukten siler (NowGoal adi veya Volkano adi verilebilir)."""
+    global _dirty
+    A = _load()
+    keys = {_norm(x) for x in names}
+    n = 0
+    for k in list(A):
+        if k in keys:
+            del A[k]; n += 1
+            continue
+        for vn in list(A[k]):
+            if vn in keys:
+                del A[k][vn]; n += 1
+        if not A[k]:
+            del A[k]
+    _dirty += 1
+    save(force=True)
+    return n
+
 
 def _cli():
     import sys
@@ -298,4 +319,8 @@ def _cli():
 
 
 if __name__ == "__main__":
-    _cli()
+    import sys as _s
+    if len(_s.argv) > 2 and _s.argv[1] == "--sil":
+        print("silinen kayit:", forget(_s.argv[2:]))
+    else:
+        _cli()
