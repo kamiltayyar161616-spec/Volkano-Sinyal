@@ -45,7 +45,7 @@ HEADERS = {
 BEKLE = 1.0                  # istekler arasi sn (nazik tarama)
 CYCLE_SEC = 900              # 15 dk'da bir tur
 MAX_FLASH_PER_CYCLE = 150    # yeni maclarin saat sorgusu
-MAX_H2H_PER_CYCLE = 80       # analiz sayfasi cekimi
+MAX_H2H_PER_CYCLE = 150      # analiz sayfasi cekimi (lig fikstur taramasiyla mac sayisi artti)
 MAX_RESULT_PER_CYCLE = 80
 LOOKAHEAD_H = 36             # bu kadar saat icindeki maclarin istatistigi cekilir
 NEIGHBOR = 8                 # bilinen mac ID'sinin +-8 komsusu yoklanir (ayni lig/hafta ID'leri ardisik)
@@ -160,6 +160,8 @@ def _conn():
         ft_h INTEGER, ft_a INTEGER, result_at TEXT)""")
     c.execute("CREATE INDEX IF NOT EXISTS ix_ng_kick ON ng_match(kickoff_utc)")
     c.execute("CREATE TABLE IF NOT EXISTS ng_probe (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT)")
+    c.execute("""CREATE TABLE IF NOT EXISTS ng_league (lid INTEGER PRIMARY KEY, path TEXT, path_at TEXT,
+                 swept_at TEXT, n_window INTEGER, err TEXT)""")
     have = {r[1] for r in c.execute("PRAGMA table_info(ng_match)")}
     for col, typ in (("tip_side", "TEXT"), ("tip_odd", "REAL"), ("tip_prob", "REAL"), ("tip_fav", "TEXT"),
                      ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT"),
@@ -901,9 +903,120 @@ def resolve(log):
     log.append(f"sonuçlanan {done}/{len(rows)}")
 
 
+
+# ------------------------------------------------------------------ Lig fikstur taramasi (tam bulten)
+# NowGoal'un fikstur sayfasi veriyi yasak yollardan (/Scripts/, /gf/) yukluyor; o yuzden kullanilmiyor.
+# Bunun yerine izinli yol: football.nowgoal.net/league/<id> sayfasi -> /jsData/matchResult/json/<sezon>/(s|c)<id>_en.json
+# (football.nowgoal.net robots.txt: sadece /Scripts/ ve /en/ yasak). Lig listesi www sitemap'ten.
+LG_SITE = "https://football.nowgoal.net"
+LG_PER_CYCLE = 120           # tur basina taranan lig (991 lig ~ 2 saatte bir tam tur)
+LG_PATH_TTL_D = 7            # lig sayfasindaki json yolu (sezon) bu kadar gunde bir yenilenir
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
+
+
+def _lg_get(path):
+    import gzip
+    req = urllib.request.Request(LG_SITE + path, headers=dict(HEADERS, Referer=LG_SITE + "/"))
+    with urllib.request.urlopen(req, timeout=25) as r:
+        b = r.read()
+    if b[:2] == b"\x1f\x8b":
+        b = gzip.decompress(b)
+    return b.decode("utf-8", errors="replace").lstrip("\ufeff")
+
+
+def _lg_matches(obj, out):
+    """json icinde [mac_id, lig_id, durum, 'YYYY-MM-DD HH:MM'(GMT+8), ev_id, dep_id, ...] kayitlarini toplar."""
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _lg_matches(v, out)
+    elif isinstance(obj, list):
+        if len(obj) >= 6 and isinstance(obj[0], int) and obj[0] > 100000:
+            d = next((x for x in obj[1:6] if isinstance(x, str) and _DATE_RE.match(x)), None)
+            if d:
+                try:
+                    ko = datetime.strptime(d, "%Y-%m-%d %H:%M").replace(tzinfo=timezone(timedelta(hours=8)))
+                    out[obj[0]] = ko.astimezone(timezone.utc)
+                except ValueError:
+                    pass
+                return
+        for v in obj:
+            _lg_matches(v, out)
+
+
+def sweep_leagues(log):
+    now = _now()
+    with _db_lock:
+        c = _conn()
+        n_lg = c.execute("SELECT COUNT(*) FROM ng_league").fetchone()[0]
+        c.close()
+    if n_lg == 0 or now.hour == 4 and now.minute < 16:      # lig listesini ilk calismada ve gunde bir yenile
+        try:
+            ids = [int(x) for x in re.findall(r"/league/(\d+)<", _get("/football/league/sitemap.xml",
+                                                                         valid=lambda b: "/league/" in b))]
+            with _db_lock:
+                c = _conn()
+                c.executemany("INSERT OR IGNORE INTO ng_league (lid) VALUES (?)", [(i,) for i in ids])
+                c.commit()
+                c.close()
+        except Exception as e:
+            log.append(f"lig listesi hata {e}")
+    with _db_lock:
+        c = _conn()
+        todo = c.execute("SELECT lid, path, path_at FROM ng_league ORDER BY swept_at IS NOT NULL, swept_at LIMIT ?",
+                         (LG_PER_CYCLE,)).fetchall()
+        known = {r[0]: r[1] for r in c.execute("SELECT mid, kickoff_utc FROM ng_match WHERE kickoff_utc > ?",
+                                               (_iso(now - timedelta(days=2)),))}
+        c.close()
+    lo, hi = now - timedelta(hours=3), now + timedelta(hours=PROBE_WINDOW_H)
+    n_new = n_upd = n_err = 0
+    for row in todo:
+        lid, path, path_at = row["lid"], row["path"], row["path_at"]
+        err = None
+        win = 0
+        try:
+            if not path or not path_at or datetime.fromisoformat(path_at) < now - timedelta(days=LG_PATH_TTL_D):
+                page = _lg_get(f"/league/{lid}")
+                m = re.search(r"/jsData/matchResult/json/[^\"'`\s]+?_en\.json", page)
+                path = m.group(0) if m else ""
+                path_at = _iso(_now())
+                time.sleep(BEKLE)
+            found = {}
+            if path:
+                _lg_matches(json.loads(_lg_get(path)), found)
+                time.sleep(BEKLE)
+            add, upd = [], []
+            for mid, ko in found.items():
+                if not (lo <= ko <= hi):
+                    continue
+                win += 1
+                k = _iso(ko)
+                if mid not in known:
+                    add.append((mid, k, _iso(_now()), "past" if ko < now else "new"))
+                elif known[mid] != k:
+                    upd.append((k, mid))
+            with _db_lock:
+                c = _conn()
+                c.executemany("INSERT OR IGNORE INTO ng_match (mid, kickoff_utc, first_seen, status) VALUES (?,?,?,?)", add)
+                c.executemany("UPDATE ng_match SET kickoff_utc=? WHERE mid=? AND status IN ('new','stats')", upd)
+                c.commit()
+                c.close()
+            n_new += len(add)
+            n_upd += len(upd)
+        except Exception as e:
+            err = str(e)[:200]
+            n_err += 1
+        with _db_lock:
+            c = _conn()
+            c.execute("UPDATE ng_league SET path=?, path_at=?, swept_at=?, n_window=?, err=? WHERE lid=?",
+                      (path, path_at, _iso(_now()), win, err, lid))
+            c.commit()
+            c.close()
+    log.append(f"lig taramasi {len(todo)} lig, yeni mac {n_new}, saat degisen {n_upd}, hata {n_err}")
+
+
 def run_cycle():
     log = []
-    for step in (_probe_neighbors, collect, evaluate, resolve):
+    for step in (sweep_leagues, _probe_neighbors, collect, evaluate, resolve):
         try:
             step(log)
         except Exception as e:
