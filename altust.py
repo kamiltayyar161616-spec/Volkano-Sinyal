@@ -3,7 +3,7 @@
 Veri /root/defter/defter.py 'aday' isinden gelir (cron, 15 dk, vip-tahmin ortami):
   - au_aday : onumuzdeki 12 saatin Volkano'lu maclari -> Volkano 1.5-5.5 alt/ust oranlari + BetOracle gol beklentisi
               (Poisson) ile adil oran ve deger (BO olasiligi x Volkano orani - 1)
-  - au_kupon: mactan ~50 dk once oranlar kilitlenir; deger >= %10 ve oran 1.30-12.00 olan her secim kupona yazilir
+  - au_kupon: mactan ~10-15 dk once oranlar kilitlenir (cron 5 dk); deger >= %10 ve oran 1.30-12.00 olan her secim kupona yazilir
 Sonuclar ng_match (ft_h/ft_a) ile cozulur; performans cizgi x taraf ve deger bandina gore duz bahis ROI.
 """
 import json
@@ -45,6 +45,16 @@ def _band(dg):
     return "+%10-20" if dg < 0.20 else "+%20-40" if dg < 0.40 else "+%40 ve üstü"
 
 
+def _hareket(r):
+    """Volkano'nun bu secim icin ilk gorulen orani -> kilit orani. Oran >=%3 dustuyse bu tarafa para girmis."""
+    io = r.get("ilk_oran")
+    if not io:
+        return "ilk oran yok"
+    ch = r["oran"] / io - 1
+    return "Volkano oranı DÜŞTÜ (para bu tarafa)" if ch <= -0.03 else \
+           "Volkano oranı YÜKSELDİ (para karşı tarafa)" if ch >= 0.03 else "Volkano oranı sabit (±%3)"
+
+
 def _kupon():
     c = _defter()
     if not c:
@@ -55,6 +65,7 @@ def _kupon():
     for r in rows:
         ft = res.get(r["mid"])
         r["ft"] = ft
+        r["hareket"] = _hareket(r)
         if ft:
             t = ft[0] + ft[1]
             r["tuttu"] = t > r["cizgi"] if r["taraf"] == "UST" else t < r["cizgi"]
@@ -80,7 +91,7 @@ def get_performance(days=None):
     if days:
         sinir = ng._iso(ng._now() - timedelta(days=days))
         rows = [r for r in rows if r["ko"] >= sinir]
-    out = {"toplam": _ozet(rows), "cizgi": [], "bant": []}
+    out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": []}
     for ln in CIZGI:
         for tr in ("UST", "ALT"):
             o = _ozet([r for r in rows if r["cizgi"] == ln and r["taraf"] == tr])
@@ -90,6 +101,11 @@ def get_performance(days=None):
         o = _ozet([r for r in rows if _band(r["deger"]) == b])
         if o:
             out["bant"].append(dict(o, ad=f"BO değeri {b}"))
+    for h in ("Volkano oranı DÜŞTÜ (para bu tarafa)", "Volkano oranı sabit (±%3)", "Volkano oranı YÜKSELDİ (para karşı tarafa)"):
+        for tr in ("UST", "ALT"):
+            o = _ozet([r for r in rows if r["hareket"] == h and r["taraf"] == tr])
+            if o:
+                out["hareket"].append(dict(o, ad=f"{'ÜST' if tr == 'UST' else 'ALT'} · {h}"))
     return out
 
 

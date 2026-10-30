@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Alt/Üst Kupon{% endblock %}
 {% block page_tag %}ALT/ÜST KUPON{% endblock %}
-{% block subtitle %}BetOracle gol beklentisinden (Poisson) 1.5–5.5 alt/üst adil oranı üretilir, Volkano oranıyla karşılaştırılır. Değer = BO olasılığı × Volkano oranı − 1. Maçtan ~50 dk önce değeri ≥ %10 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
+{% block subtitle %}BetOracle gol beklentisinden (Poisson) 1.5–5.5 alt/üst adil oranı üretilir, Volkano oranıyla karşılaştırılır. Değer = BO olasılığı × Volkano oranı − 1. Maçtan ~10-15 dk önce değeri ≥ %10 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
 {% block extra_style %}
 <style>
   .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
@@ -63,16 +63,17 @@
 </div>
 {% if perf.cizgi %}<div class="section-sub">Çizgi × taraf</div>{{ ptab(perf.cizgi) }}{% endif %}
 {% if perf.bant %}<div class="section-sub">BetOracle değer bandı</div>{{ ptab(perf.bant) }}{% endif %}
+{% if perf.hareket %}<div class="section-sub">Para akışı: Volkano'nun bu seçimdeki ilk görülen oranı → kilit oranı (≥%3 değişim)</div>{{ ptab(perf.hareket) }}{% endif %}
 
 <h2 class="section">🎫 AKTİF KUPON</h2>
 <div class="section-sub">Oranı kilitlenmiş, sonucu bekleyen seçimler (maç başına birden fazla çizgi olabilir; birbirine bağlı seçimlerdir, aynı kombinede birlikte oynanmaz).</div>
 {% for r in d.aktif %}
 <div class="row"><span><b>{{ r.home }} — {{ r.away }}</b><br><span class="ng-meta">{{ r.ko | localdatetime }} · {{ r.lig or '' }} · BO gol {{ r.lt }}</span></span>
-  <span style="text-align:right"><span class="tag a">{{ r.cizgi }} {{ tr_ad(r.taraf) }} @{{ r.oran }}</span><br><span class="ng-meta">BO %{{ pc(r.p_bo) }} · değer +%{{ (r.deger*100)|round|int }}</span></span></div>
+  <span style="text-align:right"><span class="tag a">{{ r.cizgi }} {{ tr_ad(r.taraf) }} @{{ r.oran }}</span>{% if r.ilk_oran and r.ilk_oran != r.oran %}<br><span class="ng-meta">ilk {{ r.ilk_oran }} → {{ r.oran }}</span>{% endif %}<br><span class="ng-meta">BO %{{ pc(r.p_bo) }} · değer +%{{ (r.deger*100)|round|int }}</span></span></div>
 {% else %}<div class="empty">Şu an kilitli seçim yok.</div>{% endfor %}
 
 <h2 class="section">📅 YAKLAŞAN 12 SAAT</h2>
-<div class="section-sub">Her hücre: Volkano oranı / BO adil oranı. Çerçeveli = kupona girecek seçim (kesin liste maçtan ~50 dk önce kilitlenir, oranlar o ana kadar değişebilir).</div>
+<div class="section-sub">Her hücre: Volkano oranı / BO adil oranı. Çerçeveli = kupona girecek seçim (kesin liste maçtan ~10-15 dk önce kilitlenir, oranlar o ana kadar değişebilir).</div>
 {% for m in d.aday %}
 <div class="ng-card {{ 'hot' if m.secim else '' }}">
   <div class="ng-teams">{{ m.home }} — {{ m.away }}</div>
