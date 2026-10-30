@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Alt/Üst Kupon{% endblock %}
+{% block page_tag %}ALT/ÜST KUPON{% endblock %}
+{% block subtitle %}BetOracle gol beklentisinden (Poisson) 1.5–5.5 alt/üst adil oranı üretilir, Volkano oranıyla karşılaştırılır. Değer = BO olasılığı × Volkano oranı − 1. Maçtan ~50 dk önce değeri ≥ %10 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
+{% block extra_style %}
+<style>
+  .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
+  .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11.5px;
+    background:linear-gradient(135deg,var(--amber-bright),var(--amber)); color:#241a06; }
+  .ng-card{ margin:0 16px 10px; padding:13px 14px; border-radius:12px;
+    background:linear-gradient(165deg,var(--navy-soft),var(--navy)); border:1px solid var(--navy-line); }
+  .ng-card.hot{ border-color:var(--amber); }
+  .ng-teams{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .og{ display:grid; grid-template-columns:44px repeat(4,1fr); gap:3px; margin-top:8px; font-size:10px; }
+  .og div{ background:var(--navy-deep); border-radius:6px; padding:4px 3px; text-align:center; }
+  .og .h{ background:none; color:var(--chalk-faint); font-size:8.5px; }
+  .og .sel{ outline:1px solid var(--amber); color:var(--amber-bright); font-weight:700; }
+  .og small{ display:block; font-size:8px; color:var(--chalk-faint); }
+  .tag{ display:inline-block; font-size:9.5px; font-weight:700; padding:3px 7px; border-radius:5px; margin:5px 4px 0 0; background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .tag.a{ border-color:var(--amber-dim); color:var(--amber-bright); }
+  .tag.w{ border-color:var(--turf); color:var(--turf-bright); } .tag.l{ border-color:var(--clay-dim); color:var(--clay); }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .pt{ display:grid; grid-template-columns:1.4fr .6fr .9fr .8fr .9fr 1fr; gap:2px; margin:0 16px 10px; font-size:10px; }
+  .pt div{ padding:5px 4px; background:var(--navy); border-radius:4px; text-align:center; }
+  .pt .n{ text-align:left; } .pt .hd{ background:none; color:var(--chalk-faint); font-size:9px; }
+  .two{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:0 16px 10px; }
+  .two div{ background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; padding:9px; font-size:10.5px; }
+  .two b{ font-family:'Space Grotesk',sans-serif; font-size:16px; }
+  .row{ display:flex; justify-content:space-between; gap:8px; padding:8px 12px; margin:0 16px 5px; background:var(--navy); border:1px solid var(--navy-line); border-radius:9px; font-size:10.5px; }
+</style>
+{% endblock %}
+{% macro pc(v) %}{% if v is not none %}{{ (v*100)|round(1) }}{% else %}-{% endif %}{% endmacro %}
+{% macro tr_ad(t) %}{{ 'ÜST' if t == 'UST' else 'ALT' }}{% endmacro %}
+{% macro ptab(L) %}
+<div class="pt">
+  <div class="hd n">seçim</div><div class="hd">n</div><div class="hd">isabet</div><div class="hd">BO bekl.</div><div class="hd">ort. oran</div><div class="hd">ROI</div>
+  {% for o in L %}
+  <div class="n">{{ o.ad }}</div><div>{{ o.n }}</div><div>%{{ o.isabet }}</div><div>%{{ o.beklenen }}</div><div>{{ o.ort_oran }}</div>
+  <div class="{{ 'pos' if o.roi > 0 else 'neg' }}">{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}</div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% block content %}
+{% if not d.hazir %}
+<div class="empty">Alt/üst defteri henüz oluşmadı. VPS'te defter 'aday' işi çalışınca veriler burada görünecek.</div>
+{% else %}
+<div class="ng-dl"><a href="/alt-ust/indir">⬇ Alt/üst verisini indir (JSON)</a></div>
+
+<h2 class="section">📊 PERFORMANS</h2>
+<div class="section-sub">Kilitlenen oranla düz bahis. "BO bekl." = BetOracle'ın verdiği ortalama olasılık; isabet bunun altında kalıyorsa BO o çizgide iyimser demektir. n≥100 olmadan kesin karar yok.</div>
+<div class="two">
+  <div><div class="ng-meta">TOPLAM</div>
+    {% if perf.toplam %}<b class="{{ 'pos' if perf.toplam.roi > 0 else 'neg' }}">{{ '+' if perf.toplam.roi > 0 else '' }}%{{ perf.toplam.roi }}</b>
+    <div>n={{ perf.toplam.n }} · %{{ perf.toplam.isabet }} isabet</div><div>{{ '+' if perf.toplam.eur > 0 else '' }}{{ perf.toplam.eur }} €</div>
+    {% else %}<div class="ng-meta">henüz sonuçlanan yok</div>{% endif %}</div>
+  <div><div class="ng-meta">SON 7 GÜN</div>
+    {% if perf_7d.toplam %}<b class="{{ 'pos' if perf_7d.toplam.roi > 0 else 'neg' }}">{{ '+' if perf_7d.toplam.roi > 0 else '' }}%{{ perf_7d.toplam.roi }}</b>
+    <div>n={{ perf_7d.toplam.n }} · %{{ perf_7d.toplam.isabet }} isabet</div><div>{{ '+' if perf_7d.toplam.eur > 0 else '' }}{{ perf_7d.toplam.eur }} €</div>
+    {% else %}<div class="ng-meta">-</div>{% endif %}</div>
+</div>
+{% if perf.cizgi %}<div class="section-sub">Çizgi × taraf</div>{{ ptab(perf.cizgi) }}{% endif %}
+{% if perf.bant %}<div class="section-sub">BetOracle değer bandı</div>{{ ptab(perf.bant) }}{% endif %}
+
+<h2 class="section">🎫 AKTİF KUPON</h2>
+<div class="section-sub">Oranı kilitlenmiş, sonucu bekleyen seçimler (maç başına birden fazla çizgi olabilir; birbirine bağlı seçimlerdir, aynı kombinede birlikte oynanmaz).</div>
+{% for r in d.aktif %}
+<div class="row"><span><b>{{ r.home }} — {{ r.away }}</b><br><span class="ng-meta">{{ r.ko | localdatetime }} · {{ r.lig or '' }} · BO gol {{ r.lt }}</span></span>
+  <span style="text-align:right"><span class="tag a">{{ r.cizgi }} {{ tr_ad(r.taraf) }} @{{ r.oran }}</span><br><span class="ng-meta">BO %{{ pc(r.p_bo) }} · değer +%{{ (r.deger*100)|round|int }}</span></span></div>
+{% else %}<div class="empty">Şu an kilitli seçim yok.</div>{% endfor %}
+
+<h2 class="section">📅 YAKLAŞAN 12 SAAT</h2>
+<div class="section-sub">Her hücre: Volkano oranı / BO adil oranı. Çerçeveli = kupona girecek seçim (kesin liste maçtan ~50 dk önce kilitlenir, oranlar o ana kadar değişebilir).</div>
+{% for m in d.aday %}
+<div class="ng-card {{ 'hot' if m.secim else '' }}">
+  <div class="ng-teams">{{ m.home }} — {{ m.away }}</div>
+  <div class="ng-meta">{{ m.lig or '' }} · {{ m.ko | localdatetime }} · BO gol {{ m.lh|round(2) }} + {{ m.la|round(2) }} = <b>{{ m.lt }}</b></div>
+  <div class="og" style="grid-template-columns:44px repeat({{ m.satir|length }},1fr);">
+    <div class="h"></div>{% for ln, s in m.satir %}<div class="h">{{ ln }}</div>{% endfor %}
+    {% for tr in ('UST', 'ALT') %}
+      <div class="h">{{ tr_ad(tr) }}</div>
+      {% for ln, s in m.satir %}{% set x = s.get(tr) %}
+        <div class="{{ 'sel' if x and x.kupon else '' }}">{% if x %}{{ x.oran }}<small>{{ x.adil }}</small>{% else %}-{% endif %}</div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+  {% if m.secim %}<div>{% for ln, tr, od, dg in m.secim %}<span class="tag a">{{ ln }} {{ tr_ad(tr) }} @{{ od }} · +%{{ (dg*100)|round|int }}</span>{% endfor %}</div>{% endif %}
+</div>
+{% else %}<div class="empty">Önümüzdeki 12 saatte BO + Volkano alt/üst verisi olan maç yok.</div>{% endfor %}
+
+<h2 class="section">🧾 SON SONUÇLAR</h2>
+{% for r in d.son %}
+<div class="row"><span>{{ r.home }} — {{ r.away }}<br><span class="ng-meta">{{ r.ko | localdatetime }} · {{ r.ft[0] }}-{{ r.ft[1] }}</span></span>
+  <span class="tag {{ 'w' if r.tuttu else 'l' }}">{{ r.cizgi }} {{ tr_ad(r.taraf) }} @{{ r.oran }} {{ '✓' if r.tuttu else '✗' }}</span></div>
+{% else %}<div class="empty">Henüz sonuçlanan seçim yok.</div>{% endfor %}
+{% endif %}
+{% endblock %}

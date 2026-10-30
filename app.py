@@ -35,6 +35,7 @@ import nowgoal
 import oranlar
 import sdoran
 import strateji
+import altust
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -281,6 +282,21 @@ def strateji_page():
     return render_template("strateji.html", perf=strateji.get_performance(),
                            up=strateji.get_upcoming(sort=sort, only=only, ana=ana), sort=sort, only=only, ana=ana,
                            baslangic=strateji.BASLANGIC, bahis=strateji.BAHIS, active_page="strateji")
+
+
+@app.route("/alt-ust")
+def altust_page():
+    return render_template("altust.html", d=altust.get_page_data(), perf=altust.get_performance(),
+                           perf_7d=altust.get_performance(days=7), bahis=altust.BAHIS, active_page="altust")
+
+
+@app.route("/alt-ust/indir")
+def altust_indir():
+    import json as _json
+    from flask import Response
+    body = _json.dumps(altust.export_json(), ensure_ascii=False, default=str)
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=alt_ust_veri.json"})
 
 
 @app.route("/strateji/indir")
