@@ -986,6 +986,15 @@ def _cizgi_kaydet(c, recs, now):
                              WHERE mid=?""", (ou, ah, ou, ah, mid))
         elif r[2] == -1 and ou is not None:
             c.execute("UPDATE ng_match SET ou_kapanis=?, ah_kapanis=? WHERE mid=? AND ou_kapanis IS NULL", (ou, ah, mid))
+        if r[2] == -1:                                     # biten mac: skor + ilk yari skoru lig json'undan (izinli yol)
+            ms = re.match(r"^(\d+)-(\d+)$", str(r[6] or "").strip())
+            iy = re.match(r"^(\d+)-(\d+)$", str(r[7] or "").strip())
+            if ms:
+                c.execute("""UPDATE ng_match SET ft_h=?, ft_a=?, ht_h=COALESCE(ht_h, ?), ht_a=COALESCE(ht_a, ?),
+                             result_at=COALESCE(result_at, ?), status=CASE WHEN status IN ('new','stats') THEN 'finished' ELSE status END
+                             WHERE mid=? AND ft_h IS NULL""",
+                          (int(ms.group(1)), int(ms.group(2)), int(iy.group(1)) if iy else None, int(iy.group(2)) if iy else None,
+                           _iso(now), mid))
 
 
 def sweep_leagues(log):
@@ -1007,10 +1016,13 @@ def sweep_leagues(log):
             log.append(f"lig listesi hata {e}")
     with _db_lock:
         c = _conn()
-        acil = c.execute("""SELECT l.lid, l.path, l.path_at FROM ng_league l WHERE l.lid IN
+        acil = c.execute("""SELECT l.lid, l.path, l.path_at FROM ng_league l WHERE (l.lid IN
                  (SELECT DISTINCT lid FROM ng_match WHERE lid IS NOT NULL AND kickoff_utc > ? AND kickoff_utc < ?)
+                 OR l.lid IN (SELECT DISTINCT lid FROM ng_match WHERE lid IS NOT NULL AND ft_h IS NULL
+                              AND kickoff_utc > ? AND kickoff_utc < ?))
                  AND (l.swept_at IS NULL OR l.swept_at < ?)""",
-                 (_iso(now), _iso(now + timedelta(hours=2)), _iso(now - timedelta(minutes=25)))).fetchall()
+                 (_iso(now), _iso(now + timedelta(hours=2)), _iso(now - timedelta(hours=8)), _iso(now - timedelta(minutes=110)),
+                  _iso(now - timedelta(minutes=25)))).fetchall()
         todo = acil + [r for r in c.execute("SELECT lid, path, path_at FROM ng_league ORDER BY swept_at IS NOT NULL, swept_at LIMIT ?",
                                              (LG_PER_CYCLE,)).fetchall() if r[0] not in {a[0] for a in acil}]
         known = {r[0]: r[1] for r in c.execute("SELECT mid, kickoff_utc FROM ng_match WHERE kickoff_utc > ?",
