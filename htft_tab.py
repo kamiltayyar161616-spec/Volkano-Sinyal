@@ -249,3 +249,17 @@ def kayitli_kuponlar():
         k["bitti"] = bitti
         k["kar"] = round(k["donus"] - h.get("kombi", 0), 2) if bitti else None
     return L
+
+
+def kayit_ozet(L):
+    """Biten kayitli kuponlarin toplami: yatan (kombi, 1 birim/kombi), donus, ROI, ortalama tutan, karli kupon sayisi."""
+    B = [k for k in L if k.get("bitti")]
+    if not B:
+        return None
+    yatan = sum((k.get("hesap") or {}).get("kombi", 0) for k in B)
+    donus = sum(k["donus"] for k in B)
+    return {"n": len(B), "yatan": yatan, "donus": round(donus, 2), "kar": round(donus - yatan, 2),
+            "roi": round(100 * (donus / yatan - 1), 1) if yatan else 0.0,
+            "ort_tutan": round(sum(k["tutan"] for k in B) / len(B), 2),
+            "beklenen_tutan": round(sum((k.get("hesap") or {}).get("beklenen_tutan", 0) for k in B) / len(B), 2),
+            "karli": sum(1 for k in B if k["kar"] > 0)}

@@ -297,7 +297,7 @@ def htft_page():
     legs = htft_tab.kur_kupon(0.0, -0.05) if filtre else htft_tab.kur_kupon()
     return render_template("htft.html", filtre=filtre, d=htft_tab.get_page_data(), perf=htft_tab.get_performance(),
                            perf_7d=htft_tab.get_performance(days=7), bahis=htft_tab.BAHIS, active_page="htft",
-                           sk=legs, sh=htft_tab.sistem_hesap(legs), kayit=htft_tab.kayitli_kuponlar()[:15],
+                           sk=legs, sh=htft_tab.sistem_hesap(legs), kayit=(_kk := htft_tab.kayitli_kuponlar())[:15], kayit_oz=htft_tab.kayit_ozet(_kk),
                            kaydedildi=request.args.get("k"))
 
 

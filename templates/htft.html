@@ -51,6 +51,8 @@
 {% else %}<div class="empty">Şu an kupon kurulacak kadar İY/MS verisi yok.</div>{% endif %}
 
 {% if kayit %}<h2 class="section">📒 KAYITLI SİSTEM KUPONLARI</h2>
+{% set oz = kayit_oz %}{% if oz %}<div class="row"><span><b>Biten {{ oz.n }} kupon</b> · kârlı {{ oz.karli }}<br><span class="ng-meta">ort. tutan {{ oz.ort_tutan }} / 10 (model beklentisi {{ oz.beklenen_tutan }}) · yatan {{ oz.yatan }} birim, dönüş {{ oz.donus }}</span></span>
+  <span style="text-align:right"><b class="{{ 'pos' if oz.kar > 0 else 'neg' }}">{{ '+' if oz.roi > 0 else '' }}%{{ oz.roi }}</b><br><span class="ng-meta">{{ '+' if oz.kar > 0 else '' }}{{ oz.kar }} birim</span></span></div>{% else %}<div class="section-sub">Henüz tüm maçları biten kayıtlı kupon yok.</div>{% endif %}
 {% for k in kayit %}
 <details class="row" style="display:block"><summary>{{ k.at | localdatetime }} · {{ 'filtreli' if k.filtre else 'saf olasılık' }} · {{ k.legs|length }} ayak · tutan {{ k.tutan }} ·
   {% if k.bitti %}<b class="{{ 'pos' if k.kar > 0 else 'neg' }}">dönüş {{ k.donus }} / {{ k.hesap.kombi }} birim ({{ '+' if k.kar > 0 else '' }}{{ k.kar }})</b>{% else %}devam ediyor (şimdilik dönüş {{ k.donus }}){% endif %}</summary>
