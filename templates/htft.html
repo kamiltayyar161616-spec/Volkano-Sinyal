@@ -54,9 +54,12 @@
 {% set oz = kayit_oz %}{% if oz %}<div class="row"><span><b>Biten {{ oz.n }} kupon</b> · kârlı {{ oz.karli }}<br><span class="ng-meta">ort. tutan {{ oz.ort_tutan }} / 10 (model beklentisi {{ oz.beklenen_tutan }}) · yatan {{ oz.yatan }} birim, dönüş {{ oz.donus }}</span></span>
   <span style="text-align:right"><b class="{{ 'pos' if oz.kar > 0 else 'neg' }}">{{ '+' if oz.roi > 0 else '' }}%{{ oz.roi }}</b><br><span class="ng-meta">{{ '+' if oz.kar > 0 else '' }}{{ oz.kar }} birim</span></span></div>{% else %}<div class="section-sub">Henüz tüm maçları biten kayıtlı kupon yok.</div>{% endif %}
 {% for k in kayit %}
-<details class="row" style="display:block"><summary>{{ k.at | localdatetime }} · {{ 'filtreli' if k.filtre else 'saf olasılık' }} · {{ k.legs|length }} ayak · tutan {{ k.tutan }} ·
-  {% if k.bitti %}<b class="{{ 'pos' if k.kar > 0 else 'neg' }}">dönüş {{ k.donus }} / {{ k.hesap.kombi }} birim ({{ '+' if k.kar > 0 else '' }}{{ k.kar }})</b>{% else %}devam ediyor (şimdilik dönüş {{ k.donus }}){% endif %}</summary>
-  {% for l in k.legs %}<div class="ng-meta">{{ l.home }} — {{ l.away }}: <b>{{ l.sonuc }} @{{ l.oran }}</b> {% if l.gercek %}→ {{ l.gercek }} {{ '✓' if l.tuttu else '✗' }}{% endif %}</div>{% endfor %}
+<details class="row" style="display:block"><summary>{{ k.at | localdatetime }} · {{ 'filtreli' if k.filtre else 'saf olasılık' }} · <b class="pos">✓ {{ k.say.tuttu }}</b> · <b class="neg">✗ {{ k.say.yatti }}</b> · ⏳ {{ k.say.bekliyor }} ·
+  {% if k.bitti %}<b class="{{ 'pos' if k.kar > 0 else 'neg' }}">dönüş {{ k.donus }} / {{ k.hesap.kombi }} birim ({{ '+' if k.kar > 0 else '' }}{{ k.kar }})</b>{% else %}şimdilik dönüş {{ k.donus }} / {{ k.hesap.kombi }}{% endif %}</summary>
+  {% for l in k.legs %}<div class="ng-meta" style="display:flex;justify-content:space-between;gap:6px;padding:3px 0;border-bottom:1px solid rgba(128,128,128,.15)">
+    <span>{{ l.ko | localdatetime }} · {{ l.home }} — {{ l.away }}<br><b>{{ l.sonuc }} @{{ l.oran }}</b>{% if l.skor %} · {{ l.skor }}{% endif %}</span>
+    <span style="text-align:right;white-space:nowrap">{% if l.durum == 'TUTTU' %}<b class="pos">✓ TUTTU</b>{% elif l.durum == 'YATTI' %}<b class="neg">✗ YATTI</b><br>{{ l.gercek }}{% else %}⏳ {{ l.durum }}{% endif %}</span></div>{% endfor %}
+  <form method="post" action="/ht-ft/kupon-sil" style="margin-top:6px"><input type="hidden" name="idx" value="{{ k.idx }}"><button style="padding:4px 10px;border-radius:8px;border:1px solid #a33;background:none;color:#c55">🗑 Bu kaydı sil</button></form>
 </details>
 {% endfor %}{% endif %}
 

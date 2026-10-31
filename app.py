@@ -301,6 +301,15 @@ def htft_page():
                            kaydedildi=request.args.get("k"))
 
 
+@app.route("/ht-ft/kupon-sil", methods=["POST"])
+def htft_kupon_sil():
+    try:
+        htft_tab.kupon_sil(int(request.form.get("idx", "-1")))
+    except ValueError:
+        pass
+    return redirect(url_for("htft_page"))
+
+
 @app.route("/ht-ft/kupon-kaydet", methods=["POST"])
 def htft_kupon_kaydet():
     filtre = request.form.get("filtre") == "1"

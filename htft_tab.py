@@ -7,7 +7,7 @@ Sonuc: ng_match ilk yari (ht_h/ht_a) + mac sonu (ft_h/ft_a)."""
 import json
 import os
 import sqlite3
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import nowgoal as ng
 
@@ -228,20 +228,33 @@ def kayitli_kuponlar():
         with ng._db_lock:
             cc = ng._conn()
             res = {r[0]: r[1:] for r in cc.execute(
-                f"SELECT mid, ht_h, ht_a, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND ht_h IS NOT NULL AND mid IN ({','.join(map(str, mids))})")}
+                f"SELECT mid, ht_h, ht_a, ft_h, ft_a FROM ng_match WHERE mid IN ({','.join(map(str, mids))})")}
             cc.close()
-    for k in L:
+    now = ng._now()
+    for i, k in enumerate(L):
+        k["idx"] = i
         tut, bitti = [], True
+        k["say"] = {"tuttu": 0, "yatti": 0, "bekliyor": 0}
         for l in k["legs"]:
-            x = res.get(l["mid"])
-            if x:
+            x = res.get(l["mid"]) or (None,) * 4
+            l["gercek"] = l["tuttu"] = None
+            l["skor"] = f"İY {x[0]}-{x[1]} · MS {x[2]}-{x[3]}" if x[2] is not None and x[0] is not None else \
+                        f"MS {x[2]}-{x[3]} (İY skoru yok)" if x[2] is not None else None
+            if x[2] is not None and x[0] is not None:
                 l["gercek"] = f"{_sg(x[0], x[1])}/{_sg(x[2], x[3])}"
                 l["tuttu"] = l["gercek"] == l["sonuc"]
+                l["durum"] = "TUTTU" if l["tuttu"] else "YATTI"
+                k["say"]["tuttu" if l["tuttu"] else "yatti"] += 1
                 if l["tuttu"]:
                     tut.append(l["oran"])
-            else:
-                l["gercek"] = l["tuttu"] = None
-                bitti = False
+                continue
+            bitti = False
+            k["say"]["bekliyor"] += 1
+            try:
+                dk = (now - datetime.fromisoformat(str(l["ko"]).replace("Z", "+00:00"))).total_seconds() / 60
+            except Exception:
+                dk = None
+            l["durum"] = "başlamadı" if dk is not None and dk < 0 else "oynanıyor" if dk is not None and dk < 120 else "sonuç bekleniyor"
         h = k.get("hesap") or {}
         e = _esim(tut, max(BOYUT))
         k["tutan"] = len(tut)
@@ -249,6 +262,15 @@ def kayitli_kuponlar():
         k["bitti"] = bitti
         k["kar"] = round(k["donus"] - h.get("kombi", 0), 2) if bitti else None
     return L
+
+
+def kupon_sil(idx):
+    L = _kayitli()
+    if 0 <= idx < len(L):
+        L.pop(idx)
+        json.dump(L, open(SISTEM_FILE, "w"), ensure_ascii=False)
+        return True
+    return False
 
 
 def kayit_ozet(L):
