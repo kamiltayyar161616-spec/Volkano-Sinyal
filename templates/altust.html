@@ -49,8 +49,8 @@
 {% else %}
 <div class="ng-dl"><a href="/alt-ust/indir">⬇ Alt/üst verisini indir (JSON)</a></div>
 
-<h2 class="section">📊 PERFORMANS</h2>
-<div class="section-sub">Kilitlenen oranla düz bahis. "piy. bekl." = piyasa çizgisinden hesaplanan ortalama olasılık; isabet bundan sistematik saparsa o çizgide düzeltme gerekir. n≥100 olmadan kesin karar yok.</div>
+<h2 class="section">📊 PERFORMANS ("Şu an değerli" seçimlerinin gerçek sonucu)</h2>
+<div class="section-sub">"Şu an değerli" listesindeki her seçim maçtan 10-15 dk önce o anki Volkano oranıyla kilitlenir; burada barem barem, oran bandına göre isabet ve ROI'si tutulur. Kilitlenen oranla düz bahis. "piy. bekl." = piyasa çizgisinden hesaplanan ortalama olasılık; isabet bundan sistematik saparsa o çizgide düzeltme gerekir. n≥100 olmadan kesin karar yok.</div>
 <div class="two">
   <div><div class="ng-meta">TOPLAM</div>
     {% if perf.toplam %}<b class="{{ 'pos' if perf.toplam.roi > 0 else 'neg' }}">{{ '+' if perf.toplam.roi > 0 else '' }}%{{ perf.toplam.roi }}</b>
@@ -63,6 +63,8 @@
 </div>
 {% if perf.ham %}<div class="section-sub">Eski BetOracle tabanlı seçimler (tabloya dahil değil): n={{ perf.ham.n }} · isabet %{{ perf.ham.isabet }} (BO bekl. %{{ perf.ham.beklenen }}) · ROI {{ '+' if perf.ham.roi > 0 else '' }}%{{ perf.ham.roi }}</div>{% endif %}
 {% if perf.cizgi %}<div class="section-sub">Çizgi × taraf</div>{{ ptab(perf.cizgi) }}{% endif %}
+{% if perf.oran %}<div class="section-sub">Oran bandı</div>{{ ptab(perf.oran) }}{% endif %}
+{% if perf.cizgi_oran %}<details style="margin:0 16px 10px"><summary>Barem × oran bandı (ayrıntı)</summary>{{ ptab(perf.cizgi_oran) }}</details>{% endif %}
 {% if perf.bant %}<div class="section-sub">Değer bandı</div>{{ ptab(perf.bant) }}{% endif %}
 {% if perf.hareket %}<div class="section-sub">Para akışı: Volkano'nun bu seçimdeki ilk görülen oranı → kilit oranı (≥%3 değişim)</div>{{ ptab(perf.hareket) }}{% endif %}
 

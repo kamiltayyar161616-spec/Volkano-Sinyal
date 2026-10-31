@@ -104,7 +104,18 @@ def get_performance(days=None):
         rows = [r for r in rows if r["ko"] >= sinir]
     ham = [r for r in rows if not str(r.get("kal") or "").startswith("pz")]   # eski BetOracle tabanli secimler (kiyas)
     rows = [r for r in rows if str(r.get("kal") or "").startswith("pz")]       # piyasa cizgisi tabanli
-    out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": [], "ham": _ozet(ham)}
+    out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": [], "oran": [], "cizgi_oran": [], "ham": _ozet(ham)}
+    ORAN = ((1.30, 1.60, "1.30-1.60"), (1.60, 2.00, "1.60-2.00"), (2.00, 3.00, "2.00-3.00"), (3.00, 5.00, "3.00-5.00"), (5.00, 99, "5.00+"))
+    for lo, hi, ad in ORAN:
+        o = _ozet([r for r in rows if lo <= r["oran"] < hi])
+        if o:
+            out["oran"].append(dict(o, ad=f"oran {ad}"))
+    for ln in CIZGI:
+        for tr in ("UST", "ALT"):
+            for lo, hi, ad in ORAN:
+                o = _ozet([r for r in rows if r["cizgi"] == ln and r["taraf"] == tr and lo <= r["oran"] < hi])
+                if o:
+                    out["cizgi_oran"].append(dict(o, ad=f"{ln} {'ÜST' if tr == 'UST' else 'ALT'} @{ad}"))
     for ln in CIZGI:
         for tr in ("UST", "ALT"):
             o = _ozet([r for r in rows if r["cizgi"] == ln and r["taraf"] == tr])
