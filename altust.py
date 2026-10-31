@@ -143,7 +143,23 @@ def get_page_data():
                          "satir": [(ln, satir[ln]) for ln in CIZGI if ln in satir],
                          "secim": [(ln, tr, od, dg) for ln, tr, od, p, adil, dg, k in sec if k]})
         c.close()
-    return {"aktif": aktif, "son": son, "aday": aday, "hazir": c is not None}
+    # piyasa cizgisi (ilk -> simdi) SAHA'nin kendi veritabanindan
+    if aday:
+        with ng._db_lock:
+            cc = ng._conn()
+            try:
+                pz = {r[0]: (r[1], r[2]) for r in cc.execute(
+                    f"SELECT mid, ou_ilk, ou_son FROM ng_match WHERE mid IN ({','.join(str(a['mid']) for a in aday)})")}
+            except Exception:
+                pz = {}
+            cc.close()
+        for a in aday:
+            a["pz_ilk"], a["pz_son"] = pz.get(a["mid"], (None, None))
+            a["pz_yon"] = None if not (a["pz_ilk"] and a["pz_son"]) or a["pz_ilk"] == a["pz_son"] else \
+                ("up" if a["pz_son"] > a["pz_ilk"] else "down")
+    # su an degerli secimler (kupon kriterini gecen), degere gore
+    firsat = sorted(([a, ln, tr, od, dg] for a in aday for ln, tr, od, dg in a["secim"]), key=lambda x: -x[4])
+    return {"aktif": aktif, "son": son, "aday": aday, "firsat": firsat, "hazir": c is not None}
 
 
 def export_json():

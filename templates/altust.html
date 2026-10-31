@@ -66,6 +66,14 @@
 {% if perf.bant %}<div class="section-sub">Değer bandı</div>{{ ptab(perf.bant) }}{% endif %}
 {% if perf.hareket %}<div class="section-sub">Para akışı: Volkano'nun bu seçimdeki ilk görülen oranı → kilit oranı (≥%3 değişim)</div>{{ ptab(perf.hareket) }}{% endif %}
 
+<h2 class="section">🔥 ŞU AN DEĞERLİ ({{ d.firsat|length }})</h2>
+<div class="section-sub">Volkano'nun piyasa çizgisinden daha yüksek ödediği seçimler (değer ≥ %5), en değerli en üstte. "Piyasa 2.5 → 3" = NowGoal çizgisi gün içinde 2.5'ten 3'e çıktı (üste para). Kesin kupon maçtan 10-15 dk önce kilitlenir; o ana kadar oran ve çizgi değişebilir.</div>
+{% for a, ln, tr, od, dg in d.firsat %}
+<div class="row"><span><b>{{ a.home }} — {{ a.away }}</b><br><span class="ng-meta">{{ a.ko | localdatetime }} · {{ a.lig or '' }} · piyasa
+  {% if a.pz_yon %}{{ a.pz_ilk }} → <b class="{{ 'pos' if a.pz_yon == 'up' else 'neg' }}">{{ a.pz_son }} {{ '↑' if a.pz_yon == 'up' else '↓' }}</b>{% else %}{{ a.pz_son }}{% endif %} ({{ a.lt }} gol)</span></span>
+  <span style="text-align:right"><span class="tag a">{{ ln }} {{ tr_ad(tr) }} @{{ od }}</span><br><span class="ng-meta">değer +%{{ (dg*100)|round|int }}</span></span></div>
+{% else %}<div class="empty">Şu an Volkano'nun piyasadan fazla ödediği seçim yok.</div>{% endfor %}
+
 <h2 class="section">🎫 AKTİF KUPON</h2>
 <div class="section-sub">Oranı kilitlenmiş, sonucu bekleyen seçimler (maç başına birden fazla çizgi olabilir; birbirine bağlı seçimlerdir, aynı kombinede birlikte oynanmaz).</div>
 {% for r in d.aktif %}
@@ -78,7 +86,7 @@
 {% for m in d.aday %}
 <div class="ng-card {{ 'hot' if m.secim else '' }}">
   <div class="ng-teams">{{ m.home }} — {{ m.away }}</div>
-  <div class="ng-meta">{{ m.lig or '' }} · {{ m.ko | localdatetime }} · piyasa gol beklentisi <b>{{ m.lt }}</b></div>
+  <div class="ng-meta">{{ m.lig or '' }} · {{ m.ko | localdatetime }} · piyasa çizgisi {% if m.pz_yon %}{{ m.pz_ilk }} → <b class="{{ 'pos' if m.pz_yon == 'up' else 'neg' }}">{{ m.pz_son }} {{ '↑' if m.pz_yon == 'up' else '↓' }}</b>{% else %}<b>{{ m.pz_son or '-' }}</b>{% endif %} · beklenen <b>{{ m.lt }}</b> gol</div>
   <div class="og" style="grid-template-columns:44px repeat({{ m.satir|length }},1fr);">
     <div class="h"></div>{% for ln, s in m.satir %}<div class="h">{{ ln }}</div>{% endfor %}
     {% for tr in ('UST', 'ALT') %}
