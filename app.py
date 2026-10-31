@@ -36,6 +36,7 @@ import oranlar
 import sdoran
 import strateji
 import altust
+import htft_tab
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -288,6 +289,12 @@ def strateji_page():
 def altust_page():
     return render_template("altust.html", d=altust.get_page_data(), perf=altust.get_performance(),
                            perf_7d=altust.get_performance(days=7), bahis=altust.BAHIS, active_page="altust")
+
+
+@app.route("/ht-ft")
+def htft_page():
+    return render_template("htft.html", d=htft_tab.get_page_data(), perf=htft_tab.get_performance(),
+                           perf_7d=htft_tab.get_performance(days=7), bahis=htft_tab.BAHIS, active_page="htft")
 
 
 @app.route("/alt-ust/indir")
