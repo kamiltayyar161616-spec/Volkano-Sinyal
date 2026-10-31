@@ -31,6 +31,32 @@
 {% block content %}
 {% if not d.hazir %}<div class="empty">HT/FT defteri henüz oluşmadı (defter 'aday' işi çalışınca dolar).</div>{% else %}
 
+<h2 class="section">🎫 SİSTEM KUPON 1-2-3-4-5 / 10</h2>
+<div class="section-sub">Önümüzdeki 14 saatin maçlarından: 9 İY/MS sonucunun her biri için en olası maç (aynı maç iki kez yok) + 10. ayak en güvendiğimiz seçim. Sadece Volkano'nun adil orandan az ödemediği (değer ≥ %0) seçimler alınır; o sonuç için bulunamazsa değer ≥ −%5 ile doldurulur (⚠). Kupon her açılışta güncel oranlarla yeniden kurulur; "Kaydet" ile o anki hali saklanır ve sonucu takip edilir.</div>
+{% if kaydedildi == '1' %}<div class="row"><b class="pos">✓ Kupon kaydedildi.</b></div>{% elif kaydedildi == '0' %}<div class="row"><b class="neg">Kupon kurulamadı (yeterli maç yok).</b></div>{% endif %}
+{% if sk %}
+{% for l in sk %}
+<div class="row"><span><b>{{ l.home }} — {{ l.away }}</b><br><span class="ng-meta">{{ l.ko | localdatetime }} · {{ l.lig or '' }} · rol: {{ l.rol }}</span></span>
+  <span style="text-align:right"><span class="tag a">{{ l.sonuc }} @{{ l.oran }}</span>{% if l.yedek %} ⚠{% endif %}<br><span class="ng-meta">olasılık %{{ pc(l.p) }} · adil {{ l.adil }} · değer {{ '+' if l.deger >= 0 else '' }}%{{ (l.deger*100)|round|int }}</span></span></div>
+{% endfor %}
+{% if sh %}
+<div class="two">
+  <div><div class="ng-meta">KOMBİNASYON</div><b>{{ sh.kombi }}</b><div>birim başına toplam {{ sh.kombi }} birim</div></div>
+  <div><div class="ng-meta">BEKLENEN GETİRİ (EV)</div><b class="{{ 'pos' if sh.ev > 0 else 'neg' }}">{{ '+' if sh.ev > 0 else '' }}%{{ sh.ev }}</b><div>kâra geçme olasılığı %{{ sh.p_kar }}</div></div>
+</div>
+<div class="section-sub">Beklenen tutan ayak: {{ sh.beklenen_tutan }} · Tutan sayısı olasılığı: {% for v in sh.dag %}{% if v >= 0.5 %}{{ loop.index0 }} maç %{{ v }}{{ ' · ' if not loop.last else '' }}{% endif %}{% endfor %}</div>
+{% else %}<div class="section-sub">Sistem hesabı için en az 5 ayak gerekiyor.</div>{% endif %}
+<form method="post" action="/ht-ft/kupon-kaydet" style="margin:6px 16px 12px"><button style="width:100%;padding:10px;border-radius:10px;border:0;font-weight:700;background:linear-gradient(135deg,var(--amber-bright),var(--amber));color:#241a06">💾 Bu kuponu kaydet (takip et)</button></form>
+{% else %}<div class="empty">Şu an kupon kurulacak kadar İY/MS verisi yok.</div>{% endif %}
+
+{% if kayit %}<h2 class="section">📒 KAYITLI SİSTEM KUPONLARI</h2>
+{% for k in kayit %}
+<details class="row" style="display:block"><summary>{{ k.at | localdatetime }} · {{ k.legs|length }} ayak · tutan {{ k.tutan }} ·
+  {% if k.bitti %}<b class="{{ 'pos' if k.kar > 0 else 'neg' }}">dönüş {{ k.donus }} / {{ k.hesap.kombi }} birim ({{ '+' if k.kar > 0 else '' }}{{ k.kar }})</b>{% else %}devam ediyor (şimdilik dönüş {{ k.donus }}){% endif %}</summary>
+  {% for l in k.legs %}<div class="ng-meta">{{ l.home }} — {{ l.away }}: <b>{{ l.sonuc }} @{{ l.oran }}</b> {% if l.gercek %}→ {{ l.gercek }} {{ '✓' if l.tuttu else '✗' }}{% endif %}</div>{% endfor %}
+</details>
+{% endfor %}{% endif %}
+
 <h2 class="section">🔥 ŞU AN DEĞERLİ ({{ d.firsat|length }})</h2>
 <div class="section-sub">Volkano'nun piyasa modelinden en az %10 fazla ödediği İY/MS seçimleri. Kesin kupon maçtan 10-15 dk önce kilitlenir.</div>
 {% for a, k, x in d.firsat %}

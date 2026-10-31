@@ -121,3 +121,130 @@ def get_page_data():
         c.close()
     firsat.sort(key=lambda t: -t[2]["deger"])
     return {"aktif": aktif, "son": son, "aday": aday, "firsat": firsat, "son_liste": SON, "hazir": c is not None}
+
+
+# ------------------------------------------------------------------ SISTEM KUPON KURUCU (10 mac, 9 IY/MS sonucunun her biri en az 1)
+import itertools
+
+SISTEM_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "htft_sistem.json")
+BOYUT = (1, 2, 3, 4, 5)          # sistem 1-2-3-4-5 / 10
+
+
+def _adaylar(min_dk=20, saat=14):
+    c = _defter()
+    if not c:
+        return []
+    now = ng._now()
+    out = []
+    for r in c.execute("SELECT * FROM ht_aday WHERE ko > ? AND ko < ? ORDER BY ko",
+                       (ng._iso(now + timedelta(minutes=min_dk)), ng._iso(now + timedelta(hours=saat)))):
+        for k, od, p, adil, dg, kp in json.loads(r["sec"] or "[]"):
+            out.append({"mid": r["mid"], "ko": r["ko"], "home": r["home"], "away": r["away"], "lig": r["lig"],
+                        "sonuc": k, "oran": od, "p": p, "adil": adil, "deger": dg})
+    c.close()
+    return out
+
+
+def kur_kupon(min_deger=0.0, yedek_deger=-0.05):
+    """Her IY/MS sonucu icin (en az bulunandan baslayarak) en olasi + fiyati adil (deger >= min) maci sec,
+    her mac bir kez; 10. ayak = kalanlar icinde en yuksek olasilikli secim. Bulunamazsa deger >= yedek ile (isaretli)."""
+    A = _adaylar()
+    used, legs = set(), []
+    say = lambda k, m: sum(1 for x in A if x["sonuc"] == k and x["deger"] >= m and x["mid"] not in used)
+    for k in sorted(SON, key=lambda k: say(k, min_deger)):
+        for m, yedek in ((min_deger, False), (yedek_deger, True)):
+            cs = sorted([x for x in A if x["sonuc"] == k and x["deger"] >= m and x["mid"] not in used], key=lambda x: -x["p"])
+            if cs:
+                legs.append(dict(cs[0], yedek=yedek, rol=k))
+                used.add(cs[0]["mid"])
+                break
+    cs = sorted([x for x in A if x["deger"] >= min_deger and x["mid"] not in used], key=lambda x: -x["p"])
+    if cs:
+        legs.append(dict(cs[0], yedek=False, rol="en güvenli"))
+    legs.sort(key=lambda x: x["ko"])
+    return legs
+
+
+def _esim(vals, kmax):
+    """elementer simetrik toplamlar e_1..e_kmax"""
+    e = [1.0] + [0.0] * kmax
+    for v in vals:
+        for k in range(kmax, 0, -1):
+            e[k] += e[k - 1] * v
+    return e
+
+
+def sistem_hesap(legs, boyut=BOYUT):
+    n = len(legs)
+    if n < max(boyut):
+        return None
+    from math import comb
+    kombi = sum(comb(n, k) for k in boyut)
+    ev_e = _esim([l["p"] * l["oran"] for l in legs], max(boyut))
+    beklenen_donus = sum(ev_e[k] for k in boyut)               # birim kombinasyon basina beklenen toplam donus
+    dag = [0.0] * (n + 1)
+    p_kar = 0.0
+    for mask in range(1 << n):
+        pr = 1.0
+        tut = []
+        for i, l in enumerate(legs):
+            if mask >> i & 1:
+                pr *= l["p"]
+                tut.append(l["oran"])
+            else:
+                pr *= 1 - l["p"]
+        dag[len(tut)] += pr
+        e = _esim(tut, max(boyut))
+        if sum(e[k] for k in boyut if k <= len(tut)) > kombi:
+            p_kar += pr
+    return {"kombi": kombi, "ev": round(100 * (beklenen_donus / kombi - 1), 1), "p_kar": round(100 * p_kar, 1),
+            "beklenen_tutan": round(sum(l["p"] for l in legs), 2),
+            "dag": [round(100 * x, 1) for x in dag]}
+
+
+def _kayitli():
+    try:
+        return json.load(open(SISTEM_FILE))
+    except Exception:
+        return []
+
+
+def kupon_kaydet():
+    legs = kur_kupon()
+    if len(legs) < 5:
+        return False
+    L = _kayitli()
+    L.insert(0, {"at": ng._iso(ng._now()), "legs": legs, "hesap": sistem_hesap(legs)})
+    json.dump(L[:100], open(SISTEM_FILE, "w"), ensure_ascii=False)
+    return True
+
+
+def kayitli_kuponlar():
+    L = _kayitli()
+    mids = {l["mid"] for k in L for l in k["legs"]}
+    res = {}
+    if mids:
+        with ng._db_lock:
+            cc = ng._conn()
+            res = {r[0]: r[1:] for r in cc.execute(
+                f"SELECT mid, ht_h, ht_a, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND ht_h IS NOT NULL AND mid IN ({','.join(map(str, mids))})")}
+            cc.close()
+    for k in L:
+        tut, bitti = [], True
+        for l in k["legs"]:
+            x = res.get(l["mid"])
+            if x:
+                l["gercek"] = f"{_sg(x[0], x[1])}/{_sg(x[2], x[3])}"
+                l["tuttu"] = l["gercek"] == l["sonuc"]
+                if l["tuttu"]:
+                    tut.append(l["oran"])
+            else:
+                l["gercek"] = l["tuttu"] = None
+                bitti = False
+        h = k.get("hesap") or {}
+        e = _esim(tut, max(BOYUT))
+        k["tutan"] = len(tut)
+        k["donus"] = round(sum(e[i] for i in BOYUT if i <= len(tut)), 2)
+        k["bitti"] = bitti
+        k["kar"] = round(k["donus"] - h.get("kombi", 0), 2) if bitti else None
+    return L
