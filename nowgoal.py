@@ -160,13 +160,17 @@ def _conn():
         ft_h INTEGER, ft_a INTEGER, result_at TEXT)""")
     c.execute("CREATE INDEX IF NOT EXISTS ix_ng_kick ON ng_match(kickoff_utc)")
     c.execute("CREATE TABLE IF NOT EXISTS ng_probe (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT)")
+    c.execute("""CREATE TABLE IF NOT EXISTS ng_line (mid INTEGER, at TEXT, ah REAL, ah_h REAL, ou REAL, ou_h REAL,
+                 PRIMARY KEY (mid, at))""")      # lig json'undaki piyasa cizgisi (mac oncesi, degistikce)
     c.execute("""CREATE TABLE IF NOT EXISTS ng_league (lid INTEGER PRIMARY KEY, path TEXT, path_at TEXT,
                  swept_at TEXT, n_window INTEGER, err TEXT)""")
     have = {r[1] for r in c.execute("PRAGMA table_info(ng_match)")}
     for col, typ in (("tip_side", "TEXT"), ("tip_odd", "REAL"), ("tip_prob", "REAL"), ("tip_fav", "TEXT"),
                      ("tip_market", "REAL"), ("tip_at", "TEXT"), ("tip_reasons", "TEXT"),
                      ("odds_json", "TEXT"), ("odds_at", "TEXT"), ("odds_final", "INTEGER"),
-                     ("odds_first", "TEXT"), ("ht_h", "INTEGER"), ("ht_a", "INTEGER")):
+                     ("odds_first", "TEXT"), ("ht_h", "INTEGER"), ("ht_a", "INTEGER"),
+                     ("lid", "INTEGER"), ("ou_ilk", "REAL"), ("ou_son", "REAL"), ("ah_ilk", "REAL"), ("ah_son", "REAL"),
+                     ("ou_kapanis", "REAL"), ("ah_kapanis", "REAL")):
         if col not in have:
             c.execute(f"ALTER TABLE ng_match ADD COLUMN {col} {typ}")
     return c
@@ -943,6 +947,47 @@ def _lg_matches(obj, out):
             _lg_matches(v, out)
 
 
+def _cizgi(v):
+    """'2.5/3' -> 2.75, '-0.25' -> -0.25, '' -> None"""
+    if v in (None, ""):
+        return None
+    try:
+        p = [float(x) for x in str(v).split("/")]
+        return sum(p) / len(p)
+    except ValueError:
+        return None
+
+
+def _lg_records(obj, out):
+    """lig json'undaki tam mac kayitlari: [mid, lid, durum, tarih(GMT+8), ev, dep, skor, iy, sira, sira,
+    AH, AH_iy, UA, UA_iy, ...] -> out[mid] = kayit"""
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _lg_records(v, out)
+    elif isinstance(obj, list):
+        if len(obj) >= 14 and isinstance(obj[0], int) and obj[0] > 100000 and isinstance(obj[3], str) and _DATE_RE.match(obj[3]):
+            out[obj[0]] = obj
+            return
+        for v in obj:
+            _lg_records(v, out)
+
+
+def _cizgi_kaydet(c, recs, now):
+    """Mac oncesi kayitlarda cizgi degistiyse ng_line'a yaz; ng_match'te ilk/son, bitmislerde kapanis."""
+    son = {r[0]: r[1:] for r in c.execute("""SELECT l.mid, l.ah, l.ah_h, l.ou, l.ou_h FROM ng_line l JOIN
+             (SELECT mid, MAX(at) at FROM ng_line GROUP BY mid) x ON x.mid = l.mid AND x.at = l.at""")} if recs else {}
+    for mid, r in recs.items():
+        ah, ahh, ou, ouh = (_cizgi(x) for x in r[10:14])
+        c.execute("UPDATE ng_match SET lid=? WHERE mid=? AND lid IS NULL", (r[1], mid))
+        if r[2] == 0 and (ah is not None or ou is not None):
+            if son.get(mid) != (ah, ahh, ou, ouh):
+                c.execute("INSERT OR IGNORE INTO ng_line VALUES (?,?,?,?,?,?)", (mid, _iso(now), ah, ahh, ou, ouh))
+                c.execute("""UPDATE ng_match SET ou_ilk=COALESCE(ou_ilk, ?), ah_ilk=COALESCE(ah_ilk, ?), ou_son=?, ah_son=?
+                             WHERE mid=?""", (ou, ah, ou, ah, mid))
+        elif r[2] == -1 and ou is not None:
+            c.execute("UPDATE ng_match SET ou_kapanis=?, ah_kapanis=? WHERE mid=? AND ou_kapanis IS NULL", (ou, ah, mid))
+
+
 def sweep_leagues(log):
     now = _now()
     with _db_lock:
@@ -962,8 +1007,12 @@ def sweep_leagues(log):
             log.append(f"lig listesi hata {e}")
     with _db_lock:
         c = _conn()
-        todo = c.execute("SELECT lid, path, path_at FROM ng_league ORDER BY swept_at IS NOT NULL, swept_at LIMIT ?",
-                         (LG_PER_CYCLE,)).fetchall()
+        acil = c.execute("""SELECT l.lid, l.path, l.path_at FROM ng_league l WHERE l.lid IN
+                 (SELECT DISTINCT lid FROM ng_match WHERE lid IS NOT NULL AND kickoff_utc > ? AND kickoff_utc < ?)
+                 AND (l.swept_at IS NULL OR l.swept_at < ?)""",
+                 (_iso(now), _iso(now + timedelta(hours=2)), _iso(now - timedelta(minutes=25)))).fetchall()
+        todo = acil + [r for r in c.execute("SELECT lid, path, path_at FROM ng_league ORDER BY swept_at IS NOT NULL, swept_at LIMIT ?",
+                                             (LG_PER_CYCLE,)).fetchall() if r[0] not in {a[0] for a in acil}]
         known = {r[0]: r[1] for r in c.execute("SELECT mid, kickoff_utc FROM ng_match WHERE kickoff_utc > ?",
                                                (_iso(now - timedelta(days=2)),))}
         c.close()
@@ -981,9 +1030,13 @@ def sweep_leagues(log):
                 path_at = _iso(_now())
                 time.sleep(BEKLE)
             found = {}
+            recs = {}
             if path:
-                _lg_matches(json.loads(_lg_get(path)), found)
+                js = json.loads(_lg_get(path))
+                _lg_matches(js, found)
+                _lg_records(js, recs)
                 time.sleep(BEKLE)
+            recs = {m: r for m, r in recs.items() if m in found and lo - timedelta(days=2) <= found[m] <= hi}
             add, upd = [], []
             for mid, ko in found.items():
                 if not (lo <= ko <= hi):
@@ -998,6 +1051,7 @@ def sweep_leagues(log):
                 c = _conn()
                 c.executemany("INSERT OR IGNORE INTO ng_match (mid, kickoff_utc, first_seen, status) VALUES (?,?,?,?)", add)
                 c.executemany("UPDATE ng_match SET kickoff_utc=? WHERE mid=? AND status IN ('new','stats')", upd)
+                _cizgi_kaydet(c, recs, now)
                 c.commit()
                 c.close()
             n_new += len(add)
