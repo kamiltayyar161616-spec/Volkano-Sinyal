@@ -58,7 +58,8 @@ def _kupon():
         else:
             r["gercek"] = r["tuttu"] = r["kar"] = None
         k = str(r.get("kay") or "")
-        r["kaynak"] = "Pinnacle" if k.startswith("pin") else "büro medyanı" if k.startswith("pmed") else "NowGoal çizgisi"
+        r["kaynak"] = "Pinnacle" if k.startswith("pin") else "büro medyanı" if k.startswith("pmed") else \
+                      "BetOracle (yedek)" if k.startswith("bo") else "lig ort. 2.75 (yedek)" if k.startswith("ort") else "NowGoal çizgisi"
     return rows
 
 
@@ -90,7 +91,7 @@ def get_performance(days=None):
         o = _ozet([r for r in rows if lo <= r["deger"] < hi])
         if o:
             out["bant"].append(dict(o, ad=f"değer {ad}"))
-    for kk in ("Pinnacle", "büro medyanı", "NowGoal çizgisi"):
+    for kk in ("Pinnacle", "büro medyanı", "NowGoal çizgisi", "BetOracle (yedek)", "lig ort. 2.75 (yedek)"):
         o = _ozet([r for r in rows if r["kaynak"] == kk])
         if o:
             out["kaynak"].append(dict(o, ad=f"referans: {kk}"))
