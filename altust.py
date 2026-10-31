@@ -8,6 +8,7 @@ Veri /root/defter/defter.py 'aday' isinden gelir (cron, 15 dk, vip-tahmin ortami
 Sonuclar ng_match (ft_h/ft_a) ile cozulur; performans cizgi x taraf ve deger bandina gore duz bahis ROI.
 """
 import json
+import re
 import os
 import sqlite3
 from datetime import timedelta
@@ -77,6 +78,13 @@ def _kupon():
         r["ft"] = ft
         r["hareket"] = _hareket(r)
         r["pz_ilk"], r["pz_son"] = _pz(r)
+        k = str(r.get("kal") or "")
+        r["kaynak"] = "Pinnacle" if k.startswith("pin") else "büro medyanı" if k.startswith("pmed") else \
+                      "NowGoal çizgisi" if k.startswith("pz") else "BetOracle (eski)"
+        r["pin_ilk"] = r["pin_son"] = None
+        m = re.match(r"pin[\d.]+:([\d.]+)>([\d.]+)", k)
+        if m:
+            r["pin_ilk"], r["pin_son"] = float(m.group(1)), float(m.group(2))
         if ft:
             t = ft[0] + ft[1]
             r["tuttu"] = t > r["cizgi"] if r["taraf"] == "UST" else t < r["cizgi"]
@@ -102,9 +110,21 @@ def get_performance(days=None):
     if days:
         sinir = ng._iso(ng._now() - timedelta(days=days))
         rows = [r for r in rows if r["ko"] >= sinir]
-    ham = [r for r in rows if not str(r.get("kal") or "").startswith("pz")]   # eski BetOracle tabanli secimler (kiyas)
-    rows = [r for r in rows if str(r.get("kal") or "").startswith("pz")]       # piyasa cizgisi tabanli
-    out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": [], "oran": [], "cizgi_oran": [], "ham": _ozet(ham)}
+    yeni = lambda r: str(r.get("kal") or "").startswith(("pz", "pin", "pmed"))
+    ham = [r for r in rows if not yeni(r)]          # eski BetOracle tabanli secimler (kiyas)
+    rows = [r for r in rows if yeni(r)]             # piyasa (Pinnacle / buro medyani / NowGoal cizgisi) tabanli
+    out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": [], "oran": [], "cizgi_oran": [], "ham": _ozet(ham),
+           "kaynak": [], "pin": []}
+    for kk in ("Pinnacle", "büro medyanı", "NowGoal çizgisi"):
+        o = _ozet([r for r in rows if r["kaynak"] == kk])
+        if o:
+            out["kaynak"].append(dict(o, ad=f"referans: {kk}"))
+    for tr in ("UST", "ALT"):
+        for ad, f in (("Pinnacle gol beklentisi ARTTI (≥0.08)", lambda d: d >= 0.08), ("Pinnacle sabit", lambda d: -0.08 < d < 0.08),
+                      ("Pinnacle gol beklentisi AZALDI (≥0.08)", lambda d: d <= -0.08)):
+            o = _ozet([r for r in rows if r["taraf"] == tr and r["pin_ilk"] and f(r["pin_son"] - r["pin_ilk"])])
+            if o:
+                out["pin"].append(dict(o, ad=f"{'ÜST' if tr == 'UST' else 'ALT'} · {ad}"))
     ORAN = ((1.30, 1.60, "1.30-1.60"), (1.60, 2.00, "1.60-2.00"), (2.00, 3.00, "2.00-3.00"), (3.00, 5.00, "3.00-5.00"), (5.00, 99, "5.00+"))
     for lo, hi, ad in ORAN:
         o = _ozet([r for r in rows if lo <= r["oran"] < hi])

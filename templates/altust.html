@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Alt/Üst Kupon{% endblock %}
 {% block page_tag %}ALT/ÜST KUPON{% endblock %}
-{% block subtitle %}Piyasanın alt/üst çizgisinden (NowGoal) 1.5–5.5 adil oran üretilir ve Volkano oranıyla karşılaştırılır. Çizgi L → beklenen gol L + 0.20 (10 bin maçlık testte piyasa çizgisi gerçek gole 0.1 gol yakın). Değer = piyasa olasılığı × Volkano oranı − 1. Maçtan ~10-15 dk önce değeri ≥ %5 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
+{% block subtitle %}Adil oran Pinnacle'ın marjsız alt/üst fiyatından (The Odds API), yoksa diğer büroların medyanından, o da yoksa NowGoal piyasa çizgisinden üretilir ve Volkano oranıyla karşılaştırılır. Çizgi L → beklenen gol L + 0.20 (10 bin maçlık testte piyasa çizgisi gerçek gole 0.1 gol yakın). Değer = piyasa olasılığı × Volkano oranı − 1. Maçtan ~10-15 dk önce değeri ≥ %5 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
 {% block extra_style %}
 <style>
   .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
@@ -63,6 +63,8 @@
 </div>
 {% if perf.ham %}<div class="section-sub">Eski BetOracle tabanlı seçimler (tabloya dahil değil): n={{ perf.ham.n }} · isabet %{{ perf.ham.isabet }} (BO bekl. %{{ perf.ham.beklenen }}) · ROI {{ '+' if perf.ham.roi > 0 else '' }}%{{ perf.ham.roi }}</div>{% endif %}
 {% if perf.cizgi %}<div class="section-sub">Çizgi × taraf</div>{{ ptab(perf.cizgi) }}{% endif %}
+{% if perf.kaynak %}<div class="section-sub">Adil oran kaynağı</div>{{ ptab(perf.kaynak) }}{% endif %}
+{% if perf.pin %}<div class="section-sub">Pinnacle para akışı (ilk → kapanış gol beklentisi değişimi)</div>{{ ptab(perf.pin) }}{% endif %}
 {% if perf.oran %}<div class="section-sub">Oran bandı</div>{{ ptab(perf.oran) }}{% endif %}
 {% if perf.cizgi_oran %}<details style="margin:0 16px 10px"><summary>Barem × oran bandı (ayrıntı)</summary>{{ ptab(perf.cizgi_oran) }}</details>{% endif %}
 {% if perf.bant %}<div class="section-sub">Değer bandı</div>{{ ptab(perf.bant) }}{% endif %}
@@ -80,7 +82,7 @@
 <div class="section-sub">Oranı kilitlenmiş, sonucu bekleyen seçimler (maç başına birden fazla çizgi olabilir; birbirine bağlı seçimlerdir, aynı kombinede birlikte oynanmaz).</div>
 {% for r in d.aktif %}
 <div class="row"><span><b>{{ r.home }} — {{ r.away }}</b><br><span class="ng-meta">{{ r.ko | localdatetime }} · {{ r.lig or '' }} · piyasa çizgisi {% if r.pz_ilk and r.pz_ilk != r.pz_son %}{{ r.pz_ilk }} → {% endif %}{{ r.pz_son or '-' }} ({{ r.lt }} gol)</span></span>
-  <span style="text-align:right"><span class="tag a">{{ r.cizgi }} {{ tr_ad(r.taraf) }} @{{ r.oran }}</span>{% if r.ilk_oran and r.ilk_oran != r.oran %}<br><span class="ng-meta">ilk {{ r.ilk_oran }} → {{ r.oran }}</span>{% endif %}<br><span class="ng-meta">piyasa %{{ pc(r.p_bo) }} · değer +%{{ (r.deger*100)|round|int }}</span></span></div>
+  <span style="text-align:right"><span class="tag a">{{ r.cizgi }} {{ tr_ad(r.taraf) }} @{{ r.oran }}</span>{% if r.ilk_oran and r.ilk_oran != r.oran %}<br><span class="ng-meta">ilk {{ r.ilk_oran }} → {{ r.oran }}</span>{% endif %}<br><span class="ng-meta">{{ r.kaynak }}{% if r.pin_ilk %} {{ r.pin_ilk }}→{{ r.pin_son }} gol{% endif %} · %{{ pc(r.p_bo) }} · değer +%{{ (r.deger*100)|round|int }}</span></span></div>
 {% else %}<div class="empty">Şu an kilitli seçim yok.</div>{% endfor %}
 
 <h2 class="section">📅 YAKLAŞAN 12 SAAT</h2>
