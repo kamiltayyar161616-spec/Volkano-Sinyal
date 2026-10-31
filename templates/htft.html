@@ -32,7 +32,8 @@
 {% if not d.hazir %}<div class="empty">HT/FT defteri henüz oluşmadı (defter 'aday' işi çalışınca dolar).</div>{% else %}
 
 <h2 class="section">🎫 SİSTEM KUPON 1-2-3-4-5 / 10</h2>
-<div class="section-sub">Önümüzdeki 14 saatin maçlarından: 9 İY/MS sonucunun her biri için en olası maç (aynı maç iki kez yok) + 10. ayak en güvendiğimiz seçim. Sadece Volkano'nun adil orandan az ödemediği (değer ≥ %0) seçimler alınır; o sonuç için bulunamazsa değer ≥ −%5 ile doldurulur (⚠). Kupon her açılışta güncel oranlarla yeniden kurulur; "Kaydet" ile o anki hali saklanır ve sonucu takip edilir.</div>
+<div class="section-sub">Önümüzdeki 14 saatin maçlarından: 9 İY/MS sonucunun her biri için en olası maç (aynı maç iki kez yok) + 10. ayak en güvendiğimiz seçim. {% if filtre %}<b>Fiyat filtresi AÇIK:</b> sadece değer ≥ %0 (yoksa ≥ −%5, ⚠).{% else %}<b>Saf olasılık:</b> fiyata bakılmaz, her ayağın değeri yanında gösterilir.{% endif %} Kupon her açılışta güncel oranlarla yeniden kurulur; "Kaydet" ile o anki hali saklanır ve sonucu takip edilir.</div>
+<div style="display:flex;gap:6px;margin:6px 16px"><a class="tag {{ '' if filtre else 'a' }}" href="/ht-ft">Saf olasılık</a><a class="tag {{ 'a' if filtre else '' }}" href="/ht-ft?filtre=1">Fiyat filtreli</a></div>
 {% if kaydedildi == '1' %}<div class="row"><b class="pos">✓ Kupon kaydedildi.</b></div>{% elif kaydedildi == '0' %}<div class="row"><b class="neg">Kupon kurulamadı (yeterli maç yok).</b></div>{% endif %}
 {% if sk %}
 {% for l in sk %}
@@ -46,12 +47,12 @@
 </div>
 <div class="section-sub">Beklenen tutan ayak: {{ sh.beklenen_tutan }} · Tutan sayısı olasılığı: {% for v in sh.dag %}{% if v >= 0.5 %}{{ loop.index0 }} maç %{{ v }}{{ ' · ' if not loop.last else '' }}{% endif %}{% endfor %}</div>
 {% else %}<div class="section-sub">Sistem hesabı için en az 5 ayak gerekiyor.</div>{% endif %}
-<form method="post" action="/ht-ft/kupon-kaydet" style="margin:6px 16px 12px"><button style="width:100%;padding:10px;border-radius:10px;border:0;font-weight:700;background:linear-gradient(135deg,var(--amber-bright),var(--amber));color:#241a06">💾 Bu kuponu kaydet (takip et)</button></form>
+<form method="post" action="/ht-ft/kupon-kaydet" style="margin:6px 16px 12px"><input type="hidden" name="filtre" value="{{ '1' if filtre else '0' }}"><button style="width:100%;padding:10px;border-radius:10px;border:0;font-weight:700;background:linear-gradient(135deg,var(--amber-bright),var(--amber));color:#241a06">💾 Bu kuponu kaydet (takip et)</button></form>
 {% else %}<div class="empty">Şu an kupon kurulacak kadar İY/MS verisi yok.</div>{% endif %}
 
 {% if kayit %}<h2 class="section">📒 KAYITLI SİSTEM KUPONLARI</h2>
 {% for k in kayit %}
-<details class="row" style="display:block"><summary>{{ k.at | localdatetime }} · {{ k.legs|length }} ayak · tutan {{ k.tutan }} ·
+<details class="row" style="display:block"><summary>{{ k.at | localdatetime }} · {{ 'filtreli' if k.filtre else 'saf olasılık' }} · {{ k.legs|length }} ayak · tutan {{ k.tutan }} ·
   {% if k.bitti %}<b class="{{ 'pos' if k.kar > 0 else 'neg' }}">dönüş {{ k.donus }} / {{ k.hesap.kombi }} birim ({{ '+' if k.kar > 0 else '' }}{{ k.kar }})</b>{% else %}devam ediyor (şimdilik dönüş {{ k.donus }}){% endif %}</summary>
   {% for l in k.legs %}<div class="ng-meta">{{ l.home }} — {{ l.away }}: <b>{{ l.sonuc }} @{{ l.oran }}</b> {% if l.gercek %}→ {{ l.gercek }} {{ '✓' if l.tuttu else '✗' }}{% endif %}</div>{% endfor %}
 </details>

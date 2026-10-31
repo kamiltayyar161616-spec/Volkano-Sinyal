@@ -145,7 +145,7 @@ def _adaylar(min_dk=20, saat=14):
     return out
 
 
-def kur_kupon(min_deger=0.0, yedek_deger=-0.05):
+def kur_kupon(min_deger=-9.0, yedek_deger=-9.0):
     """Her IY/MS sonucu icin (en az bulunandan baslayarak) en olasi + fiyati adil (deger >= min) maci sec,
     her mac bir kez; 10. ayak = kalanlar icinde en yuksek olasilikli secim. Bulunamazsa deger >= yedek ile (isaretli)."""
     A = _adaylar()
@@ -209,12 +209,12 @@ def _kayitli():
         return []
 
 
-def kupon_kaydet():
-    legs = kur_kupon()
+def kupon_kaydet(filtre=False):
+    legs = kur_kupon(0.0, -0.05) if filtre else kur_kupon()
     if len(legs) < 5:
         return False
     L = _kayitli()
-    L.insert(0, {"at": ng._iso(ng._now()), "legs": legs, "hesap": sistem_hesap(legs)})
+    L.insert(0, {"at": ng._iso(ng._now()), "legs": legs, "hesap": sistem_hesap(legs), "filtre": filtre})
     json.dump(L[:100], open(SISTEM_FILE, "w"), ensure_ascii=False)
     return True
 

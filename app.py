@@ -293,8 +293,9 @@ def altust_page():
 
 @app.route("/ht-ft")
 def htft_page():
-    legs = htft_tab.kur_kupon()
-    return render_template("htft.html", d=htft_tab.get_page_data(), perf=htft_tab.get_performance(),
+    filtre = request.args.get("filtre") == "1"
+    legs = htft_tab.kur_kupon(0.0, -0.05) if filtre else htft_tab.kur_kupon()
+    return render_template("htft.html", filtre=filtre, d=htft_tab.get_page_data(), perf=htft_tab.get_performance(),
                            perf_7d=htft_tab.get_performance(days=7), bahis=htft_tab.BAHIS, active_page="htft",
                            sk=legs, sh=htft_tab.sistem_hesap(legs), kayit=htft_tab.kayitli_kuponlar()[:15],
                            kaydedildi=request.args.get("k"))
@@ -302,8 +303,9 @@ def htft_page():
 
 @app.route("/ht-ft/kupon-kaydet", methods=["POST"])
 def htft_kupon_kaydet():
-    ok = htft_tab.kupon_kaydet()
-    return redirect(url_for("htft_page", k="1" if ok else "0"))
+    filtre = request.form.get("filtre") == "1"
+    ok = htft_tab.kupon_kaydet(filtre)
+    return redirect(url_for("htft_page", k="1" if ok else "0", filtre="1" if filtre else None))
 
 
 @app.route("/alt-ust/indir")
