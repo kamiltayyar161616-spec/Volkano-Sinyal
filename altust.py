@@ -91,7 +91,9 @@ def get_performance(days=None):
     if days:
         sinir = ng._iso(ng._now() - timedelta(days=days))
         rows = [r for r in rows if r["ko"] >= sinir]
-    out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": []}
+    ham = [r for r in rows if not r.get("kal")]          # BO kalibrasyonu oncesi (ham gol beklentisi) secimler
+    rows = [r for r in rows if r.get("kal")]
+    out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": [], "ham": _ozet(ham)}
     for ln in CIZGI:
         for tr in ("UST", "ALT"):
             o = _ozet([r for r in rows if r["cizgi"] == ln and r["taraf"] == tr])

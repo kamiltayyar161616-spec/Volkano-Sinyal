@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Alt/Üst Kupon{% endblock %}
 {% block page_tag %}ALT/ÜST KUPON{% endblock %}
-{% block subtitle %}BetOracle gol beklentisinden (Poisson) 1.5–5.5 alt/üst adil oranı üretilir, Volkano oranıyla karşılaştırılır. Değer = BO olasılığı × Volkano oranı − 1. Maçtan ~10-15 dk önce değeri ≥ %10 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
+{% block subtitle %}BetOracle gol beklentisinden (Poisson) 1.5–5.5 alt/üst adil oranı üretilir, Volkano oranıyla karşılaştırılır. BO gol beklentisi geçmiş maçlardan kalibre edilir (haftalık). Değer = düzeltilmiş BO olasılığı × Volkano oranı − 1. Maçtan ~10-15 dk önce değeri ≥ %10 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
 {% block extra_style %}
 <style>
   .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
@@ -61,6 +61,7 @@
     <div>n={{ perf_7d.toplam.n }} · %{{ perf_7d.toplam.isabet }} isabet</div><div>{{ '+' if perf_7d.toplam.eur > 0 else '' }}{{ perf_7d.toplam.eur }} €</div>
     {% else %}<div class="ng-meta">-</div>{% endif %}</div>
 </div>
+{% if perf.ham %}<div class="section-sub">Kalibrasyon öncesi (ham BO gol beklentisi, tabloya dahil değil): n={{ perf.ham.n }} · isabet %{{ perf.ham.isabet }} (BO bekl. %{{ perf.ham.beklenen }}) · ROI {{ '+' if perf.ham.roi > 0 else '' }}%{{ perf.ham.roi }}</div>{% endif %}
 {% if perf.cizgi %}<div class="section-sub">Çizgi × taraf</div>{{ ptab(perf.cizgi) }}{% endif %}
 {% if perf.bant %}<div class="section-sub">BetOracle değer bandı</div>{{ ptab(perf.bant) }}{% endif %}
 {% if perf.hareket %}<div class="section-sub">Para akışı: Volkano'nun bu seçimdeki ilk görülen oranı → kilit oranı (≥%3 değişim)</div>{{ ptab(perf.hareket) }}{% endif %}
