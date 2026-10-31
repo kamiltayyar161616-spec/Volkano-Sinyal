@@ -2,7 +2,8 @@
 
 Veri /root/defter/defter.py 'aday' isinden gelir (cron, 15 dk, vip-tahmin ortami):
   - au_aday : onumuzdeki 12 saatin Volkano'lu maclari -> Volkano 1.5-5.5 alt/ust oranlari + BetOracle gol beklentisi
-              (Poisson) ile adil oran ve deger (BO olasiligi x Volkano orani - 1)
+              (Poisson) ile adil oran ve deger (piyasa olasiligi x Volkano orani - 1). Referans: NowGoal piyasa
+              alt/ust cizgisi L -> beklenen gol L + 0.20 (10 bin maclik kapanis cizgisi testi; BetOracle'dan isabetli)
   - au_kupon: mactan ~10-15 dk once oranlar kilitlenir (cron 5 dk); deger >= %10 ve oran 1.30-12.00 olan her secim kupona yazilir
 Sonuclar ng_match (ft_h/ft_a) ile cozulur; performans cizgi x taraf ve deger bandina gore duz bahis ROI.
 """
@@ -45,6 +46,15 @@ def _band(dg):
     return "+%10-20" if dg < 0.20 else "+%20-40" if dg < 0.40 else "+%40 ve üstü"
 
 
+def _pz(r):
+    k = str(r.get("kal") or "")
+    if not k.startswith("pz") or ">" not in k:
+        return None, None
+    a, b = k[2:].split(">", 1)
+    f = lambda x: None if x in ("None", "") else float(x)
+    return f(a), f(b)
+
+
 def _hareket(r):
     """Volkano'nun bu secim icin ilk gorulen orani -> kilit orani. Oran >=%3 dustuyse bu tarafa para girmis."""
     io = r.get("ilk_oran")
@@ -66,6 +76,7 @@ def _kupon():
         ft = res.get(r["mid"])
         r["ft"] = ft
         r["hareket"] = _hareket(r)
+        r["pz_ilk"], r["pz_son"] = _pz(r)
         if ft:
             t = ft[0] + ft[1]
             r["tuttu"] = t > r["cizgi"] if r["taraf"] == "UST" else t < r["cizgi"]
@@ -91,8 +102,8 @@ def get_performance(days=None):
     if days:
         sinir = ng._iso(ng._now() - timedelta(days=days))
         rows = [r for r in rows if r["ko"] >= sinir]
-    ham = [r for r in rows if not r.get("kal")]          # BO kalibrasyonu oncesi (ham gol beklentisi) secimler
-    rows = [r for r in rows if r.get("kal")]
+    ham = [r for r in rows if not str(r.get("kal") or "").startswith("pz")]   # eski BetOracle tabanli secimler (kiyas)
+    rows = [r for r in rows if str(r.get("kal") or "").startswith("pz")]       # piyasa cizgisi tabanli
     out = {"toplam": _ozet(rows), "cizgi": [], "bant": [], "hareket": [], "ham": _ozet(ham)}
     for ln in CIZGI:
         for tr in ("UST", "ALT"):
@@ -102,7 +113,7 @@ def get_performance(days=None):
     for b in ("+%10-20", "+%20-40", "+%40 ve üstü"):
         o = _ozet([r for r in rows if _band(r["deger"]) == b])
         if o:
-            out["bant"].append(dict(o, ad=f"BO değeri {b}"))
+            out["bant"].append(dict(o, ad=f"değer {b}"))
     for h in ("Volkano oranı DÜŞTÜ (para bu tarafa)", "Volkano oranı sabit (±%3)", "Volkano oranı YÜKSELDİ (para karşı tarafa)"):
         for tr in ("UST", "ALT"):
             o = _ozet([r for r in rows if r["hareket"] == h and r["taraf"] == tr])
