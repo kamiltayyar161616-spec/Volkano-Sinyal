@@ -333,6 +333,15 @@ def altust_indir():
                     headers={"Content-Disposition": "attachment; filename=alt_ust_veri.json"})
 
 
+@app.route("/iy-ms-v/indir")
+def iyv_indir():
+    import json as _json
+    from flask import Response
+    body = _json.dumps(iyv_tab.export_json(), ensure_ascii=False, default=str)
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=iyms_volkano_veri.json"})
+
+
 @app.route("/strateji/indir")
 def strateji_indir():
     import json as _json

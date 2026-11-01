@@ -186,3 +186,36 @@ def get_page_data():
     secim = sorted([(a, k, x) for a in aday for k, x in a["sec"]], key=lambda t: -t[2]["sapma"])
     return {"aday": aday, "secim": secim, "son": son, "son_eksi": son_eksi, "bias": bias, "son_liste": SON, "hazir": c is not None,
             "kilit_mac": len({r["mid"] for r in kil})}
+
+
+def export_json():
+    """Kilitli tum maclar: 9 IY/MS sonucu (oran, model, olmasi gereken, sapma, tuttu) + MS/IY 1X2 ters yontem + skor; performans."""
+    kil = _kilit()
+    M = {}
+    for r in kil:
+        m = M.setdefault(r["mid"], {"mid": r["mid"], "ko": r["ko"], "home": r["home"], "away": r["away"], "lig": r["lig"],
+                                    "skor": None, "iyms": None, "iyms_sec": []})
+        if r["skor"]:
+            x = r["skor"]
+            m["skor"] = {"iy": f"{x[0]}-{x[1]}", "ms": f"{x[2]}-{x[3]}"}
+            m["iyms"] = r["gercek"]
+        m["iyms_sec"].append({"sonuc": r["sonuc"], "oran": r["oran"], "p": r["p"], "olmasi": r["olmasi"],
+                              "sapma_yuzde": round(100 * r["sapma"], 2), "tuttu": r["tuttu"]})
+    c = _c()
+    if c:
+        for mid, vk, mo in c.execute("SELECT mid, vk, model FROM iyv_islenen"):
+            m = M.get(mid)
+            if not m:
+                continue
+            vk = json.loads(vk) if vk else None
+            mo = json.loads(mo) if mo else {}
+            m["model"] = {k: mo.get(k) for k in ("p1x2", "lam", "f", "fk")}
+            sk = m["skor"]
+            gel = {"MS": m["iyms"].split("/")[1], "IY": m["iyms"].split("/")[0]} if m["iyms"] else {}
+            for ad, T in ters(vk).items():
+                m[f"{ad.lower()}_1x2"] = [{"sonuc": r, "gercek": od, "olmasi": ol, "fark_yuzde": round(100 * d, 2),
+                                           "tuttu": (r == gel[ad]) if gel else None} for r, (od, ol, d, p) in T.items()]
+        c.close()
+    L = sorted(M.values(), key=lambda m: m["ko"], reverse=True)
+    return {"exported_at": ng._iso(ng._now()), "mac_sayisi": len(L), "sonuclu": sum(1 for m in L if m["skor"]),
+            "performans": get_performance(), "ters_performans": ters_perf(), "maclar": L}
