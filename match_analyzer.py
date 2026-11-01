@@ -17,8 +17,8 @@ from zoneinfo import ZoneInfo
 import oracle_data
 import oracle_model
 
-# VolcanoBet arayuzuyle ayni saat dilimi (Karadag, CET/CEST - DST'yi otomatik ayarlar)
-LOCAL_TZ = ZoneInfo("Europe/Podgorica")  # kullanici Karadag'da -- Istanbul'a cevirmek yanlis bir varsayimdi, geri alindi
+# Tum sayfalarda Turkiye saati (kullanici istegi 2026-11-01; once Karadag/CET idi)
+LOCAL_TZ = ZoneInfo("Europe/Istanbul")
 
 
 _TZ_MARKER_RE = re.compile(r"(Z|[+-]\d{2}:\d{2})$")
