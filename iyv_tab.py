@@ -12,7 +12,7 @@ import nowgoal as ng
 
 DB = "/root/defter/iyv.db"
 SON = [f"{a}/{b}" for a in "1X2" for b in "1X2"]
-ESIK = (0.02, 0.04, 0.06)
+ESIK = (0.02, 0.04, 0.06, 0.08, 0.12)
 
 
 def _c():
@@ -98,8 +98,10 @@ def get_performance(days=None):
 
 
 # ------------------------------------------------------------------ TERS YONTEM: Volkano IY/MS -> MS 1X2 ve IY 1X2 olmasi gereken
-TBANT = (("≥ +%2", lambda d: d >= 0.02), ("+%0.5 … +%2", lambda d: 0.005 <= d < 0.02), ("≈ 0 (±%0.5)", lambda d: abs(d) < 0.005),
-         ("−%2 … −%0.5", lambda d: -0.02 < d <= -0.005), ("≤ −%2", lambda d: d <= -0.02))
+TBANT = (("≥ +%8", lambda d: d >= 0.08), ("+%4 … +%8", lambda d: 0.04 <= d < 0.08), ("+%2 … +%4", lambda d: 0.02 <= d < 0.04),
+         ("+%0.5 … +%2", lambda d: 0.005 <= d < 0.02), ("≈ 0 (±%0.5)", lambda d: abs(d) < 0.005),
+         ("−%2 … −%0.5", lambda d: -0.02 < d <= -0.005), ("−%4 … −%2", lambda d: -0.04 < d <= -0.02),
+         ("−%8 … −%4", lambda d: -0.08 < d <= -0.04), ("≤ −%8", lambda d: d <= -0.08))
 
 
 def ters(vk):
