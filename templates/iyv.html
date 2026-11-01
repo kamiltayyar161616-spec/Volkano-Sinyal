@@ -32,10 +32,12 @@
 
 <h2 class="section">📊 PERFORMANS (kilitli oranla, 1 birim)</h2>
 <div class="section-sub">Sonucu belli {{ perf.mac }} maç (toplam kilitli {{ d.kilit_mac }}). "model" = modelin ortalama olasılığı. Az maçta tek bir yüksek oran (2/1, 1/2) ROI'yi tek başına taşır; n≥300 olmadan karar yok.</div>
-{% if perf.esik %}<div class="section-sub">Eşikler</div>{{ ptab(perf.esik) }}{% else %}<div class="empty">Henüz sonuçlanan kilitli maç yok.</div>{% endif %}
+{% if perf.esik %}<div class="section-sub">Artı eşikler (Volkano olması gerekenden yüksek)</div>{{ ptab(perf.esik) }}
+{% if perf.esik_eksi %}<div class="section-sub">Eksi eşikler (Volkano olması gerekenden düşük)</div>{{ ptab(perf.esik_eksi) }}{% endif %}{% else %}<div class="empty">Henüz sonuçlanan kilitli maç yok.</div>{% endif %}
 {% if perf.eksi %}<div class="section-sub">Karşılaştırma</div>{{ ptab(perf.eksi) }}{% endif %}
 {% if perf.sonuc %}<div class="section-sub">Sonuca göre (sapma ≥ +%2)</div>{{ ptab(perf.sonuc) }}{% endif %}
-{% if perf7.esik %}<div class="section-sub">Son 7 gün</div>{{ ptab(perf7.esik) }}{% endif %}
+{% if perf.sonuc_eksi %}<div class="section-sub">Sonuca göre (sapma ≤ −%2)</div>{{ ptab(perf.sonuc_eksi) }}{% endif %}
+{% if perf7.esik %}<div class="section-sub">Son 7 gün</div>{{ ptab(perf7.esik + perf7.esik_eksi) }}{% endif %}
 
 <h2 class="section">🔥 YAKLAŞAN ≥ +%2 ({{ d.secim|length }})</h2>
 <div class="section-sub">Volkano'nun olması gerekenden en az %2 yüksek verdiği İY/MS sonuçları. Oranlar maçtan ~15 dk önce kilitlenir.</div>
@@ -61,6 +63,13 @@
 <div class="row"><span>{{ r.home }} — {{ r.away }}<br><span class="ng-meta">{{ r.ko | localdatetime }}{% if r.skor %} · İY {{ r.skor[0] }}-{{ r.skor[1] }} · MS {{ r.skor[2] }}-{{ r.skor[3] }} ({{ r.gercek }}){% endif %}</span></span>
   <span style="text-align:right"><span class="tag {{ 'w' if r.tuttu else 'l' if r.tuttu is sameas false else '' }}">{{ r.sonuc }} @{{ r.oran }} {{ '✓' if r.tuttu else '✗' if r.tuttu is sameas false else '⏳' }}</span><br><span class="ng-meta">olması {{ r.olmasi }} · {{ sp(r.sapma) }}</span></span></div>
 {% else %}<div class="empty">Henüz kilitli seçim yok.</div>{% endfor %}
+
+<details style="margin:0 0 10px"><summary class="section" style="cursor:pointer">🧊 KİLİTLİ ≤ −%2 SEÇİMLER ({{ d.son_eksi|length }})</summary>
+{% for r in d.son_eksi %}
+<div class="row"><span>{{ r.home }} — {{ r.away }}<br><span class="ng-meta">{{ r.ko | localdatetime }}{% if r.skor %} · İY {{ r.skor[0] }}-{{ r.skor[1] }} · MS {{ r.skor[2] }}-{{ r.skor[3] }} ({{ r.gercek }}){% endif %}</span></span>
+  <span style="text-align:right"><span class="tag {{ 'w' if r.tuttu else 'l' if r.tuttu is sameas false else '' }}">{{ r.sonuc }} @{{ r.oran }} {{ '✓' if r.tuttu else '✗' if r.tuttu is sameas false else '⏳' }}</span><br><span class="ng-meta">olması {{ r.olmasi }} · {{ sp(r.sapma) }}</span></span></div>
+{% else %}<div class="empty">Henüz yok.</div>{% endfor %}
+</details>
 
 {% if d.bias %}<h2 class="section">⚙️ DÜZELTME KATSAYISI (bias)</h2>
 <div class="section-sub">Olması gereken = katsayı ÷ model olasılığı. Katsayı = kilitli maçlarda ortalama (Volkano oranı × model olasılığı); başlangıçta 6 gözlemlik tabloyla karışık, maç biriktikçe kendini günceller. Sonuçları kullanmaz.</div>

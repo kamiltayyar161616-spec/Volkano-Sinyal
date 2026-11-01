@@ -74,13 +74,16 @@ def get_performance(days=None):
     if days:
         sinir = ng._iso(ng._now() - timedelta(days=days))
         rows = [r for r in rows if r["ko"] >= sinir]
-    out = {"mac": len({r["mid"] for r in rows}), "esik": [], "sonuc": [], "eksi": []}
+    out = {"mac": len({r["mid"] for r in rows}), "esik": [], "sonuc": [], "eksi": [], "esik_eksi": [], "sonuc_eksi": []}
     for e in ESIK:
         o = _ozet([r for r in rows if r["sapma"] >= e], f"sapma ≥ +%{int(e * 100)}")
         if o:
             out["esik"].append(o)
-    for ad, f in (("sapma 0 … +%2", lambda s: 0 <= s < 0.02), ("sapma −%2 … 0", lambda s: -0.02 <= s < 0),
-                  ("sapma ≤ −%2", lambda s: s < -0.02), ("tümü (9 sonuç)", lambda s: True)):
+        o = _ozet([r for r in rows if r["sapma"] <= -e], f"sapma ≤ −%{int(e * 100)}")
+        if o:
+            out["esik_eksi"].append(o)
+    for ad, f in (("sapma 0 … +%2", lambda s: 0 <= s < 0.02), ("sapma −%2 … 0", lambda s: -0.02 < s < 0),
+                  ("tümü (9 sonuç)", lambda s: True)):
         o = _ozet([r for r in rows if f(r["sapma"])], ad)
         if o:
             out["eksi"].append(o)
@@ -88,6 +91,9 @@ def get_performance(days=None):
         o = _ozet([r for r in rows if r["sonuc"] == k and r["sapma"] >= ESIK[0]], k)
         if o:
             out["sonuc"].append(o)
+        o = _ozet([r for r in rows if r["sonuc"] == k and r["sapma"] <= -ESIK[0]], k)
+        if o:
+            out["sonuc_eksi"].append(o)
     return out
 
 
@@ -95,6 +101,7 @@ def get_page_data():
     now = ng._iso(ng._now())
     kil = _kilit()
     son = [r for r in kil if r["sapma"] >= ESIK[0]][:80]
+    son_eksi = [r for r in kil if r["sapma"] <= -ESIK[0]][:80]
     aday, bias = [], None
     c = _c()
     if c:
@@ -111,5 +118,5 @@ def get_page_data():
                          "sec": sorted([(k, x) for k, x in hucre.items() if x["sapma"] >= ESIK[0]], key=lambda t: -t[1]["sapma"])})
         c.close()
     secim = sorted([(a, k, x) for a in aday for k, x in a["sec"]], key=lambda t: -t[2]["sapma"])
-    return {"aday": aday, "secim": secim, "son": son, "bias": bias, "son_liste": SON, "hazir": c is not None,
+    return {"aday": aday, "secim": secim, "son": son, "son_eksi": son_eksi, "bias": bias, "son_liste": SON, "hazir": c is not None,
             "kilit_mac": len({r["mid"] for r in kil})}
