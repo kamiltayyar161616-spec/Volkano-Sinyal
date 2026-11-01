@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}SAHA — İY/MS Volkano{% endblock %}
+{% block page_tag %}İY/MS V{% endblock %}
+{% block subtitle %}Sadece Volkano'nun kendi oranları: 1X2 + alt/üst + ilk yarı alt/üst → 9 İY/MS sonucunun "olması gereken" oranı. Sapma = Volkano'nun İY/MS oranı ÷ olması gereken − 1. Artı = Volkano olması gerekenden yüksek veriyor. Maçtan ~15 dk önce 9 sonucun hepsi kilitlenir; ROI 1 birim düz bahisle.{% endblock %}
+{% block extra_style %}
+<style>
+  .ng-card{ margin:0 16px 10px; padding:13px 14px; border-radius:12px; background:linear-gradient(165deg,var(--navy-soft),var(--navy)); border:1px solid var(--navy-line); }
+  .ng-card.hot{ border-color:var(--amber); }
+  .ng-teams{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .og{ display:grid; grid-template-columns:repeat(9,1fr); gap:3px; margin-top:8px; font-size:9.5px; }
+  .og div{ background:var(--navy-deep); border-radius:6px; padding:4px 1px; text-align:center; }
+  .og .h{ background:none; color:var(--chalk-faint); font-size:8.5px; }
+  .og .sel{ outline:1px solid var(--amber); }
+  .og small{ display:block; font-size:8px; color:var(--chalk-faint); }
+  .tag{ display:inline-block; font-size:9.5px; font-weight:700; padding:3px 7px; border-radius:5px; margin:5px 4px 0 0; background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .tag.a{ border-color:var(--amber-dim); color:var(--amber-bright); } .tag.w{ border-color:var(--turf); color:var(--turf-bright); } .tag.l{ border-color:var(--clay-dim); color:var(--clay); }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .pt{ display:grid; grid-template-columns:1.4fr .55fr .6fr .8fr .8fr .8fr 1fr; gap:2px; margin:0 16px 10px; font-size:10px; }
+  .pt div{ padding:5px 3px; background:var(--navy); border-radius:4px; text-align:center; } .pt .n{ text-align:left; } .pt .hd{ background:none; color:var(--chalk-faint); font-size:9px; }
+  .row{ display:flex; justify-content:space-between; gap:8px; padding:8px 12px; margin:0 16px 5px; background:var(--navy); border:1px solid var(--navy-line); border-radius:9px; font-size:10.5px; }
+</style>
+{% endblock %}
+{% macro pc(v) %}{% if v is not none %}{{ (v*100)|round(1) }}{% else %}-{% endif %}{% endmacro %}
+{% macro sp(v) %}<span class="{{ 'pos' if v > 0 else 'neg' if v < 0 else '' }}">{{ '+' if v > 0 else '' }}%{{ (v*100)|round(1) }}</span>{% endmacro %}
+{% macro ptab(L) %}
+<div class="pt"><div class="hd n">grup</div><div class="hd">seçim</div><div class="hd">tuttu</div><div class="hd">isabet</div><div class="hd">model</div><div class="hd">ort. oran</div><div class="hd">ROI</div>
+{% for o in L %}<div class="n">{{ o.ad }}</div><div>{{ o.n }}</div><div>{{ o.w }}</div><div>%{{ o.isabet }}</div><div>%{{ o.beklenen }}</div><div>{{ o.ort_oran }}</div><div class="{{ 'pos' if o.roi > 0 else 'neg' }}">{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}<br><small>{{ '+' if o.kar > 0 else '' }}{{ o.kar }} br</small></div>{% endfor %}</div>
+{% endmacro %}
+{% block content %}
+{% if not d.hazir %}<div class="empty">Defter henüz oluşmadı (iyv işi ilk kez çalışınca dolar).</div>{% else %}
+
+<h2 class="section">📊 PERFORMANS (kilitli oranla, 1 birim)</h2>
+<div class="section-sub">Sonucu belli {{ perf.mac }} maç (toplam kilitli {{ d.kilit_mac }}). "model" = modelin ortalama olasılığı. Az maçta tek bir yüksek oran (2/1, 1/2) ROI'yi tek başına taşır; n≥300 olmadan karar yok.</div>
+{% if perf.esik %}<div class="section-sub">Eşikler</div>{{ ptab(perf.esik) }}{% else %}<div class="empty">Henüz sonuçlanan kilitli maç yok.</div>{% endif %}
+{% if perf.eksi %}<div class="section-sub">Karşılaştırma</div>{{ ptab(perf.eksi) }}{% endif %}
+{% if perf.sonuc %}<div class="section-sub">Sonuca göre (sapma ≥ +%2)</div>{{ ptab(perf.sonuc) }}{% endif %}
+{% if perf7.esik %}<div class="section-sub">Son 7 gün</div>{{ ptab(perf7.esik) }}{% endif %}
+
+<h2 class="section">🔥 YAKLAŞAN ≥ +%2 ({{ d.secim|length }})</h2>
+<div class="section-sub">Volkano'nun olması gerekenden en az %2 yüksek verdiği İY/MS sonuçları. Oranlar maçtan ~15 dk önce kilitlenir.</div>
+{% for a, k, x in d.secim[:40] %}
+<div class="row"><span><b>{{ a.home }} — {{ a.away }}</b><br><span class="ng-meta">{{ a.ko | localdatetime }} · {{ a.lig or '' }}</span></span>
+  <span style="text-align:right"><span class="tag a">{{ k }} @{{ x.oran }}</span><br><span class="ng-meta">olması {{ x.olmasi }} · {{ sp(x.sapma) }}</span></span></div>
+{% else %}<div class="empty">Şu an ≥ +%2 sapma yok.</div>{% endfor %}
+
+<h2 class="section">📅 YAKLAŞAN 12 SAAT</h2>
+<div class="section-sub">Hücre: Volkano oranı / olması gereken / sapma. Çerçeveli = ≥ +%2. Altta: Volkano 1X2'sinden olasılıklar, toplam gol beklentisi, ilk yarı gol payı.</div>
+{% for m in d.aday %}
+<div class="ng-card {{ 'hot' if m.sec else '' }}">
+  <div class="ng-teams">{{ m.home }} — {{ m.away }}</div>
+  <div class="ng-meta">{{ m.lig or '' }} · {{ m.ko | localdatetime }} · 9 sonucun {{ m.arti }}'ine artı</div>
+  <div class="og">{% for k in d.son_liste %}<div class="h">{{ k }}</div>{% endfor %}
+  {% for k in d.son_liste %}{% set x = m.hucre.get(k) %}<div class="{{ 'sel' if x and x.sapma >= 0.02 else '' }}">{% if x %}{{ x.oran }}<small>{{ x.olmasi }}</small><small>{{ sp(x.sapma) }}</small>{% else %}-{% endif %}</div>{% endfor %}</div>
+  <div class="ng-meta">{% if m.p1x2 %}1X2 %{{ pc(m.p1x2[0]) }}/%{{ pc(m.p1x2[1]) }}/%{{ pc(m.p1x2[2]) }} · {% endif %}{{ m.lam }} gol · İY payı %{{ pc(m.f) }}{% if m.fk != 'iy0.5' %} (İY alt/üst yok, varsayılan){% endif %}</div>
+</div>
+{% else %}<div class="empty">Önümüzdeki 12 saatte veri yok.</div>{% endfor %}
+
+<h2 class="section">🧾 KİLİTLİ ≥ +%2 SEÇİMLER</h2>
+{% for r in d.son %}
+<div class="row"><span>{{ r.home }} — {{ r.away }}<br><span class="ng-meta">{{ r.ko | localdatetime }}{% if r.skor %} · İY {{ r.skor[0] }}-{{ r.skor[1] }} · MS {{ r.skor[2] }}-{{ r.skor[3] }} ({{ r.gercek }}){% endif %}</span></span>
+  <span style="text-align:right"><span class="tag {{ 'w' if r.tuttu else 'l' if r.tuttu is sameas false else '' }}">{{ r.sonuc }} @{{ r.oran }} {{ '✓' if r.tuttu else '✗' if r.tuttu is sameas false else '⏳' }}</span><br><span class="ng-meta">olması {{ r.olmasi }} · {{ sp(r.sapma) }}</span></span></div>
+{% else %}<div class="empty">Henüz kilitli seçim yok.</div>{% endfor %}
+
+{% if d.bias %}<h2 class="section">⚙️ DÜZELTME KATSAYISI (bias)</h2>
+<div class="section-sub">Olması gereken = katsayı ÷ model olasılığı. Katsayı = kilitli maçlarda ortalama (Volkano oranı × model olasılığı); başlangıçta 6 gözlemlik tabloyla karışık, maç biriktikçe kendini günceller. Sonuçları kullanmaz.</div>
+<div class="og" style="margin:0 16px 14px">{% for k in d.son_liste %}<div class="h">{{ k }}</div>{% endfor %}{% for k in d.son_liste %}<div>{{ d.bias.get(k, '-') }}</div>{% endfor %}</div>
+{% endif %}
+{% endif %}
+{% endblock %}

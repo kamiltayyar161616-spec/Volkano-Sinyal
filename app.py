@@ -37,6 +37,7 @@ import sdoran
 import strateji
 import altust
 import htft_tab
+import iyv_tab
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -299,6 +300,12 @@ def htft_page():
                            perf_7d=htft_tab.get_performance(days=7), bahis=htft_tab.BAHIS, active_page="htft",
                            sk=legs, sh=htft_tab.sistem_hesap(legs), kayit=(_kk := htft_tab.kayitli_kuponlar())[:15], kayit_oz=htft_tab.kayit_ozet(_kk),
                            kaydedildi=request.args.get("k"))
+
+
+@app.route("/iy-ms-v")
+def iyv_page():
+    return render_template("iyv.html", d=iyv_tab.get_page_data(), perf=iyv_tab.get_performance(),
+                           perf7=iyv_tab.get_performance(days=7), active_page="iyv")
 
 
 @app.route("/ht-ft/kupon-sil", methods=["POST"])

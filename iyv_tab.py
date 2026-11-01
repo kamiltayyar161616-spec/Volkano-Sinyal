@@ -1,0 +1,115 @@
+"""SAHA - IY/MS Volkano ic sapma sekmesi (diger sekmelerden bagimsiz).
+Veri /root/defter/iyv.py (cron 5 dk) -> /root/defter/iyv.db
+  iyv_aday : onumuzdeki 12 saat; Volkano'nun kendi 1X2 + alt/ust + IY alt/ust oranlarindan 9 sonucun 'olmasi gereken' orani
+  iyv_kilit: mactan ~15 dk once 9 sonucun hepsi kilitlenir (oran, model olasiligi, olmasi gereken, sapma)
+Sonuc: ng_match ht_h/ht_a + ft_h/ft_a. 1 birim duz bahis."""
+import json
+import os
+import sqlite3
+from datetime import timedelta
+
+import nowgoal as ng
+
+DB = "/root/defter/iyv.db"
+SON = [f"{a}/{b}" for a in "1X2" for b in "1X2"]
+ESIK = (0.02, 0.04, 0.06)
+
+
+def _c():
+    if not os.path.exists(DB):
+        return None
+    c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=10)
+    c.row_factory = sqlite3.Row
+    try:
+        c.execute("SELECT 1 FROM iyv_kilit LIMIT 1")
+    except sqlite3.OperationalError:
+        c.close()
+        return None
+    return c
+
+
+def _sg(h, a):
+    return "1" if h > a else "X" if h == a else "2"
+
+
+def _kilit():
+    c = _c()
+    if not c:
+        return []
+    rows = [dict(r) for r in c.execute("SELECT * FROM iyv_kilit ORDER BY ko DESC")]
+    c.close()
+    mids = {r["mid"] for r in rows}
+    res = {}
+    if mids:
+        with ng._db_lock:
+            cc = ng._conn()
+            res = {r[0]: r[1:] for r in cc.execute(
+                f"SELECT mid, ht_h, ht_a, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND ht_h IS NOT NULL AND mid IN ({','.join(map(str, mids))})")}
+            cc.close()
+    for r in rows:
+        x = res.get(r["mid"])
+        r["skor"] = x
+        if x:
+            r["gercek"] = f"{_sg(x[0], x[1])}/{_sg(x[2], x[3])}"
+            r["tuttu"] = r["gercek"] == r["sonuc"]
+            r["kar"] = (r["oran"] - 1) if r["tuttu"] else -1.0
+        else:
+            r["gercek"] = r["tuttu"] = r["kar"] = None
+    return rows
+
+
+def _ozet(L, ad):
+    n = len(L)
+    if not n:
+        return None
+    w = sum(1 for r in L if r["tuttu"])
+    k = sum(r["kar"] for r in L)
+    return {"ad": ad, "n": n, "w": w, "mac": len({r["mid"] for r in L}), "isabet": round(100 * w / n, 1),
+            "ort_oran": round(sum(r["oran"] for r in L) / n, 2), "beklenen": round(100 * sum(r["p"] for r in L) / n, 1),
+            "kar": round(k, 2), "roi": round(100 * k / n, 1)}
+
+
+def get_performance(days=None):
+    rows = [r for r in _kilit() if r["skor"]]
+    if days:
+        sinir = ng._iso(ng._now() - timedelta(days=days))
+        rows = [r for r in rows if r["ko"] >= sinir]
+    out = {"mac": len({r["mid"] for r in rows}), "esik": [], "sonuc": [], "eksi": []}
+    for e in ESIK:
+        o = _ozet([r for r in rows if r["sapma"] >= e], f"sapma ≥ +%{int(e * 100)}")
+        if o:
+            out["esik"].append(o)
+    for ad, f in (("sapma 0 … +%2", lambda s: 0 <= s < 0.02), ("sapma −%2 … 0", lambda s: -0.02 <= s < 0),
+                  ("sapma ≤ −%2", lambda s: s < -0.02), ("tümü (9 sonuç)", lambda s: True)):
+        o = _ozet([r for r in rows if f(r["sapma"])], ad)
+        if o:
+            out["eksi"].append(o)
+    for k in SON:
+        o = _ozet([r for r in rows if r["sonuc"] == k and r["sapma"] >= ESIK[0]], k)
+        if o:
+            out["sonuc"].append(o)
+    return out
+
+
+def get_page_data():
+    now = ng._iso(ng._now())
+    kil = _kilit()
+    son = [r for r in kil if r["sapma"] >= ESIK[0]][:80]
+    aday, bias = [], None
+    c = _c()
+    if c:
+        for r in c.execute("SELECT * FROM iyv_aday WHERE ko > ? ORDER BY ko", (now,)):
+            sec = json.loads(r["sec"] or "[]")
+            if not sec:
+                continue
+            M = json.loads(r["model"]) if r["model"] else {}
+            hucre = {k: {"oran": od, "p": p, "olmasi": ol, "sapma": sp} for k, od, p, ol, sp, b in sec}
+            bias = {k: b for k, od, p, ol, sp, b in sec}
+            aday.append({"mid": r["mid"], "ko": r["ko"], "home": r["home"], "away": r["away"], "lig": r["lig"],
+                         "p1x2": M.get("p1x2"), "lam": M.get("lam"), "f": M.get("f"), "fk": M.get("fk"), "hucre": hucre,
+                         "arti": sum(1 for x in hucre.values() if x["sapma"] > 0),
+                         "sec": sorted([(k, x) for k, x in hucre.items() if x["sapma"] >= ESIK[0]], key=lambda t: -t[1]["sapma"])})
+        c.close()
+    secim = sorted([(a, k, x) for a in aday for k, x in a["sec"]], key=lambda t: -t[2]["sapma"])
+    return {"aday": aday, "secim": secim, "son": son, "bias": bias, "son_liste": SON, "hazir": c is not None,
+            "kilit_mac": len({r["mid"] for r in kil})}
