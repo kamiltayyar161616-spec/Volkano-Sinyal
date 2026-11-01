@@ -83,7 +83,7 @@ def get_performance(days=None):
         if o:
             out["esik_eksi"].append(o)
     for ad, f in (("sapma 0 … +%2", lambda s: 0 <= s < 0.02), ("sapma −%2 … 0", lambda s: -0.02 < s < 0),
-                  ("tümü (9 sonuç)", lambda s: True)):
+                  ("≈ 0 (±%0.5)", lambda s: abs(s) < 0.005), ("tümü (9 sonuç)", lambda s: True)):
         o = _ozet([r for r in rows if f(r["sapma"])], ad)
         if o:
             out["eksi"].append(o)
@@ -94,6 +94,69 @@ def get_performance(days=None):
         o = _ozet([r for r in rows if r["sonuc"] == k and r["sapma"] <= -ESIK[0]], k)
         if o:
             out["sonuc_eksi"].append(o)
+    return out
+
+
+# ------------------------------------------------------------------ TERS YONTEM: Volkano IY/MS -> MS 1X2 ve IY 1X2 olmasi gereken
+TBANT = (("≥ +%2", lambda d: d >= 0.02), ("+%0.5 … +%2", lambda d: 0.005 <= d < 0.02), ("≈ 0 (±%0.5)", lambda d: abs(d) < 0.005),
+         ("−%2 … −%0.5", lambda d: -0.02 < d <= -0.005), ("≤ −%2", lambda d: d <= -0.02))
+
+
+def ters(vk):
+    """Volkano IY/MS (47) -> {'MS': {'1': [gercek, olmasi, fark], ..}, 'IY': {..}}; 1X2 pazari 1, IY 1X2 pazari 60."""
+    h = (vk or {}).get("47") or {}
+    if len([k for k in SON if h.get(k)]) < 9:
+        return {}
+    q = {k: 1 / h[k] for k in SON}
+    t = sum(q.values())
+    out = {}
+    for ad, pz, i in (("MS", "1", 1), ("IY", "60", 0)):
+        o = (vk or {}).get(pz) or {}
+        if not all(o.get(r) for r in "1X2"):
+            continue
+        m = sum(1 / o[r] for r in "1X2")
+        x = {}
+        for r in "1X2":
+            p = sum(v for k, v in q.items() if k.split("/")[i] == r) / t
+            ol = 1 / (p * m)
+            x[r] = [o[r], round(ol, 2), round(o[r] / ol - 1, 4), p]
+        out[ad] = x
+    return out
+
+
+def ters_perf():
+    c = _c()
+    if not c:
+        return None
+    try:
+        vks = {r[0]: json.loads(r[1]) for r in c.execute("SELECT mid, vk FROM iyv_islenen WHERE vk IS NOT NULL")}
+    except sqlite3.OperationalError:
+        c.close()
+        return None
+    c.close()
+    res = {}
+    if vks:
+        with ng._db_lock:
+            cc = ng._conn()
+            res = {r[0]: r[1:] for r in cc.execute(
+                f"SELECT mid, ht_h, ht_a, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND ht_h IS NOT NULL AND mid IN ({','.join(map(str, vks))})")}
+            cc.close()
+    L = {"MS": [], "IY": []}
+    for mid, vk in vks.items():
+        x = res.get(mid)
+        if not x:
+            continue
+        gel = {"IY": _sg(x[0], x[1]), "MS": _sg(x[2], x[3])}
+        for ad, T in ters(vk).items():
+            for r, (od, ol, d, p) in T.items():
+                w = r == gel[ad]
+                L[ad].append({"mid": mid, "tuttu": w, "kar": (od - 1) if w else -1.0, "oran": od, "p": p, "sapma": d, "sonuc": r})
+    out = {"MS": [], "IY": [], "mac": len({r["mid"] for r in L["MS"] + L["IY"]})}
+    for ad in ("MS", "IY"):
+        for bn, f in TBANT:
+            o = _ozet([r for r in L[ad] if f(r["sapma"])], bn)
+            if o:
+                out[ad].append(o)
     return out
 
 
@@ -110,10 +173,11 @@ def get_page_data():
             if not sec:
                 continue
             M = json.loads(r["model"]) if r["model"] else {}
+            T = ters(json.loads(r["vk"]) if r["vk"] else None)
             hucre = {k: {"oran": od, "p": p, "olmasi": ol, "sapma": sp} for k, od, p, ol, sp, b in sec}
             bias = {k: b for k, od, p, ol, sp, b in sec}
             aday.append({"mid": r["mid"], "ko": r["ko"], "home": r["home"], "away": r["away"], "lig": r["lig"],
-                         "p1x2": M.get("p1x2"), "lam": M.get("lam"), "f": M.get("f"), "fk": M.get("fk"), "hucre": hucre,
+                         "p1x2": M.get("p1x2"), "lam": M.get("lam"), "f": M.get("f"), "fk": M.get("fk"), "hucre": hucre, "ters": T,
                          "arti": sum(1 for x in hucre.values() if x["sapma"] > 0),
                          "sec": sorted([(k, x) for k, x in hucre.items() if x["sapma"] >= ESIK[0]], key=lambda t: -t[1]["sapma"])})
         c.close()

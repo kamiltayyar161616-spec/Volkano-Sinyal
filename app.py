@@ -305,7 +305,7 @@ def htft_page():
 @app.route("/iy-ms-v")
 def iyv_page():
     return render_template("iyv.html", d=iyv_tab.get_page_data(), perf=iyv_tab.get_performance(),
-                           perf7=iyv_tab.get_performance(days=7), active_page="iyv")
+                           perf7=iyv_tab.get_performance(days=7), tp=iyv_tab.ters_perf(), active_page="iyv")
 
 
 @app.route("/ht-ft/kupon-sil", methods=["POST"])

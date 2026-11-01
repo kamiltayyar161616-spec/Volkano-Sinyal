@@ -39,6 +39,12 @@
 {% if perf.sonuc_eksi %}<div class="section-sub">Sonuca göre (sapma ≤ −%2)</div>{{ ptab(perf.sonuc_eksi) }}{% endif %}
 {% if perf7.esik %}<div class="section-sub">Son 7 gün</div>{{ ptab(perf7.esik + perf7.esik_eksi) }}{% endif %}
 
+<h2 class="section">🔁 MS 1X2 ve İY 1X2: Volkano gerçek oran vs İY/MS'den olması gereken</h2>
+<div class="section-sub">Volkano'nun İY/MS oranlarından maç sonu ve ilk yarı 1X2 olasılığı çıkarılır, Volkano'nun kendi 1X2 marjıyla olması gereken oran hesaplanır. Fark = gerçek ÷ olması gereken − 1. Her maçta 3 sonucun hepsi sayılır, 1 birim Volkano oranıyla. {% if tp %}Sonucu belli {{ tp.mac }} maç.{% endif %}</div>
+{% if tp and tp.MS %}<div class="section-sub">Maç sonu 1X2</div>{{ ptab(tp.MS) }}{% endif %}
+{% if tp and tp.IY %}<div class="section-sub">İlk yarı 1X2</div>{{ ptab(tp.IY) }}{% endif %}
+{% if not tp or not (tp.MS or tp.IY) %}<div class="empty">Henüz sonuçlanan maç yok.</div>{% endif %}
+
 <h2 class="section">🔥 YAKLAŞAN ≥ +%2 ({{ d.secim|length }})</h2>
 <div class="section-sub">Volkano'nun olması gerekenden en az %2 yüksek verdiği İY/MS sonuçları. Oranlar maçtan ~15 dk önce kilitlenir.</div>
 {% for a, k, x in d.secim[:40] %}
@@ -55,6 +61,7 @@
   <div class="og">{% for k in d.son_liste %}<div class="h">{{ k }}</div>{% endfor %}
   {% for k in d.son_liste %}{% set x = m.hucre.get(k) %}<div class="{{ 'sel' if x and x.sapma >= 0.02 else '' }}">{% if x %}{{ x.oran }}<small>{{ x.olmasi }}</small><small>{{ sp(x.sapma) }}</small>{% else %}-{% endif %}</div>{% endfor %}</div>
   <div class="ng-meta">{% if m.p1x2 %}1X2 %{{ pc(m.p1x2[0]) }}/%{{ pc(m.p1x2[1]) }}/%{{ pc(m.p1x2[2]) }} · {% endif %}{{ m.lam }} gol · İY payı %{{ pc(m.f) }}{% if m.fk != 'iy0.5' %} (İY alt/üst yok, varsayılan){% endif %}</div>
+  {% for ad in ('MS', 'IY') %}{% if m.ters.get(ad) %}<div class="ng-meta">{{ 'MS' if ad == 'MS' else 'İY' }} 1X2 gerçek/olması: {% for r in '1X2' %}{% set t = m.ters[ad][r] %}{{ r }} {{ t[0] }}/{{ t[1] }} {{ sp(t[2]) }}{{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}{% endfor %}
 </div>
 {% else %}<div class="empty">Önümüzdeki 12 saatte veri yok.</div>{% endfor %}
 
