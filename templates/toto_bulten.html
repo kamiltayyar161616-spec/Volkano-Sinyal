@@ -94,6 +94,14 @@
 <div class="section-sub"><b>Haftada kaç beraberlik çıkmış</b> — 0-1 X çıkan hafta: %{{ G.x_az }} · 6+ X çıkan hafta: %{{ G.x_cok }}</div>
 <table class="tt"><tr><th>X sayısı</th>{% for r in G.xdag %}<th>{{ r.x }}</th>{% endfor %}</tr>
 <tr><td>hafta</td>{% for r in G.xdag %}<td>{{ r.hafta }}<br><span class="ng-meta">%{{ r.y }}</span></td>{% endfor %}</tr></table>
+{% set GT = d.gtest %}
+<div class="section-sub"><b>Oranlarla geriye dönük test</b> (NowGoal kapanış oranları, 210 hafta):
+{% if not GT %} oranlar toplanıyor (sunucuda arka planda, birkaç saat sürer).</div>
+{% else %} {{ GT.oranli }}/{{ GT.mac }} maçın oranı bulundu{% if GT.oranli < GT.mac %} (toplama sürüyor ya da eşleşmedi){% endif %}. <a href="/toto-bulten/gecmis-indir">⬇ JSON</a></div>
+{% if GT.yontem %}<table class="tt"><tr><th class="l">yöntem</th><th>maç</th><th>tutan</th></tr>{% for r in GT.yontem %}<tr><td class="l">{{ r.ad }}</td><td>{{ r.n }}</td><td>{% if r.n %}{{ r.w }} · %{{ r.y }}{% else %}—{% endif %}</td></tr>{% endfor %}</table>
+<table class="tt"><tr><th class="l">kupon önerisi</th><th>maç</th><th>tutan</th></tr>{% for r in GT.kupon %}<tr><td class="l">{{ r.ad }}</td><td>{{ r.n }}</td><td>{% if r.n %}{{ r.w }} · %{{ r.y }}{% else %}—{% endif %}</td></tr>{% endfor %}</table>{% endif %}
+{% if GT.hafta %}<div class="section-sub">Oranı tam olan {{ GT.hafta.n }} haftada kupon önerisiyle kaç maç tutardı (orta kupon {{ GT.hafta.kolon_ort }} kolon): {% for k, v in GT.hafta.dag %}<b>{{ k }}</b>/15: {{ v }} hafta{{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
+{% endif %}
 <details style="margin:0 0 10px"><summary class="section-sub" style="cursor:pointer">Sıra bazında 1 / X / 2 (210 haftada fark çok küçük, büyük ihtimalle tesadüf)</summary>
 <table class="tt"><tr><th>sıra</th><th>1</th><th>X</th><th>2</th></tr>{% for r in G.sira %}<tr><td>{{ r.sira }}</td><td>%{{ r['1'] }}</td><td>%{{ r['X'] }}</td><td>%{{ r['2'] }}</td></tr>{% endfor %}</table></details>
 {% endif %}

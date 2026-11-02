@@ -352,6 +352,15 @@ def toto_liste():
     return redirect(url_for("toto_bulten_page", m=msg, hafta=request.form.get("hafta") or None))
 
 
+@app.route("/toto-bulten/gecmis-indir")
+def toto_gecmis_indir():
+    from flask import Response
+    p = toto_tab.GECMIS_ORAN_FILE
+    body = open(p, encoding="utf-8").read() if __import__("os").path.exists(p) else "{}"
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=toto_gecmis_oran.json"})
+
+
 @app.route("/toto/indir")
 def toto_indir():
     import json as _json

@@ -692,10 +692,48 @@ def gecmis_ozet():
     return v
 
 
+GECMIS_ORAN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_gecmis_oran.json")
+
+
+def gecmis_test():
+    """toto_gecmis_oran.py ciktisi: 210 haftada yontemlerin ve kupon onerisinin tutma orani."""
+    try:
+        D = json.load(open(GECMIS_ORAN_FILE, encoding="utf-8"))
+    except Exception:
+        return None
+    M = D.get("maclar") or []
+    O = [m for m in M if m.get("s")]
+    out = {"at": D.get("at"), "mac": len(M), "eslesen": D.get("eslesen"), "oranli": len(O), "yontem": [], "kupon": [], "hafta": None}
+    if not O:
+        return out
+    for y in ("favori", "kucuk", "birlikte"):
+        L = [m for m in O if m["s"].get(y) is not None]
+        w = sum(1 for m in L if "1X2"[m["s"][y]] == m["sonuc"])
+        out["yontem"].append({"ad": YON_AD.get(y, y), "n": len(L), "w": w, "y": round(100 * w / len(L), 1) if L else None})
+    for t, f in (("TEK", lambda k: k["tur"] == "TEK" and not k["dikkat"]), ("TEK ⚠", lambda k: k["dikkat"]),
+                 ("ÇİFTE", lambda k: k["tur"] == "ÇİFTE"), ("KAPALI", lambda k: k["tur"] == "KAPALI")):
+        L = [m for m in O if m.get("kupon") and f(m["kupon"])]
+        w = sum(1 for m in L if m["sonuc"] in m["kupon"]["isaret"])
+        out["kupon"].append({"ad": t, "n": len(L), "w": w, "y": round(100 * w / len(L), 1) if L else None})
+    W = {}
+    for m in M:
+        W.setdefault((m["sezon"], m["hafta"]), []).append(m)
+    tam = [L for L in W.values() if len(L) == 15 and all(m.get("kupon") for m in L)]
+    if tam:
+        dag = {}
+        for L in tam:
+            k = sum(1 for m in L if m["sonuc"] in m["kupon"]["isaret"])
+            dag[k] = dag.get(k, 0) + 1
+        kol = sorted(__import__("math").prod(len(m["kupon"]["isaret"]) for m in L) for L in tam)
+        out["hafta"] = {"n": len(tam), "dag": sorted(dag.items(), reverse=True), "on5": dag.get(15, 0),
+                        "kolon_ort": kol[len(kol) // 2]}
+    return out
+
+
 def get_bulten_data(hafta=None):
     h = toto_hafta(hafta)
     return {"canli_hata": _canli["hata"], "hafta": h, "haftalar": [x.get("hafta") for x in _haftalar()],
-            "liste": _liste(hafta), "durum": _last, "gecmis": gecmis_ozet(),
+            "liste": _liste(hafta), "durum": _last, "gecmis": gecmis_ozet(), "gtest": gecmis_test(),
             "kupon_x": sum(1 for x in h.get("maclar", []) if x.get("kupon") and "X" in (x["kupon"].get("isaret") or "")) if h else None}
 
 

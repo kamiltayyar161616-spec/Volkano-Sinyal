@@ -15,3 +15,5 @@ if [ "$ESKI" != "$YENI" ]; then
   fi
 fi
 python3 toto_girdi.py
+# gecmis Toto oranlari: bitene kadar arka planda (kaldigi yerden devam eder)
+if [ -f toto_gecmis_oran.py ] && [ ! -f data/toto_gecmis_bitti ]; then (nohup flock -n /tmp/toto_gecmis.lock python3 toto_gecmis_oran.py >> data/toto_gecmis.log 2>&1 9>&- &) ; fi
