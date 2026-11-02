@@ -17,3 +17,5 @@ fi
 python3 toto_girdi.py
 # gecmis Toto oranlari: bitene kadar arka planda (kaldigi yerden devam eder)
 if [ -f toto_gecmis_oran.py ] && [ ! -f data/toto_gecmis_bitti ]; then (nohup flock -n /tmp/toto_gecmis.lock python3 toto_gecmis_oran.py >> data/toto_gecmis.log 2>&1 9>&- &) ; fi
+# Pinnacle/Crown/Sbobet zaman serisi (parametre arayisi): gecmis oranlar bittikten sonra, bitene kadar arka planda
+if [ -f toto_parametre.py ] && [ -f data/toto_gecmis_bitti ] && [ ! -f data/toto_param_bitti ]; then (nohup flock -n /tmp/toto_param.lock python3 toto_parametre.py >> data/toto_param.log 2>&1 9>&- &) ; fi

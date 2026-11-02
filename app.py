@@ -361,6 +361,16 @@ def toto_gecmis_indir():
                     headers={"Content-Disposition": "attachment; filename=toto_gecmis_oran.json"})
 
 
+@app.route("/toto-bulten/param-indir")
+def toto_param_indir():
+    from flask import Response
+    import os as _os
+    p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "data", "toto_param.json")
+    body = open(p, encoding="utf-8").read() if _os.path.exists(p) else "{}"
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=toto_param.json"})
+
+
 @app.route("/toto/indir")
 def toto_indir():
     import json as _json
