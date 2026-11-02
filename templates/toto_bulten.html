@@ -17,6 +17,16 @@
   textarea, input{ width:100%; background:var(--navy-deep); color:var(--chalk); border:1px solid var(--navy-line); border-radius:8px; padding:8px; font-size:11px; box-sizing:border-box; }
   .kp{ font-weight:800; font-size:11px; padding:3px 7px; border-radius:6px; background:var(--navy-deep); border:1px solid var(--amber-dim); color:var(--amber-bright); white-space:nowrap; }
   .kp.w{ border-color:var(--turf); color:var(--turf-bright); } .kp.l{ border-color:var(--clay-dim); color:var(--clay); }
+  .mk{ margin:0 16px 8px; padding:10px 12px; border-radius:12px; background:var(--navy); border:1px solid var(--navy-line); }
+  .mk.ok{ border-color:var(--turf); } .mk.no{ border-color:var(--clay-dim); }
+  .mk-ust{ display:flex; gap:8px; align-items:flex-start; } .mk-no{ font-weight:800; color:var(--chalk-faint); min-width:18px; font-size:12px; }
+  .mk-ad{ flex:1; font-size:12px; line-height:1.35; } .mk-kp{ text-align:right; }
+  .mk-durum{ margin:6px 0 0 26px; }
+  .mk-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin:8px 0 0 26px; }
+  .mk-3>div{ background:var(--navy-deep); border:1px solid var(--navy-line); border-radius:8px; padding:6px 4px; text-align:center; }
+  .mk-3>div.kc{ border-color:var(--amber); } .mk-3>div.gel{ background:rgba(60,200,120,.14); }
+  .mk-t{ font-size:10px; color:var(--chalk-faint); font-weight:700; } .mk-f{ font-size:13px; font-weight:800; margin:2px 0; }
+  .mk-3>div.kc .mk-f{ color:var(--amber-bright); }
 </style>
 {% endblock %}
 {% macro yz(s, y, sonuc) %}{% if s and s[y] is not none %}{% set i = s[y] %}<span class="tag {{ ('w' if i == sonuc else 'l') if sonuc is not none else 'a' }}">{{ '1X2'[i] }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}{% endmacro %}
@@ -32,12 +42,25 @@
 {% if d.hafta %}
 <div class="section-sub">Kupon kapanışı: {{ d.hafta.kapanis | localdatetime }}. <b>Kapanışta</b> = Toto kuponu kapanırken görünen oranlarla (oynanabilecek seçim). <b>Maç başında</b> = maç başlarken (NowGoal'daki "Live" son hali).</div>
 <div class="row" style="border-color:var(--amber)"><span><b>Kupon önerisi</b>{% if d.hafta.kolon %} · {{ d.hafta.kolon }} kolon{% endif %}</span><span>{% if d.hafta.say.kupon[0] %}tutan <b>{{ d.hafta.say.kupon[1] }}/{{ d.hafta.say.kupon[0] }}</b>{% else %}sonuç bekleniyor{% endif %}</span></div>
-<table class="tt"><tr><th>#</th><th class="l">maç</th><th>sonuç / canlı</th><th>kupon</th><th class="l">Max First ÷ Min Live</th></tr>
-{% for m in d.hafta.maclar %}{% set s = m.elle or m.toto or m.simdi or m.kap %}
-<tr {% if m.ber70 %}style="background:rgba(255,190,60,.08)"{% endif %}><td>{{ m.no }}</td><td class="l"><b>{{ m.ad }}</b>{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}</span></td>
-<td>{% if m.skor and m.sonuc %}<b>{{ m.sonuc }}</b><br><span class="ng-meta">{{ m.skor }}</span>{% elif m.dk %}<span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% if m.ber70 %}<br><span class="tag w">70+ BERABERE</span>{% endif %}{% else %}<span class="ng-meta">—</span>{% endif %}</td>
-<td>{{ kp(m) }}</td><td class="l">{% if s %}{{ fk(s) }}<br><span class="ng-meta">favori {{ '1X2'[s.favori] }}{% if s.ort %} ({{ s.ort[s.favori] }}){% endif %}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td></tr>
-{% endfor %}</table>
+{% for m in d.hafta.maclar %}{% set s = m.elle or m.toto or m.simdi or m.kap %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
+<div class="mk {{ 'ok' if m.kupon_tuttu else 'no' if m.kupon_tuttu is not none else '' }}" {% if m.ber70 %}style="border-color:var(--amber)"{% endif %}>
+  <div class="mk-ust">
+    <span class="mk-no">{{ m.no }}</span>
+    <span class="mk-ad"><b>{{ m.ad }}</b><br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% else %}tarih bekleniyor{% endif %}{% if m.kupon_kaynak %} · oran: {{ m.kupon_kaynak }}{% endif %}{% if not m.ng %} · ⏳ NowGoal'a henüz düşmedi (sonuç sonra otomatik gelir){% endif %}</span></span>
+    <span class="mk-kp">{{ kp(m) }}</span>
+  </div>
+  {% if m.skor and m.sonuc %}<div class="mk-durum"><span class="tag {{ 'w' if m.kupon_tuttu else 'l' if m.kupon_tuttu is not none else '' }}">Sonuç {{ m.skor }} · {{ m.sonuc }}</span></div>
+  {% elif m.dk %}<div class="mk-durum"><span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}</div>{% endif %}
+  {% if s %}<div class="mk-3">{% for i in range(3) %}
+    <div class="{{ 'kc' if i == s.kucuk else '' }} {{ 'gel' if sr == i else '' }}">
+      <div class="mk-t">{{ '1X2'[i] }}{% if i == s.favori %} <span title="favori">★</span>{% endif %}</div>
+      <div class="mk-f">{{ '+' if s.fark[i] >= 0 else '−' }}%{{ s.fark[i]|abs }}</div>
+      <div class="ng-meta">ort. {{ '%.2f'|format(s.ort[i]) if s.ort else '-' }}</div>
+      <div class="ng-meta">{{ s.mxf[i] }} ÷ {{ s.mnl[i] }}</div>
+    </div>{% endfor %}</div>{% endif %}
+</div>
+{% endfor %}
+<div class="section-sub">Kutu: <b>fark</b> = Max First ÷ Min Live − 1 (çerçeveli olan en küçük) · <b>★</b> favori (ortalama oranı en düşük) · altta ortalama oran ve Max First ÷ Min Live değerleri · biten maçta gelen sonuç yeşil zeminli.</div>
 <details style="margin:0 0 10px"><summary class="section-sub" style="cursor:pointer">Yöntem ayrıntısı (favori / en küçük fark / birlikte, her oran anında)</summary>
 {% for an, ad in ([('elle', 'Ekran görüntüsü (NowGoal)')] if d.hafta.elle_var else []) + [('toto', 'Kupon kapanışında'), ('kap', 'Maç başında')] %}{% set S = d.hafta.say[an] %}
 <div class="row"><span><b>{{ ad }}</b></span><span>{% for y in ['favori', 'kucuk', 'birlikte'] %}{{ yad[y] }}: <b>{{ S[y][1] }}/{{ S[y][0] }}</b>{{ ' · ' if not loop.last else '' }}{% endfor %}</span></div>
