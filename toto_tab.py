@@ -652,10 +652,51 @@ def get_page_data():
             "son": son_sonuclar(), "kupon": gunluk_kupon(), "kupon_on": gunluk_kupon(an="on"), "durum": _last}
 
 
+# ------------------------------------------------------------------ GECMIS TOTO (210 hafta, sadece sonuclar)
+GECMIS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "girdi", "gecmis", "sportoto_210_hafta.json")
+_gecmis = {"mt": None, "v": None}
+
+
+def gecmis_ozet():
+    """Gecmis Toto haftalari: haftada kac 1/X/2, X sayisi dagilimi, sira bazinda 1/X/2 yuzdesi."""
+    try:
+        mt = os.path.getmtime(GECMIS_FILE)
+    except OSError:
+        return None
+    if _gecmis["mt"] == mt:
+        return _gecmis["v"]
+    try:
+        H = json.load(open(GECMIS_FILE, encoding="utf-8"))
+    except Exception:
+        return None
+    H = [w for w in H if len(w.get("maclar") or []) == 15]
+    n = len(H)
+    if not n:
+        return None
+    tum = [m["sonuc"] for w in H for m in w["maclar"]]
+    gen = {r: round(100 * tum.count(r) / len(tum), 1) for r in "1X2"}
+    ort = {r: round(tum.count(r) / n, 1) for r in "1X2"}
+    xd = {}
+    for w in H:
+        k = sum(1 for m in w["maclar"] if m["sonuc"] == "X")
+        xd[k] = xd.get(k, 0) + 1
+    xdag = [{"x": k, "hafta": v, "y": round(100 * v / n)} for k, v in sorted(xd.items())]
+    sira = []
+    for i in range(15):
+        L = [w["maclar"][i]["sonuc"] for w in H]
+        sira.append({"sira": i + 1, **{r: round(100 * L.count(r) / n) for r in "1X2"}})
+    v = {"hafta": n, "ilk": f"{H[0]['sezon']} {H[0]['hafta']}.", "son": f"{H[-1]['sezon']} {H[-1]['hafta']}.",
+         "gen": gen, "ort": ort, "xdag": xdag, "sira": sira,
+         "x_az": round(100 * sum(v for k, v in xd.items() if k <= 1) / n), "x_cok": round(100 * sum(v for k, v in xd.items() if k >= 6) / n)}
+    _gecmis.update(mt=mt, v=v)
+    return v
+
+
 def get_bulten_data(hafta=None):
     h = toto_hafta(hafta)
     return {"canli_hata": _canli["hata"], "hafta": h, "haftalar": [x.get("hafta") for x in _haftalar()],
-            "liste": _liste(hafta), "durum": _last}
+            "liste": _liste(hafta), "durum": _last, "gecmis": gecmis_ozet(),
+            "kupon_x": sum(1 for x in h.get("maclar", []) if x.get("kupon") and "X" in (x["kupon"].get("isaret") or "")) if h else None}
 
 
 def export_json():

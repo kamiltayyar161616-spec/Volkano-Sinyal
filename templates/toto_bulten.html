@@ -86,5 +86,16 @@
 </form>
 {% if msg %}<div class="row"><b>{{ msg }}</b></div>{% endif %}
 </details>
+{% set G = d.gecmis %}{% if G %}
+<h2 class="section">📚 GEÇMİŞ TOTO ({{ G.hafta }} hafta, {{ G.ilk }} – {{ G.son }} hafta)</h2>
+<div class="section-sub">Sadece sonuçlar (oran yok), tahmin yöntemi değil; kuponda ne kadar risk alınacağını ayarlamak için.</div>
+<div class="mk"><div class="mk-3">{% for r in '1X2' %}<div><div class="mk-t">{{ r }}</div><div class="mk-f">%{{ G.gen[r] }}</div><div class="ng-meta">haftada ort. {{ G.ort[r] }} maç</div></div>{% endfor %}</div>
+{% if d.kupon_x is not none %}<div class="ng-meta" style="margin-top:8px">Bu haftanın kuponunda <b>X</b> içeren maç: <b>{{ d.kupon_x }}</b> (geçmişte haftada ortalama {{ G.ort['X'] }} beraberlik).</div>{% endif %}</div>
+<div class="section-sub"><b>Haftada kaç beraberlik çıkmış</b> — 0-1 X çıkan hafta: %{{ G.x_az }} · 6+ X çıkan hafta: %{{ G.x_cok }}</div>
+<table class="tt"><tr><th>X sayısı</th>{% for r in G.xdag %}<th>{{ r.x }}</th>{% endfor %}</tr>
+<tr><td>hafta</td>{% for r in G.xdag %}<td>{{ r.hafta }}<br><span class="ng-meta">%{{ r.y }}</span></td>{% endfor %}</tr></table>
+<details style="margin:0 0 10px"><summary class="section-sub" style="cursor:pointer">Sıra bazında 1 / X / 2 (210 haftada fark çok küçük, büyük ihtimalle tesadüf)</summary>
+<table class="tt"><tr><th>sıra</th><th>1</th><th>X</th><th>2</th></tr>{% for r in G.sira %}<tr><td>{{ r.sira }}</td><td>%{{ r['1'] }}</td><td>%{{ r['X'] }}</td><td>%{{ r['2'] }}</td></tr>{% endfor %}</table></details>
+{% endif %}
 <div class="section-sub">Canlı skor: AllSportsAPI.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %} Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else "henüz çalışmadı" }} {{ d.durum.log }}</div>
 {% endblock %}
