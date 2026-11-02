@@ -316,6 +316,8 @@ def _eslestir(ev, dep, bas, bit):
         c.close()
     best = None
     for r in rows:
+        if not r["home"] or not r["away"]:
+            continue
         if re.search(r"\b(u1\d|u2\d|women|kadin|reserves?|ii)\b", _fold(r["home"] + " " + r["away"])):
             continue
         s1, s2 = _benzer(ev, r["home"]), _benzer(dep, r["away"])
