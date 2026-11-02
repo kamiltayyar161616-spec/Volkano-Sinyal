@@ -34,7 +34,7 @@
 {% endfor %}
 <table class="tt"><tr><th>#</th><th class="l">maç</th><th>sonuç</th><th>Favori<br><small>kapanış / başlama</small></th><th>En küçük<br><small>kapanış / başlama</small></th><th>Birlikte<br><small>kapanış / başlama</small></th></tr>
 {% for m in d.hafta.maclar %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
-<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.dk %} <span class="tag a">{{ m.dk }}</span>{% endif %}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
+<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
 <td>{% if m.skor %}<b>{{ m.sonuc }}</b><br><span class="ng-meta">{{ m.skor }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>
 {% for y in ['favori', 'kucuk', 'birlikte'] %}<td>{{ yz(m.toto, y, sr) }}{{ yz(m.kap, y, sr) }}</td>{% endfor %}</tr>
 {% endfor %}</table>
@@ -62,8 +62,9 @@
 {% for g in d.perf7 %}{% if g.mac %}<div class="section-sub">{{ g.ad }} — {{ g.mac }} maç</div>{{ ptab(g, 'kap') }}{% endif %}{% endfor %}
 
 <h2 class="section">📅 YAKLAŞAN VE CANLI (başlama saatine göre; başlayan maç 2 saat listede kalır)</h2>
+<div class="section-sub">Canlı skor/dakika: AllSportsAPI (dakikada bir güncellenir). 70. dakikadan sonra berabere giden maçlar en üstte, çerçeveli.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %}</div>
 {% for m in d.yaklasan %}
-<div class="row"><span><b>{{ m.ad }}</b>{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}</span></span>
+<div class="row" {% if m.ber70 %}style="border-color:var(--amber)"{% endif %}><span><b>{{ m.ad }}</b>{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}</span></span>
   <span style="text-align:right;white-space:nowrap">F {{ yz(m.s, 'favori', none) }}<br>K {{ yz(m.s, 'kucuk', none) }}<br>F+K {{ yz(m.s, 'birlikte', none) }}</span></div>
 {% else %}<div class="empty">Şu an kayıt yok (maçlar başlamadan 10-35 dk önce eklenir).</div>{% endfor %}
 

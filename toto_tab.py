@@ -362,12 +362,79 @@ def toto_hafta():
                         say[an][y][0] += 1
                         say[an][y][1] += s[y] == r["sonuc"]
         x["dk"] = tahmini_dakika(m["ko"]) if m.get("ko") and x["sonuc"] is None else None
+        if x["dk"] and m.get("ng") and " - " in m["ng"]:
+            _canli_ekle(x, *m["ng"].split(" - ", 1), canli_skorlar())
         out.append(x)
     out.sort(key=lambda x: x["ko"] or "9999")
     return {"hafta": L.get("hafta"), "kapanis": L.get("kapanis"), "maclar": out, "say": say}
 
 
 CANLI_KAL_DK = 120          # baslayan mac bu kadar dk listede kalir
+AS_URL = "https://apiv2.allsportsapi.com/football/?met=Livescore&APIkey={k}"
+AS_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "allsports_key.txt")
+CANLI_TTL = 60              # sn: canli skor en fazla bu siklikla cekilir (sayfa acildikca)
+_canli = {"at": 0.0, "maclar": [], "hata": None}
+
+
+def _as_key():
+    try:
+        k = open(AS_KEY_FILE).read().strip()
+        if k:
+            return k
+    except OSError:
+        pass
+    return os.environ.get("ALLSPORTS_API_KEY", "").strip()
+
+
+def canli_skorlar():
+    """AllSportsAPI Livescore -> [{ev, dep, skor, dk, iy}] (60 sn onbellek)."""
+    if time.time() - _canli["at"] < CANLI_TTL:
+        return _canli["maclar"]
+    _canli["at"] = time.time()
+    k = _as_key()
+    if not k:
+        _canli["hata"] = "AllSportsAPI anahtari yok"
+        return []
+    try:
+        req = urllib.request.Request(AS_URL.format(k=k), headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            js = json.loads(r.read().decode("utf-8", errors="replace"))
+        out = []
+        for e in js.get("result") or []:
+            out.append({"ev": e.get("event_home_team") or "", "dep": e.get("event_away_team") or "",
+                        "skor": (e.get("event_final_result") or "").replace(" ", ""), "dk": e.get("event_status") or "",
+                        "iy": (e.get("event_halftime_result") or "").replace(" ", "")})
+        _canli["maclar"], _canli["hata"] = out, (None if js.get("success") in (1, "1", True) else str(js.get("error") or js)[:120])
+    except Exception as ex:
+        _canli["hata"] = str(ex)[:120]
+    return _canli["maclar"]
+
+
+def _canli_bul(home, away, L):
+    best = None
+    for c in L:
+        s1, s2 = _benzer(home, c["ev"]) + _benzer(c["ev"], home), _benzer(away, c["dep"]) + _benzer(c["dep"], away)
+        if s1 > 0 and s2 > 0 and (not best or s1 + s2 > best[0]):
+            best = (s1 + s2, c)
+    return best[1] if best else None
+
+
+def _dk_sayi(dk):
+    m = re.match(r"(\d+)", str(dk or ""))
+    return int(m.group(1)) if m else None
+
+
+def _canli_ekle(x, home, away, L):
+    c = _canli_bul(home, away, L) if L else None
+    if not c:
+        return
+    x["skor"], x["dk"] = c["skor"], (c["dk"] + "'" if str(c["dk"]).isdigit() else c["dk"])
+    try:
+        h, a = (int(v) for v in c["skor"].split("-"))
+        n = _dk_sayi(c["dk"])
+        x["ber70"] = h == a and n is not None and n >= 70
+    except ValueError:
+        pass
 
 
 def tahmini_dakika(ko_iso, now=None):
@@ -392,9 +459,12 @@ def yaklasan():
             continue
         s = secim(r["on"], "on")
         if s:
-            out.append({"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"], "s": s,
-                        "dk": tahmini_dakika(r["kickoff_utc"], now), "mid": r["mid"]})
-    return sorted(out, key=lambda x: x["ko"])
+            x = {"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"], "s": s,
+                 "dk": tahmini_dakika(r["kickoff_utc"], now), "mid": r["mid"]}
+            if x["dk"]:
+                _canli_ekle(x, r["home"], r["away"], canli_skorlar())
+            out.append(x)
+    return sorted(out, key=lambda x: (not x.get("ber70"), x["ko"]))
 
 
 def son_sonuclar(limit=60):
@@ -412,7 +482,7 @@ def son_sonuclar(limit=60):
 
 
 def get_page_data():
-    return {"hafta": toto_hafta(), "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
+    return {"canli_hata": _canli["hata"], "hafta": toto_hafta(), "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
             "son": son_sonuclar(), "liste": _liste(), "durum": _last}
 
 
