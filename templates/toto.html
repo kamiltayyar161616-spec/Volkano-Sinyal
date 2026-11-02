@@ -58,7 +58,7 @@
 
 <h2 class="section">🧾 SON SONUÇLAR (maç başındaki oranlarla)</h2>
 {% for m in d.son %}
-<div class="row"><span>{{ m.ad }} <b>{{ '1X2'[m.sonuc] }}</b><br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }} · {{ m.skor }}<br>fark {{ fk(m.s) }}<br>{{ od(m.s) }}</span></span>
+<div class="row" style="border-color:{{ 'var(--turf)' if m.kupon_tuttu else 'var(--clay-dim)' if m.kupon_tuttu is not none else 'var(--navy-line)' }}"><span><b>{{ m.ad }}</b> <span class="tag {{ 'w' if m.kupon_tuttu else 'l' if m.kupon_tuttu is not none else '' }}">{{ m.skor }} · {{ '1X2'[m.sonuc] }}</span><br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}<br>{{ od(m.s) }}</span></span>
   <span style="text-align:right;white-space:nowrap">{{ kp(m) }}<br><span class="ng-meta">F {{ yz(m.s, 'favori', m.sonuc) }} K {{ yz(m.s, 'kucuk', m.sonuc) }}</span></span></div>
 {% else %}<div class="empty">Henüz sonuçlanan kayıt yok (veri toplanıyor).</div>{% endfor %}
 <div class="section-sub">Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else 'henüz çalışmadı' }} {{ d.durum.log }}</div>
