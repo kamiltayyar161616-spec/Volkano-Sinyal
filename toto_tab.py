@@ -485,7 +485,7 @@ def toto_hafta(hafta=None):
         if x["dk"] and m.get("ng") and " - " in m["ng"]:
             _canli_ekle(x, *m["ng"].split(" - ", 1), canli_skorlar())
         out.append(x)
-    out.sort(key=lambda x: x["ko"] or "9999")
+    out.sort(key=lambda x: x["no"])            # bultendeki sira
     ks = [x for x in out if x.get("kupon")]
     kolon = 1
     for x in ks:
