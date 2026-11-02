@@ -336,7 +336,7 @@ def altust_indir():
 
 @app.route("/toto")
 def toto_page():
-    return render_template("toto.html", d=toto_tab.get_page_data(), yad=toto_tab.YON_AD, msg=request.args.get("m"), active_page="toto")
+    return render_template("toto.html", d=toto_tab.get_page_data(request.args.get("hafta")), yad=toto_tab.YON_AD, msg=request.args.get("m"), active_page="toto")
 
 
 @app.route("/toto/liste", methods=["POST"])

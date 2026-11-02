@@ -28,7 +28,8 @@ MAX_ON = 40
 MAX_SONRA = 40
 MAX_GERI = 25
 GERI_GUN = 10
-LISTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_liste.json")
+LISTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_liste.json")        # eski (tek hafta)
+LISTELER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_listeler.json")
 YON = ("favori", "kucuk", "birlikte")
 YON_AD = {"favori": "Favori", "kucuk": "En küçük fark", "birlikte": "Favori + en küçük fark (aynı taraf)"}
 TOP5 = {"Engleska 1", "Španija 1", "Italija 1", "Njemačka 1", "Francuska 1"}
@@ -136,27 +137,68 @@ def _fetch(mid):
         return r.read().decode("utf-8", errors="replace")
 
 
-def _liste():
+def _haftalar():
+    """tum Toto haftalari, en yeni kapanis basta."""
     try:
-        return json.load(open(LISTE_FILE))
+        H = json.load(open(LISTELER_FILE)).get("haftalar", [])
     except Exception:
-        return {}
+        H = []
+        try:
+            eski = json.load(open(LISTE_FILE))
+            if eski.get("maclar"):
+                H = [eski]
+        except Exception:
+            pass
+    return sorted(H, key=lambda h: h.get("kapanis") or "", reverse=True)
+
+
+def _liste(hafta=None):
+    H = _haftalar()
+    if hafta:
+        return next((h for h in H if h.get("hafta") == hafta), H[0] if H else {})
+    return H[0] if H else {}
 
 
 def _toto_an(mid, L=None):
-    L = L or _liste()
-    if any(m.get("mid") == mid for m in L.get("maclar", [])) and L.get("kapanis"):
-        try:
-            return datetime.fromisoformat(L["kapanis"])
-        except ValueError:
-            return None
+    for h in _haftalar():
+        if h.get("kapanis") and any(m.get("mid") == mid for m in h.get("maclar", [])):
+            try:
+                return datetime.fromisoformat(h["kapanis"])
+            except ValueError:
+                return None
     return None
+
+
+def _yeniden_eslestir():
+    """listede eslesmemis maclar (ileri tarihli maclar NowGoal tablosuna ~48 saat once girer) -> tekrar dene."""
+    H = _haftalar()
+    degisti = False
+    for h in H:
+        try:
+            ka = datetime.fromisoformat(h["kapanis"])
+        except (KeyError, ValueError):
+            continue
+        if ka < ng._now() - timedelta(days=8):
+            continue
+        for m in h.get("maclar", []):
+            if m.get("mid"):
+                continue
+            r = _eslestir(m["ev"], m["dep"], ka - timedelta(hours=12), ka + timedelta(days=6))
+            if r:
+                m.update(mid=r["mid"], ng=f"{r['home']} - {r['away']}", ko=r["kickoff_utc"])
+                degisti = True
+    if degisti:
+        json.dump({"haftalar": H}, open(LISTELER_FILE, "w"), ensure_ascii=False)
 
 
 def run_cycle():
     now = ng._now()
-    L = _liste()
-    toto_mids = {m["mid"] for m in L.get("maclar", []) if m.get("mid")}
+    try:
+        _yeniden_eslestir()
+    except Exception as e:
+        print(f"[toto] eslestirme hatasi {e}")
+    L = None
+    toto_mids = {m["mid"] for h in _haftalar() for m in h.get("maclar", []) if m.get("mid")}
     with ng._db_lock:
         c = _conn()
         on = c.execute("""SELECT mid, kickoff_utc FROM ng_match WHERE kickoff_utc BETWEEN ? AND ? AND status != 'void'
@@ -267,7 +309,7 @@ def _eslestir(ev, dep, bas, bit):
     return best[1] if best else None
 
 
-def liste_kaydet(metin, kapanis, hafta=""):
+def liste_kaydet(metin, kapanis, hafta="", elle=None):
     """metin: her satir 'Ev - Deplasman' (basinda sira no olabilir). kapanis: 'YYYY-MM-DDTHH:MM' Turkiye saati."""
     try:
         ka = datetime.fromisoformat(kapanis).replace(tzinfo=timezone(timedelta(hours=3))).astimezone(timezone.utc)
@@ -281,11 +323,21 @@ def liste_kaydet(metin, kapanis, hafta=""):
             continue
         ev, dep = m[0].strip(), m[1].strip()
         r = _eslestir(ev, dep, ka - timedelta(hours=12), ka + timedelta(days=6))
-        out.append({"no": len(out) + 1, "ev": ev, "dep": dep, "mid": r["mid"] if r else None,
-                    "ng": f"{r['home']} - {r['away']}" if r else None, "ko": r["kickoff_utc"] if r else None})
+        x = {"no": len(out) + 1, "ev": ev, "dep": dep, "mid": r["mid"] if r else None,
+             "ng": f"{r['home']} - {r['away']}" if r else None, "ko": r["kickoff_utc"] if r else None}
+        if elle and len(elle) > len(out) and elle[len(out)]:
+            x["elle"] = elle[len(out)]
+        out.append(x)
     if not out:
         return False, "Listede 'Ev - Deplasman' satırı bulunamadı."
-    json.dump({"hafta": hafta, "kapanis": ka.isoformat(), "maclar": out}, open(LISTE_FILE, "w"), ensure_ascii=False)
+    hafta = hafta or ka.strftime("%Y-%m-%d")
+    eski = {h.get("hafta"): h for h in _haftalar()}
+    onceki = {(m["ev"], m["dep"]): m.get("elle") for m in (eski.get(hafta) or {}).get("maclar", []) if m.get("elle")}
+    for x in out:                                   # listeyi yeniden kaydedince elle girilen oranlar korunur
+        if "elle" not in x and onceki.get((x["ev"], x["dep"])):
+            x["elle"] = onceki[(x["ev"], x["dep"])]
+    eski[hafta] = {"hafta": hafta, "kapanis": ka.isoformat(), "maclar": out}
+    json.dump({"haftalar": list(eski.values())}, open(LISTELER_FILE, "w"), ensure_ascii=False)
     return True, f"{len(out)} maç kaydedildi, {sum(1 for x in out if x['mid'])} tanesi NowGoal'da eşleşti."
 
 
@@ -342,19 +394,42 @@ def get_performance(gun=None):
     return [{"ad": g, "mac": len(R), "kap": _perf(R, "kap"), "on": _perf(R, "on")} for g, R in gr.items()]
 
 
-def toto_hafta():
-    L = _liste()
+def secim_elle(e):
+    """ekran goruntusunden girilen NowGoal degerleri: mxf (Max First), mnl (Min Live), ort (Avg Live)"""
+    try:
+        fark = [e["mxf"][i] / e["mnl"][i] - 1 for i in range(3)]
+    except (KeyError, TypeError, ZeroDivisionError, IndexError):
+        return None
+    k = min(range(3), key=lambda i: fark[i])
+    fv = min(range(3), key=lambda i: e["ort"][i]) if e.get("ort") else k
+    return {"fark": [round(100 * x, 1) for x in fark], "kucuk": k, "favori": fv, "birlikte": k if k == fv else None,
+            "ort": e.get("ort"), "mxf": e["mxf"], "mnl": e["mnl"]}
+
+
+def toto_hafta(hafta=None):
+    L = _liste(hafta)
     if not L.get("maclar"):
         return None
     rows = {r["mid"]: r for r in _kayitlar(GERI_GUN + 10)}
-    out, say = [], {an: {y: [0, 0] for y in YON} for an in ("toto", "kap")}
+    mids = [m["mid"] for m in L["maclar"] if m.get("mid")]
+    ft = {}
+    if mids:
+        with ng._db_lock:
+            c = ng._conn()
+            ft = {r[0]: (r[1], r[2]) for r in c.execute(
+                f"SELECT mid, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND status='finished' AND mid IN ({','.join(map(str, mids))})")}
+            c.close()
+    out, say = [], {an: {y: [0, 0] for y in YON} for an in ("elle", "toto", "kap")}
     for m in L["maclar"]:
-        r = rows.get(m.get("mid")) or {}
+        r = dict(rows.get(m.get("mid")) or {})
+        if m.get("mid") in ft:
+            r["ft_h"], r["ft_a"] = ft[m["mid"]]
+            r["sonuc"] = _sonuc(*ft[m["mid"]])
         x = {"no": m["no"], "ad": f"{m['ev']} - {m['dep']}", "ng": m.get("ng"), "ko": m.get("ko"),
              "skor": f"{r['ft_h']}-{r['ft_a']}" if r.get("sonuc") is not None else None,
              "sonuc": "1X2"[r["sonuc"]] if r.get("sonuc") is not None else None}
-        for an in ("toto", "kap"):
-            s = secim(r.get("son"), an)
+        for an in ("elle", "toto", "kap"):
+            s = secim_elle(m.get("elle")) if an == "elle" else secim(r.get("son"), an)
             x[an] = s
             if s and r.get("sonuc") is not None:
                 for y in YON:
@@ -366,7 +441,8 @@ def toto_hafta():
             _canli_ekle(x, *m["ng"].split(" - ", 1), canli_skorlar())
         out.append(x)
     out.sort(key=lambda x: x["ko"] or "9999")
-    return {"hafta": L.get("hafta"), "kapanis": L.get("kapanis"), "maclar": out, "say": say}
+    return {"hafta": L.get("hafta"), "kapanis": L.get("kapanis"), "maclar": out, "say": say,
+            "elle_var": any(m.get("elle") for m in L["maclar"])}
 
 
 CANLI_KAL_DK = 120          # baslayan mac bu kadar dk listede kalir
@@ -481,14 +557,15 @@ def son_sonuclar(limit=60):
     return out
 
 
-def get_page_data():
-    return {"canli_hata": _canli["hata"], "hafta": toto_hafta(), "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
-            "son": son_sonuclar(), "liste": _liste(), "durum": _last}
+def get_page_data(hafta=None):
+    return {"canli_hata": _canli["hata"], "hafta": toto_hafta(hafta), "haftalar": [h.get("hafta") for h in _haftalar()],
+            "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
+            "son": son_sonuclar(), "liste": _liste(hafta), "durum": _last}
 
 
 def export_json():
     rows = _kayitlar()
-    return {"exported_at": ng._iso(ng._now()), "liste": _liste(), "performans": get_performance(),
+    return {"exported_at": ng._iso(ng._now()), "haftalar": _haftalar(), "performans": get_performance(),
             "maclar": [{"mid": r["mid"], "ko": r["kickoff_utc"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"],
                         "skor": f"{r['ft_h']}-{r['ft_a']}" if r["sonuc"] is not None else None,
                         "sonuc": "1X2"[r["sonuc"]] if r["sonuc"] is not None else None,

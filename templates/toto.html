@@ -27,16 +27,17 @@
 <div style="margin:12px 16px 0"><a href="/toto/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ TOTO verisini indir (JSON)</a></div>
 
 <h2 class="section">🎫 TOTO HAFTASI{% if d.hafta and d.hafta.hafta %} — {{ d.hafta.hafta }}{% endif %}</h2>
+{% if d.haftalar|length > 1 %}<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 16px 6px">{% for h in d.haftalar %}<a class="tag {{ 'a' if d.hafta and d.hafta.hafta == h else '' }}" href="/toto?hafta={{ h|urlencode }}">{{ h }}</a>{% endfor %}</div>{% endif %}
 {% if d.hafta %}
 <div class="section-sub">Kupon kapanışı: {{ d.hafta.kapanis | localdatetime }}. <b>Kapanışta</b> = Toto kuponu kapanırken görünen oranlarla (oynanabilecek seçim). <b>Maç başında</b> = maç başlarken (NowGoal'daki "Live" son hali).</div>
-{% for an, ad in [('toto', 'Kupon kapanışında'), ('kap', 'Maç başında')] %}{% set S = d.hafta.say[an] %}
+{% for an, ad in ([('elle', 'Ekran görüntüsü (NowGoal)')] if d.hafta.elle_var else []) + [('toto', 'Kupon kapanışında'), ('kap', 'Maç başında')] %}{% set S = d.hafta.say[an] %}
 <div class="row"><span><b>{{ ad }}</b></span><span>{% for y in ['favori', 'kucuk', 'birlikte'] %}{{ yad[y] }}: <b>{{ S[y][1] }}/{{ S[y][0] }}</b>{{ ' · ' if not loop.last else '' }}{% endfor %}</span></div>
 {% endfor %}
-<table class="tt"><tr><th>#</th><th class="l">maç</th><th>sonuç</th><th>Favori<br><small>kapanış / başlama</small></th><th>En küçük<br><small>kapanış / başlama</small></th><th>Birlikte<br><small>kapanış / başlama</small></th></tr>
+<table class="tt"><tr><th>#</th><th class="l">maç</th><th>sonuç</th><th>Favori<br><small>{% if d.hafta.elle_var %}ekran / {% endif %}kapanış / başlama</small></th><th>En küçük<br><small>{% if d.hafta.elle_var %}ekran / {% endif %}kapanış / başlama</small></th><th>Birlikte<br><small>{% if d.hafta.elle_var %}ekran / {% endif %}kapanış / başlama</small></th></tr>
 {% for m in d.hafta.maclar %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
-<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
+<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.elle %} · ekran fark {{ fk(m.elle) }}{% elif m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
 <td>{% if m.skor %}<b>{{ m.sonuc }}</b><br><span class="ng-meta">{{ m.skor }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>
-{% for y in ['favori', 'kucuk', 'birlikte'] %}<td>{{ yz(m.toto, y, sr) }}{{ yz(m.kap, y, sr) }}</td>{% endfor %}</tr>
+{% for y in ['favori', 'kucuk', 'birlikte'] %}<td>{% if d.hafta.elle_var %}{{ yz(m.elle, y, sr) }}{% endif %}{{ yz(m.toto, y, sr) }}{{ yz(m.kap, y, sr) }}</td>{% endfor %}</tr>
 {% endfor %}</table>
 {% else %}<div class="empty">Bu hafta için Toto listesi girilmedi. Aşağıdaki formdan girebilirsin.</div>{% endif %}
 
