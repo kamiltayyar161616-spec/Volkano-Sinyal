@@ -37,6 +37,7 @@
 {% endmacro %}
 {% macro kp(m) %}{% if m.kupon %}{% set k = m.kupon %}<span class="kp {{ ('w' if m.kupon_tuttu else 'l') if m.kupon_tuttu is not none else '' }}">{{ k.tur }} {{ k.isaret }}{% if k.dikkat %} ⚠{% endif %}</span>{% if k.dikkat %}<br><span class="ng-meta">yedek: {{ k.isaret }}{{ k.yedek }}</span>{% endif %}<br><span class="ng-meta">{{ m.kupon_kaynak }}</span>{% else %}<span class="ng-meta">oran yok</span>{% endif %}{% endmacro %}
 {% block content %}
+{% set canli_var = (d.hafta.maclar if d.hafta else []) | selectattr("dk") | rejectattr("sonuc") | list | length > 0 %}{% if canli_var %}<script>setTimeout(function(){ if(!document.querySelector('textarea:focus,input:focus')) location.reload(); }, 60000);</script><div class="section-sub">🔴 Canlı maç var: sayfa dakikada bir kendini yeniler.</div>{% endif %}
 <h2 class="section">📋 TOTO BÜLTENİ{% if d.hafta and d.hafta.hafta %} — {{ d.hafta.hafta }}{% endif %}</h2>
 {% if d.haftalar|length > 1 %}<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 16px 6px">{% for h in d.haftalar %}<a class="tag {{ 'a' if d.hafta and d.hafta.hafta == h else '' }}" href="/toto-bulten?hafta={{ h|urlencode }}">{{ h }}</a>{% endfor %}</div>{% endif %}
 {% if d.hafta %}

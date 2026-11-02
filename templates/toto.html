@@ -33,6 +33,7 @@
 {% for t in ['TEK', 'ÇİFTE', 'KAPALI', 'dikkat'] %}<td>{% if g[t].n %}{{ g[t].w }}/{{ g[t].n }}<br><span class="ng-meta">%{{ g[t].y }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</table>
 {% endmacro %}
 {% block content %}
+{% set canli_var = d.yaklasan | selectattr("skor") | list | length > 0 %}{% if canli_var %}<script>setTimeout(function(){ if(!document.querySelector('textarea:focus,input:focus')) location.reload(); }, 60000);</script><div class="section-sub">🔴 Canlı maç var: sayfa dakikada bir kendini yeniler.</div>{% endif %}
 <div style="margin:12px 16px 0"><a href="/toto/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ TOTO verisini indir (JSON)</a></div>
 <div class="section-sub" style="margin-top:8px">Haftalık Toto bülteni ve kupon önerisi: <a href="/toto-bulten">📋 TOTO BÜLTEN</a> sekmesinde.</div>
 
