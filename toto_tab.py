@@ -361,19 +361,39 @@ def toto_hafta():
                     if s[y] is not None:
                         say[an][y][0] += 1
                         say[an][y][1] += s[y] == r["sonuc"]
+        x["dk"] = tahmini_dakika(m["ko"]) if m.get("ko") and x["sonuc"] is None else None
         out.append(x)
+    out.sort(key=lambda x: x["ko"] or "9999")
     return {"hafta": L.get("hafta"), "kapanis": L.get("kapanis"), "maclar": out, "say": say}
 
 
+CANLI_KAL_DK = 120          # baslayan mac bu kadar dk listede kalir
+
+
+def tahmini_dakika(ko_iso, now=None):
+    """baslama saatinden tahmini mac dakikasi (uzatmalar bilinmedigi icin yaklasik)."""
+    now = now or ng._now()
+    el = (now - datetime.fromisoformat(ko_iso)).total_seconds() / 60
+    if el < 0:
+        return None
+    if el <= 47:
+        return f"~{int(el) + 1}'"
+    if el <= 62:
+        return "devre arası"
+    return f"~{min(int(el) - 15, 90)}'" + ("+" if el - 15 > 90 else "")
+
+
 def yaklasan():
-    now = ng._iso(ng._now())
+    now = ng._now()
+    sinir = ng._iso(now - timedelta(minutes=CANLI_KAL_DK))
     out = []
     for r in _kayitlar(1):
-        if r["kickoff_utc"] <= now or not r["on"]:
+        if r["kickoff_utc"] <= sinir or not r["on"] or r["sonuc"] is not None:
             continue
         s = secim(r["on"], "on")
         if s:
-            out.append({"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"], "s": s})
+            out.append({"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"], "s": s,
+                        "dk": tahmini_dakika(r["kickoff_utc"], now), "mid": r["mid"]})
     return sorted(out, key=lambda x: x["ko"])
 
 

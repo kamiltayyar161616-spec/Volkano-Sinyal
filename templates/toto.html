@@ -18,7 +18,7 @@
 </style>
 {% endblock %}
 {% macro yz(s, y, sonuc) %}{% if s and s[y] is not none %}{% set i = s[y] %}<span class="tag {{ ('w' if i == sonuc else 'l') if sonuc is not none else 'a' }}">{{ '1X2'[i] }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}{% endmacro %}
-{% macro fk(s) %}{% if s %}{% for i in range(3) %}<span class="{{ 'k' if i == s.kucuk else '' }}">{{ '1X2'[i] }} +%{{ s.fark[i] }}</span>{{ ' · ' if not loop.last else '' }}{% endfor %}{% endif %}{% endmacro %}
+{% macro fk(s) %}{% if s %}{% for i in range(3) %}<span class="{{ 'k' if i == s.kucuk else '' }}">{{ '1X2'[i] }} {{ '+' if s.fark[i] >= 0 else '−' }}%{{ s.fark[i]|abs }}</span>{{ ' · ' if not loop.last else '' }}{% endfor %}{% endif %}{% endmacro %}
 {% macro ptab(P, an) %}
 <div class="pt"><div class="hd n">yöntem</div><div class="hd">seçim</div><div class="hd">isabet</div><div class="hd">ROI (ort. oran)</div>
 {% for y in ['favori', 'kucuk', 'birlikte'] %}{% set o = P[an][y] %}<div class="n">{{ yad[y] }}</div><div>{{ o.n }}</div><div>{% if o.n %}{{ o.w }} · %{{ o.isabet }}{% else %}-{% endif %}</div><div class="{{ 'pos' if o.roi and o.roi > 0 else 'neg' }}">{% if o.n %}{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}{% else %}-{% endif %}</div>{% endfor %}</div>
@@ -34,7 +34,7 @@
 {% endfor %}
 <table class="tt"><tr><th>#</th><th class="l">maç</th><th>sonuç</th><th>Favori<br><small>kapanış / başlama</small></th><th>En küçük<br><small>kapanış / başlama</small></th><th>Birlikte<br><small>kapanış / başlama</small></th></tr>
 {% for m in d.hafta.maclar %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
-<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
+<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.dk %} <span class="tag a">{{ m.dk }}</span>{% endif %}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
 <td>{% if m.skor %}<b>{{ m.sonuc }}</b><br><span class="ng-meta">{{ m.skor }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>
 {% for y in ['favori', 'kucuk', 'birlikte'] %}<td>{{ yz(m.toto, y, sr) }}{{ yz(m.kap, y, sr) }}</td>{% endfor %}</tr>
 {% endfor %}</table>
@@ -61,9 +61,9 @@
 <div class="section-sub"><b>Son 7 gün</b> (maç başında)</div>
 {% for g in d.perf7 %}{% if g.mac %}<div class="section-sub">{{ g.ad }} — {{ g.mac }} maç</div>{{ ptab(g, 'kap') }}{% endif %}{% endfor %}
 
-<h2 class="section">📅 YAKLAŞAN (maçtan 10-35 dk önce kaydedilenler)</h2>
+<h2 class="section">📅 YAKLAŞAN VE CANLI (başlama saatine göre; başlayan maç 2 saat listede kalır)</h2>
 {% for m in d.yaklasan %}
-<div class="row"><span><b>{{ m.ad }}</b><br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}</span></span>
+<div class="row"><span><b>{{ m.ad }}</b>{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}</span></span>
   <span style="text-align:right;white-space:nowrap">F {{ yz(m.s, 'favori', none) }}<br>K {{ yz(m.s, 'kucuk', none) }}<br>F+K {{ yz(m.s, 'birlikte', none) }}</span></div>
 {% else %}<div class="empty">Şu an kayıt yok (maçlar başlamadan 10-35 dk önce eklenir).</div>{% endfor %}
 
