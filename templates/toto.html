@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}SAHA — TOTO{% endblock %}
+{% block page_tag %}TOTO{% endblock %}
+{% block subtitle %}NowGoal oran sayfasındaki ~370 büro: Max First ÷ Min Live − 1 farkı. Üç yöntem ayrı ayrı: <b>Favori</b> (ortalama oranı en düşük taraf), <b>En küçük fark</b>, <b>Favori + en küçük fark</b> (ikisi aynı tarafı gösterdiğinde). Diğer bürolardan 12 puandan fazla sapan oranlar (yanlış maça yazılmış oran gibi) hesaba katılmaz.{% endblock %}
+{% block extra_style %}
+<style>
+  .row{ display:flex; justify-content:space-between; gap:8px; padding:8px 12px; margin:0 16px 5px; background:var(--navy); border:1px solid var(--navy-line); border-radius:9px; font-size:10.5px; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .tag{ display:inline-block; font-size:9.5px; font-weight:700; padding:3px 6px; border-radius:5px; margin:3px 3px 0 0; background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .tag.w{ border-color:var(--turf); color:var(--turf-bright); } .tag.l{ border-color:var(--clay-dim); color:var(--clay); } .tag.a{ border-color:var(--amber-dim); color:var(--amber-bright); }
+  .pt{ display:grid; grid-template-columns:1.6fr repeat(3,1fr); gap:2px; margin:0 16px 10px; font-size:10px; }
+  .pt div{ padding:5px 4px; background:var(--navy); border-radius:4px; text-align:center; } .pt .n{ text-align:left; } .pt .hd{ background:none; color:var(--chalk-faint); font-size:9px; }
+  .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:9.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); }
+  .tt td.l{ text-align:left; } .tt .k{ font-weight:700; color:var(--amber-bright); }
+  textarea, input{ width:100%; background:var(--navy-deep); color:var(--chalk); border:1px solid var(--navy-line); border-radius:8px; padding:8px; font-size:11px; box-sizing:border-box; }
+</style>
+{% endblock %}
+{% macro yz(s, y, sonuc) %}{% if s and s[y] is not none %}{% set i = s[y] %}<span class="tag {{ ('w' if i == sonuc else 'l') if sonuc is not none else 'a' }}">{{ '1X2'[i] }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}{% endmacro %}
+{% macro fk(s) %}{% if s %}{% for i in range(3) %}<span class="{{ 'k' if i == s.kucuk else '' }}">{{ '1X2'[i] }} +%{{ s.fark[i] }}</span>{{ ' · ' if not loop.last else '' }}{% endfor %}{% endif %}{% endmacro %}
+{% macro ptab(P, an) %}
+<div class="pt"><div class="hd n">yöntem</div><div class="hd">seçim</div><div class="hd">isabet</div><div class="hd">ROI (ort. oran)</div>
+{% for y in ['favori', 'kucuk', 'birlikte'] %}{% set o = P[an][y] %}<div class="n">{{ yad[y] }}</div><div>{{ o.n }}</div><div>{% if o.n %}{{ o.w }} · %{{ o.isabet }}{% else %}-{% endif %}</div><div class="{{ 'pos' if o.roi and o.roi > 0 else 'neg' }}">{% if o.n %}{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}{% else %}-{% endif %}</div>{% endfor %}</div>
+{% endmacro %}
+{% block content %}
+<div style="margin:12px 16px 0"><a href="/toto/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ TOTO verisini indir (JSON)</a></div>
+
+<h2 class="section">🎫 TOTO HAFTASI{% if d.hafta and d.hafta.hafta %} — {{ d.hafta.hafta }}{% endif %}</h2>
+{% if d.hafta %}
+<div class="section-sub">Kupon kapanışı: {{ d.hafta.kapanis | localdatetime }}. <b>Kapanışta</b> = Toto kuponu kapanırken görünen oranlarla (oynanabilecek seçim). <b>Maç başında</b> = maç başlarken (NowGoal'daki "Live" son hali).</div>
+{% for an, ad in [('toto', 'Kupon kapanışında'), ('kap', 'Maç başında')] %}{% set S = d.hafta.say[an] %}
+<div class="row"><span><b>{{ ad }}</b></span><span>{% for y in ['favori', 'kucuk', 'birlikte'] %}{{ yad[y] }}: <b>{{ S[y][1] }}/{{ S[y][0] }}</b>{{ ' · ' if not loop.last else '' }}{% endfor %}</span></div>
+{% endfor %}
+<table class="tt"><tr><th>#</th><th class="l">maç</th><th>sonuç</th><th>Favori<br><small>kapanış / başlama</small></th><th>En küçük<br><small>kapanış / başlama</small></th><th>Birlikte<br><small>kapanış / başlama</small></th></tr>
+{% for m in d.hafta.maclar %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
+<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
+<td>{% if m.skor %}<b>{{ m.sonuc }}</b><br><span class="ng-meta">{{ m.skor }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>
+{% for y in ['favori', 'kucuk', 'birlikte'] %}<td>{{ yz(m.toto, y, sr) }}{{ yz(m.kap, y, sr) }}</td>{% endfor %}</tr>
+{% endfor %}</table>
+{% else %}<div class="empty">Bu hafta için Toto listesi girilmedi. Aşağıdaki formdan girebilirsin.</div>{% endif %}
+
+<details style="margin:0 16px 12px"><summary class="section-sub" style="cursor:pointer">✏️ Toto listesini gir / değiştir</summary>
+<form method="post" action="/toto/liste" style="margin-top:8px">
+  <div class="ng-meta">Her satıra bir maç: <b>Ev - Deplasman</b> (başta sıra numarası olabilir). Sportoto sitesindeki listeden kopyalayıp yapıştırabilirsin.</div>
+  <textarea name="metin" rows="15" placeholder="1 Konyaspor - Galatasaray&#10;2 Erzurumspor FK - Arca Çorum FK&#10;...">{% for m in d.liste.maclar or [] %}{{ m.no }} {{ m.ev }} - {{ m.dep }}
+{% endfor %}</textarea>
+  <div class="ng-meta" style="margin-top:6px">Hafta adı (isteğe bağlı) ve kupon kapanışı (Türkiye saati):</div>
+  <input name="hafta" placeholder="2026/27 12. hafta" value="{{ d.liste.hafta or '' }}" style="margin-top:4px">
+  <input name="kapanis" type="datetime-local" required style="margin-top:4px">
+  <button style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:0;font-weight:700;background:linear-gradient(135deg,var(--amber-bright),var(--amber));color:#241a06">💾 Listeyi kaydet</button>
+</form>
+{% if msg %}<div class="row"><b>{{ msg }}</b></div>{% endif %}
+</details>
+
+<h2 class="section">📊 PERFORMANS (tüm maçlar, otomatik)</h2>
+<div class="section-sub">Maç başlarken görünen oranlarla (NowGoal "Live" son hali). ROI: o tarafın büro ortalaması oranıyla 1 birim. Kayıt geriye dönük {{ 10 }} güne kadar doldurulur.</div>
+{% for g in d.perf %}<div class="section-sub"><b>{{ g.ad }}</b> — {{ g.mac }} maç</div>{{ ptab(g, 'kap') }}{% endfor %}
+<div class="section-sub"><b>Maçtan 10-35 dk önce görünen oranlarla</b> (oynanabilir an; sadece bu sekme kurulduktan sonraki maçlar)</div>
+{% for g in d.perf %}{% if g.on.favori.n %}<div class="section-sub">{{ g.ad }}</div>{{ ptab(g, 'on') }}{% endif %}{% endfor %}
+<div class="section-sub"><b>Son 7 gün</b> (maç başında)</div>
+{% for g in d.perf7 %}{% if g.mac %}<div class="section-sub">{{ g.ad }} — {{ g.mac }} maç</div>{{ ptab(g, 'kap') }}{% endif %}{% endfor %}
+
+<h2 class="section">📅 YAKLAŞAN (maçtan 10-35 dk önce kaydedilenler)</h2>
+{% for m in d.yaklasan %}
+<div class="row"><span><b>{{ m.ad }}</b><br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}</span></span>
+  <span style="text-align:right;white-space:nowrap">F {{ yz(m.s, 'favori', none) }}<br>K {{ yz(m.s, 'kucuk', none) }}<br>F+K {{ yz(m.s, 'birlikte', none) }}</span></div>
+{% else %}<div class="empty">Şu an kayıt yok (maçlar başlamadan 10-35 dk önce eklenir).</div>{% endfor %}
+
+<h2 class="section">🧾 SON SONUÇLAR (maç başındaki oranlarla)</h2>
+{% for m in d.son %}
+<div class="row"><span>{{ m.ad }}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }} · {{ m.skor }}<br>fark {{ fk(m.s) }}</span></span>
+  <span style="text-align:right;white-space:nowrap">F {{ yz(m.s, 'favori', m.sonuc) }}<br>K {{ yz(m.s, 'kucuk', m.sonuc) }}<br>F+K {{ yz(m.s, 'birlikte', m.sonuc) }}</span></div>
+{% else %}<div class="empty">Henüz sonuçlanan kayıt yok (veri toplanıyor).</div>{% endfor %}
+<div class="section-sub">Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else 'henüz çalışmadı' }} {{ d.durum.log }}</div>
+{% endblock %}

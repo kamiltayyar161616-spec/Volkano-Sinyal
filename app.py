@@ -38,6 +38,7 @@ import strateji
 import altust
 import htft_tab
 import iyv_tab
+import toto_tab
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -333,6 +334,26 @@ def altust_indir():
                     headers={"Content-Disposition": "attachment; filename=alt_ust_veri.json"})
 
 
+@app.route("/toto")
+def toto_page():
+    return render_template("toto.html", d=toto_tab.get_page_data(), yad=toto_tab.YON_AD, msg=request.args.get("m"), active_page="toto")
+
+
+@app.route("/toto/liste", methods=["POST"])
+def toto_liste():
+    ok, msg = toto_tab.liste_kaydet(request.form.get("metin", ""), request.form.get("kapanis", ""), request.form.get("hafta", ""))
+    return redirect(url_for("toto_page", m=msg))
+
+
+@app.route("/toto/indir")
+def toto_indir():
+    import json as _json
+    from flask import Response
+    body = _json.dumps(toto_tab.export_json(), ensure_ascii=False, default=str)
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=toto_veri.json"})
+
+
 @app.route("/iy-ms-v/indir")
 def iyv_indir():
     import json as _json
@@ -417,4 +438,5 @@ if __name__ == "__main__":
     t.start()
     nowgoal.start_background()
     sdoran.start_background()
+    toto_tab.start_background()
     app.run(host="0.0.0.0", port=8080)
