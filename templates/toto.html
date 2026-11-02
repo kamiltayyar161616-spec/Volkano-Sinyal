@@ -15,6 +15,8 @@
   .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); }
   .tt td.l{ text-align:left; } .tt .k{ font-weight:700; color:var(--amber-bright); }
   textarea, input{ width:100%; background:var(--navy-deep); color:var(--chalk); border:1px solid var(--navy-line); border-radius:8px; padding:8px; font-size:11px; box-sizing:border-box; }
+  .kp{ font-weight:800; font-size:10.5px; padding:2px 6px; border-radius:6px; background:var(--navy-deep); border:1px solid var(--amber-dim); color:var(--amber-bright); white-space:nowrap; }
+  .kp.w{ border-color:var(--turf); color:var(--turf-bright); } .kp.l{ border-color:var(--clay-dim); color:var(--clay); }
 </style>
 {% endblock %}
 {% macro yz(s, y, sonuc) %}{% if s and s[y] is not none %}{% set i = s[y] %}<span class="tag {{ ('w' if i == sonuc else 'l') if sonuc is not none else 'a' }}">{{ '1X2'[i] }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}{% endmacro %}
@@ -23,9 +25,21 @@
 <div class="pt"><div class="hd n">yöntem</div><div class="hd">seçim</div><div class="hd">isabet</div><div class="hd">ROI (ort. oran)</div>
 {% for y in ['favori', 'kucuk', 'birlikte'] %}{% set o = P[an][y] %}<div class="n">{{ yad[y] }}</div><div>{{ o.n }}</div><div>{% if o.n %}{{ o.w }} · %{{ o.isabet }}{% else %}-{% endif %}</div><div class="{{ 'pos' if o.roi and o.roi > 0 else 'neg' }}">{% if o.n %}{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}{% else %}-{% endif %}</div>{% endfor %}</div>
 {% endmacro %}
+{% macro kp(m) %}{% if m.kupon %}{% set k = m.kupon %}<span class="kp {{ ('w' if m.kupon_tuttu else 'l') if m.kupon_tuttu is not none else '' }}">{{ k.tur }} {{ k.isaret }}{% if k.dikkat %} ⚠{% endif %}</span>{% if k.dikkat %}<br><span class="ng-meta">yedek {{ k.isaret }}{{ k.yedek }}</span>{% endif %}{% endif %}{% endmacro %}
+{% macro od(s) %}{% if s and s.ort %}oran {% for i in range(3) %}{{ '1X2'[i] }} {{ '%.2f'|format(s.ort[i]) }}{{ ' · ' if not loop.last else '' }}{% endfor %}{% endif %}{% endmacro %}
+{% macro gtab(K) %}
+<table class="tt"><tr><th class="l">gün</th><th>maç</th><th>tutan</th><th>TEK</th><th>ÇİFTE</th><th>KAPALI</th><th>⚠</th></tr>
+{% for g in K.gunler + [K.toplam] %}<tr {% if g.gun == 'toplam' %}style="font-weight:700"{% endif %}><td class="l">{{ g.gun }}</td><td>{{ g.n }}</td><td class="{{ 'pos' if g.yuzde and g.yuzde >= 60 else '' }}">{{ g.w }} · %{{ g.yuzde }}</td>
+{% for t in ['TEK', 'ÇİFTE', 'KAPALI', 'dikkat'] %}<td>{% if g[t].n %}{{ g[t].w }}/{{ g[t].n }}<br><span class="ng-meta">%{{ g[t].y }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</table>
+{% endmacro %}
 {% block content %}
 <div style="margin:12px 16px 0"><a href="/toto/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ TOTO verisini indir (JSON)</a></div>
 <div class="section-sub" style="margin-top:8px">Haftalık Toto bülteni ve kupon önerisi: <a href="/toto-bulten">📋 TOTO BÜLTEN</a> sekmesinde.</div>
+
+<h2 class="section">🎯 KUPON ÖNERİSİ — GÜN GÜN</h2>
+<div class="section-sub">TOTO BÜLTEN'deki kurallar bütün maçlara uygulanır: <b>TEK</b> (favori = en küçük fark), <b>ÇİFTE</b> (ayrışınca ikisi), <b>KAPALI</b> (üç fark 5 puan içinde), <b>⚠</b> (favori ≤ 1.50). "Tutan" = sonucun önerilen işaretlerin içinde olması. Maç başındaki oranlarla:</div>
+{% if d.kupon.gunler %}{{ gtab(d.kupon) }}{% else %}<div class="empty">Henüz sonuçlanan kayıt yok.</div>{% endif %}
+{% if d.kupon_on.gunler %}<div class="section-sub">Maçtan 10-35 dk önceki oranlarla (oynanabilir an):</div>{{ gtab(d.kupon_on) }}{% endif %}
 
 <h2 class="section">📊 PERFORMANS (tüm maçlar, otomatik)</h2>
 <div class="section-sub">Maç başlarken görünen oranlarla (NowGoal "Live" son hali). ROI: o tarafın büro ortalaması oranıyla 1 birim. Kayıt geriye dönük {{ 10 }} güne kadar doldurulur.</div>
@@ -38,14 +52,14 @@
 <h2 class="section">📅 YAKLAŞAN VE CANLI (başlama saatine göre; başlayan maç 2 saat listede kalır)</h2>
 <div class="section-sub">Canlı skor/dakika: AllSportsAPI (dakikada bir güncellenir). 70. dakikadan sonra berabere giden maçlar en üstte, çerçeveli.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %}</div>
 {% for m in d.yaklasan %}
-<div class="row" {% if m.ber70 %}style="border-color:var(--amber)"{% endif %}><span><b>{{ m.ad }}</b>{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}</span></span>
-  <span style="text-align:right;white-space:nowrap">F {{ yz(m.s, 'favori', none) }}<br>K {{ yz(m.s, 'kucuk', none) }}<br>F+K {{ yz(m.s, 'birlikte', none) }}</span></div>
+<div class="row" {% if m.ber70 %}style="border-color:var(--amber)"{% endif %}><span><b>{{ m.ad }}</b>{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}<br>{{ od(m.s) }}</span></span>
+  <span style="text-align:right;white-space:nowrap">{{ kp(m) }}<br><span class="ng-meta">F {{ yz(m.s, 'favori', none) }} K {{ yz(m.s, 'kucuk', none) }}</span></span></div>
 {% else %}<div class="empty">Şu an kayıt yok (maçlar başlamadan 10-35 dk önce eklenir).</div>{% endfor %}
 
 <h2 class="section">🧾 SON SONUÇLAR (maç başındaki oranlarla)</h2>
 {% for m in d.son %}
-<div class="row"><span>{{ m.ad }}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }} · {{ m.skor }}<br>fark {{ fk(m.s) }}</span></span>
-  <span style="text-align:right;white-space:nowrap">F {{ yz(m.s, 'favori', m.sonuc) }}<br>K {{ yz(m.s, 'kucuk', m.sonuc) }}<br>F+K {{ yz(m.s, 'birlikte', m.sonuc) }}</span></div>
+<div class="row"><span>{{ m.ad }} <b>{{ '1X2'[m.sonuc] }}</b><br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }} · {{ m.skor }}<br>fark {{ fk(m.s) }}<br>{{ od(m.s) }}</span></span>
+  <span style="text-align:right;white-space:nowrap">{{ kp(m) }}<br><span class="ng-meta">F {{ yz(m.s, 'favori', m.sonuc) }} K {{ yz(m.s, 'kucuk', m.sonuc) }}</span></span></div>
 {% else %}<div class="empty">Henüz sonuçlanan kayıt yok (veri toplanıyor).</div>{% endfor %}
 <div class="section-sub">Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else 'henüz çalışmadı' }} {{ d.durum.log }}</div>
 {% endblock %}

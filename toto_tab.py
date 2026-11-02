@@ -586,7 +586,7 @@ def yaklasan():
         s = secim(r["on"], "on")
         if s:
             x = {"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"], "s": s,
-                 "dk": tahmini_dakika(r["kickoff_utc"], now), "mid": r["mid"]}
+                 "dk": tahmini_dakika(r["kickoff_utc"], now), "mid": r["mid"], "kupon": kupon_oneri(s)}
             if x["dk"]:
                 _canli_ekle(x, r["home"], r["away"], canli_skorlar())
             out.append(x)
@@ -600,16 +600,56 @@ def son_sonuclar(limit=60):
             continue
         s = secim(r["son"], "kap")
         if s:
+            k = kupon_oneri(s)
             out.append({"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"],
-                        "skor": f"{r['ft_h']}-{r['ft_a']}", "sonuc": r["sonuc"], "s": s})
+                        "skor": f"{r['ft_h']}-{r['ft_a']}", "sonuc": r["sonuc"], "s": s, "kupon": k,
+                        "kupon_tuttu": ("1X2"[r["sonuc"]] in k["isaret"]) if k else None})
         if len(out) >= limit:
             break
     return out
 
 
+TR = timezone(timedelta(hours=3))
+
+
+def gunluk_kupon(gun=10, an="kap"):
+    """gun gun kupon onerisi basarisi (TEK / CIFTE / KAPALI / dikkat). an: 'kap' mac basi, 'on' mactan 10-35 dk once."""
+    G = {}
+    for r in _kayitlar(gun):
+        if r["sonuc"] is None:
+            continue
+        s = secim(r["on"] if an == "on" else r["son"], an)
+        k = kupon_oneri(s)
+        if not k:
+            continue
+        g = datetime.fromisoformat(r["kickoff_utc"]).astimezone(TR).strftime("%Y-%m-%d")
+        d = G.setdefault(g, {"gun": g, "n": 0, "w": 0, "TEK": [0, 0], "ÇİFTE": [0, 0], "KAPALI": [0, 0], "dikkat": [0, 0],
+                             "kolon_log": 0.0})
+        w = "1X2"[r["sonuc"]] in k["isaret"]
+        d["n"] += 1
+        d["w"] += w
+        d[k["tur"]][0] += 1
+        d[k["tur"]][1] += w
+        if k["dikkat"]:
+            d["dikkat"][0] += 1
+            d["dikkat"][1] += w
+    out = sorted(G.values(), key=lambda d: d["gun"], reverse=True)
+    for d in out:
+        d["yuzde"] = round(100 * d["w"] / d["n"], 1) if d["n"] else None
+        for t in ("TEK", "ÇİFTE", "KAPALI", "dikkat"):
+            n, w = d[t]
+            d[t] = {"n": n, "w": w, "y": round(100 * w / n, 1) if n else None}
+    top = {"gun": "toplam", "n": sum(d["n"] for d in out), "w": sum(d["w"] for d in out)}
+    top["yuzde"] = round(100 * top["w"] / top["n"], 1) if top["n"] else None
+    for t in ("TEK", "ÇİFTE", "KAPALI", "dikkat"):
+        n, w = sum(d[t]["n"] for d in out), sum(d[t]["w"] for d in out)
+        top[t] = {"n": n, "w": w, "y": round(100 * w / n, 1) if n else None}
+    return {"gunler": out, "toplam": top}
+
+
 def get_page_data():
     return {"canli_hata": _canli["hata"], "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
-            "son": son_sonuclar(), "durum": _last}
+            "son": son_sonuclar(), "kupon": gunluk_kupon(), "kupon_on": gunluk_kupon(an="on"), "durum": _last}
 
 
 def get_bulten_data(hafta=None):
