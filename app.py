@@ -336,13 +336,20 @@ def altust_indir():
 
 @app.route("/toto")
 def toto_page():
-    return render_template("toto.html", d=toto_tab.get_page_data(request.args.get("hafta")), yad=toto_tab.YON_AD, msg=request.args.get("m"), active_page="toto")
+    return render_template("toto.html", d=toto_tab.get_page_data(), yad=toto_tab.YON_AD, active_page="toto")
 
 
+@app.route("/toto-bulten")
+def toto_bulten_page():
+    return render_template("toto_bulten.html", d=toto_tab.get_bulten_data(request.args.get("hafta")), yad=toto_tab.YON_AD,
+                           msg=request.args.get("m"), active_page="totobulten")
+
+
+@app.route("/toto-bulten/liste", methods=["POST"])
 @app.route("/toto/liste", methods=["POST"])
 def toto_liste():
     ok, msg = toto_tab.liste_kaydet(request.form.get("metin", ""), request.form.get("kapanis", ""), request.form.get("hafta", ""))
-    return redirect(url_for("toto_page", m=msg))
+    return redirect(url_for("toto_bulten_page", m=msg, hafta=request.form.get("hafta") or None))
 
 
 @app.route("/toto/indir")

@@ -25,34 +25,7 @@
 {% endmacro %}
 {% block content %}
 <div style="margin:12px 16px 0"><a href="/toto/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ TOTO verisini indir (JSON)</a></div>
-
-<h2 class="section">🎫 TOTO HAFTASI{% if d.hafta and d.hafta.hafta %} — {{ d.hafta.hafta }}{% endif %}</h2>
-{% if d.haftalar|length > 1 %}<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 16px 6px">{% for h in d.haftalar %}<a class="tag {{ 'a' if d.hafta and d.hafta.hafta == h else '' }}" href="/toto?hafta={{ h|urlencode }}">{{ h }}</a>{% endfor %}</div>{% endif %}
-{% if d.hafta %}
-<div class="section-sub">Kupon kapanışı: {{ d.hafta.kapanis | localdatetime }}. <b>Kapanışta</b> = Toto kuponu kapanırken görünen oranlarla (oynanabilecek seçim). <b>Maç başında</b> = maç başlarken (NowGoal'daki "Live" son hali).</div>
-{% for an, ad in ([('elle', 'Ekran görüntüsü (NowGoal)')] if d.hafta.elle_var else []) + [('toto', 'Kupon kapanışında'), ('kap', 'Maç başında')] %}{% set S = d.hafta.say[an] %}
-<div class="row"><span><b>{{ ad }}</b></span><span>{% for y in ['favori', 'kucuk', 'birlikte'] %}{{ yad[y] }}: <b>{{ S[y][1] }}/{{ S[y][0] }}</b>{{ ' · ' if not loop.last else '' }}{% endfor %}</span></div>
-{% endfor %}
-<table class="tt"><tr><th>#</th><th class="l">maç</th><th>sonuç</th><th>Favori<br><small>{% if d.hafta.elle_var %}ekran / {% endif %}kapanış / başlama</small></th><th>En küçük<br><small>{% if d.hafta.elle_var %}ekran / {% endif %}kapanış / başlama</small></th><th>Birlikte<br><small>{% if d.hafta.elle_var %}ekran / {% endif %}kapanış / başlama</small></th></tr>
-{% for m in d.hafta.maclar %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
-<tr><td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}{% if not m.ng %} <span class="neg">(eşleşmedi)</span>{% endif %}<br><span class="ng-meta">{% if m.ko %}{{ m.ko | localdatetime }}{% endif %}{% if m.elle %} · ekran fark {{ fk(m.elle) }}{% elif m.kap %} · fark {{ fk(m.kap) }}{% elif m.toto %} · fark {{ fk(m.toto) }}{% endif %}</span></td>
-<td>{% if m.skor %}<b>{{ m.sonuc }}</b><br><span class="ng-meta">{{ m.skor }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>
-{% for y in ['favori', 'kucuk', 'birlikte'] %}<td>{% if d.hafta.elle_var %}{{ yz(m.elle, y, sr) }}{% endif %}{{ yz(m.toto, y, sr) }}{{ yz(m.kap, y, sr) }}</td>{% endfor %}</tr>
-{% endfor %}</table>
-{% else %}<div class="empty">Bu hafta için Toto listesi girilmedi. Aşağıdaki formdan girebilirsin.</div>{% endif %}
-
-<details style="margin:0 16px 12px"><summary class="section-sub" style="cursor:pointer">✏️ Toto listesini gir / değiştir</summary>
-<form method="post" action="/toto/liste" style="margin-top:8px">
-  <div class="ng-meta">Her satıra bir maç: <b>Ev - Deplasman</b> (başta sıra numarası olabilir). Sportoto sitesindeki listeden kopyalayıp yapıştırabilirsin.</div>
-  <textarea name="metin" rows="15" placeholder="1 Konyaspor - Galatasaray&#10;2 Erzurumspor FK - Arca Çorum FK&#10;...">{% for m in d.liste.maclar or [] %}{{ m.no }} {{ m.ev }} - {{ m.dep }}
-{% endfor %}</textarea>
-  <div class="ng-meta" style="margin-top:6px">Hafta adı (isteğe bağlı) ve kupon kapanışı (Türkiye saati):</div>
-  <input name="hafta" placeholder="2026/27 12. hafta" value="{{ d.liste.hafta or '' }}" style="margin-top:4px">
-  <input name="kapanis" type="datetime-local" required style="margin-top:4px">
-  <button style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:0;font-weight:700;background:linear-gradient(135deg,var(--amber-bright),var(--amber));color:#241a06">💾 Listeyi kaydet</button>
-</form>
-{% if msg %}<div class="row"><b>{{ msg }}</b></div>{% endif %}
-</details>
+<div class="section-sub" style="margin-top:8px">Haftalık Toto bülteni ve kupon önerisi: <a href="/toto-bulten">📋 TOTO BÜLTEN</a> sekmesinde.</div>
 
 <h2 class="section">📊 PERFORMANS (tüm maçlar, otomatik)</h2>
 <div class="section-sub">Maç başlarken görünen oranlarla (NowGoal "Live" son hali). ROI: o tarafın büro ortalaması oranıyla 1 birim. Kayıt geriye dönük {{ 10 }} güne kadar doldurulur.</div>
@@ -76,3 +49,4 @@
 {% else %}<div class="empty">Henüz sonuçlanan kayıt yok (veri toplanıyor).</div>{% endfor %}
 <div class="section-sub">Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else 'henüz çalışmadı' }} {{ d.durum.log }}</div>
 {% endblock %}
+

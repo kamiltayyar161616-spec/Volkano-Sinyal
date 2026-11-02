@@ -27,6 +27,7 @@ ON_PENCERE = (8, 35)          # dk: bu aralikta baslayacak maclar icin mac onces
 MAX_ON = 40
 MAX_SONRA = 40
 MAX_GERI = 25
+SIMDI_DK = 45               # Toto bultenindeki oynanmamis maclarin orani bu siklikla yenilenir
 GERI_GUN = 10
 LISTE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_liste.json")        # eski (tek hafta)
 LISTELER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_listeler.json")
@@ -44,6 +45,9 @@ def _conn():
     c = ng._conn()
     c.execute("""CREATE TABLE IF NOT EXISTS ng_toto (mid INTEGER PRIMARY KEY, kickoff_utc TEXT,
                  on_at TEXT, on_json TEXT, son_at TEXT, son_json TEXT)""")
+    if "simdi_json" not in [r[1] for r in c.execute("PRAGMA table_info(ng_toto)")]:
+        c.execute("ALTER TABLE ng_toto ADD COLUMN simdi_at TEXT")
+        c.execute("ALTER TABLE ng_toto ADD COLUMN simdi_json TEXT")
     return c
 
 
@@ -216,9 +220,17 @@ def run_cycle():
             for r in c.execute(f"SELECT mid, kickoff_utc, son_json FROM ng_toto WHERE son_json IS NOT NULL AND mid IN ({','.join(map(str, toto_mids))})"):
                 if "toto" not in (json.loads(r["son_json"]) or {}):
                     eksik.append(r)
+        # Toto bulteni: oynanmamis maclarin guncel (anlik) orani, SIMDI_DK'da bir
+        simdi = []
+        if toto_mids:
+            eski = {r[0]: r[1] for r in c.execute(f"SELECT mid, simdi_at FROM ng_toto WHERE mid IN ({','.join(map(str, toto_mids))})")}
+            for r in c.execute(f"SELECT mid, kickoff_utc FROM ng_match WHERE kickoff_utc > ? AND mid IN ({','.join(map(str, toto_mids))}) ORDER BY kickoff_utc",
+                               (ng._iso(now + timedelta(minutes=3)),)):
+                if not eski.get(r["mid"]) or eski[r["mid"]] < ng._iso(now - timedelta(minutes=SIMDI_DK)):
+                    simdi.append(r)
         c.close()
     n_on = n_son = err = 0
-    for tur, rows in (("on", on), ("son", list(son) + list(geri) + eksik)):
+    for tur, rows in (("simdi", simdi), ("on", on), ("son", list(son) + list(geri) + eksik)):
         seen = set()
         for r in rows:
             if r["mid"] in seen:
@@ -227,8 +239,8 @@ def run_cycle():
             ko = datetime.fromisoformat(r["kickoff_utc"])
             try:
                 body = _fetch(r["mid"])
-                if tur == "on":
-                    d = parse(body, ko, {"on": None})
+                if tur in ("on", "simdi"):
+                    d = parse(body, ko, {tur: None})
                 else:
                     anlar = {"kap": ko, "t60": ko - timedelta(minutes=60)}
                     ta = _toto_an(r["mid"], L)
@@ -240,7 +252,10 @@ def run_cycle():
             with ng._db_lock:
                 c = _conn()
                 c.execute("INSERT OR IGNORE INTO ng_toto (mid, kickoff_utc) VALUES (?,?)", (r["mid"], r["kickoff_utc"]))
-                if tur == "on":
+                if tur == "simdi":
+                    c.execute("UPDATE ng_toto SET simdi_at=?, simdi_json=COALESCE(?, simdi_json) WHERE mid=?",
+                              (ng._iso(ng._now()), json.dumps(d) if d else None, r["mid"]))
+                elif tur == "on":
                     c.execute("UPDATE ng_toto SET on_at=?, on_json=? WHERE mid=?", (ng._iso(ng._now()), json.dumps(d) if d else None, r["mid"]))
                     n_on += bool(d)
                 else:
@@ -251,7 +266,7 @@ def run_cycle():
                 c.close()
             time.sleep(ng.BEKLE)
     _last["at"] = ng._iso(ng._now())
-    _last["log"] = f"mac oncesi {n_on}/{len(on)}, sonrasi {n_son}, hata {err}"
+    _last["log"] = f"bulten anlik {len(simdi)}, mac oncesi {n_on}/{len(on)}, sonrasi {n_son}, hata {err}"
     print(f"[toto] {_last['log']}")
 
 
@@ -348,7 +363,7 @@ def _sonuc(h, a):
 
 
 def _kayitlar(gun=None):
-    q = """SELECT t.mid, t.kickoff_utc, t.on_json, t.son_json, m.home, m.away, m.league_vk, m.league_ng, m.ft_h, m.ft_a, m.status
+    q = """SELECT t.mid, t.kickoff_utc, t.on_json, t.son_json, t.simdi_json, t.simdi_at, m.home, m.away, m.league_vk, m.league_ng, m.ft_h, m.ft_a, m.status
            FROM ng_toto t JOIN ng_match m ON m.mid = t.mid"""
     par = ()
     if gun:
@@ -361,6 +376,7 @@ def _kayitlar(gun=None):
     for r in rows:
         r["on"] = json.loads(r["on_json"]) if r["on_json"] else None
         r["son"] = json.loads(r["son_json"]) if r["son_json"] else None
+        r["simdi"] = json.loads(r["simdi_json"]) if r.get("simdi_json") else None
         r["sonuc"] = _sonuc(r["ft_h"], r["ft_a"]) if r["ft_h"] is not None and r["status"] == "finished" else None
         r["lig"] = r["league_vk"] or r["league_ng"]
     return rows
@@ -406,6 +422,26 @@ def secim_elle(e):
             "ort": e.get("ort"), "mxf": e["mxf"], "mnl": e["mnl"]}
 
 
+KAPALI_ESIK = 5.0           # uc farkin hepsi bu kadar puan icindeyse mac dengesiz -> kapali
+DIKKAT_ORAN = 1.50          # favori bu orana esit/alti ise dikkat (FB, Bayern ornegi)
+
+
+def kupon_oneri(s):
+    """secim -> {'tur': TEK/ÇİFTE/KAPALI, 'isaret': '1'/'1X'/'1X2', 'dikkat': bool, 'yedek': '2'|None}"""
+    if not s:
+        return None
+    f = s["fark"]
+    if max(f) - min(f) <= KAPALI_ESIK:
+        return {"tur": "KAPALI", "isaret": "1X2", "dikkat": False, "yedek": None}
+    k, fv = s["kucuk"], s["favori"]
+    ort = s.get("ort") or [9, 9, 9]
+    if k == fv:
+        dk = ort[fv] <= DIKKAT_ORAN
+        yedek = max(range(3), key=lambda i: f[i]) if dk else None
+        return {"tur": "TEK", "isaret": "1X2"[k], "dikkat": dk, "yedek": "1X2"[yedek] if yedek is not None else None}
+    return {"tur": "ÇİFTE", "isaret": "".join(c for i, c in enumerate("1X2") if i in (k, fv)), "dikkat": False, "yedek": None}
+
+
 def toto_hafta(hafta=None):
     L = _liste(hafta)
     if not L.get("maclar"):
@@ -428,6 +464,8 @@ def toto_hafta(hafta=None):
         x = {"no": m["no"], "ad": f"{m['ev']} - {m['dep']}", "ng": m.get("ng"), "ko": m.get("ko"),
              "skor": f"{r['ft_h']}-{r['ft_a']}" if r.get("sonuc") is not None else None,
              "sonuc": "1X2"[r["sonuc"]] if r.get("sonuc") is not None else None}
+        x["simdi"] = secim(r.get("simdi"), "simdi")
+        x["simdi_at"] = r.get("simdi_at")
         for an in ("elle", "toto", "kap"):
             s = secim_elle(m.get("elle")) if an == "elle" else secim(r.get("son"), an)
             x[an] = s
@@ -436,12 +474,22 @@ def toto_hafta(hafta=None):
                     if s[y] is not None:
                         say[an][y][0] += 1
                         say[an][y][1] += s[y] == r["sonuc"]
+        kay, ks = next(((ad, x[k]) for k, ad in (("elle", "ekran"), ("toto", "kupon kapanışı"), ("simdi", "anlık"), ("kap", "maç başı")) if x.get(k)), (None, None))
+        x["kupon"] = kupon_oneri(ks)
+        x["kupon_kaynak"] = kay
+        if x["kupon"] and r.get("sonuc") is not None:
+            x["kupon_tuttu"] = "1X2"[r["sonuc"]] in x["kupon"]["isaret"]
         x["dk"] = tahmini_dakika(m["ko"]) if m.get("ko") and x["sonuc"] is None else None
         if x["dk"] and m.get("ng") and " - " in m["ng"]:
             _canli_ekle(x, *m["ng"].split(" - ", 1), canli_skorlar())
         out.append(x)
     out.sort(key=lambda x: x["ko"] or "9999")
-    return {"hafta": L.get("hafta"), "kapanis": L.get("kapanis"), "maclar": out, "say": say,
+    ks = [x for x in out if x.get("kupon")]
+    kolon = 1
+    for x in ks:
+        kolon *= len(x["kupon"]["isaret"])
+    say["kupon"] = [sum(1 for x in ks if x.get("kupon_tuttu") is not None), sum(1 for x in ks if x.get("kupon_tuttu"))]
+    return {"hafta": L.get("hafta"), "kapanis": L.get("kapanis"), "maclar": out, "say": say, "kolon": kolon if ks else 0,
             "elle_var": any(m.get("elle") for m in L["maclar"])}
 
 
@@ -557,10 +605,15 @@ def son_sonuclar(limit=60):
     return out
 
 
-def get_page_data(hafta=None):
-    return {"canli_hata": _canli["hata"], "hafta": toto_hafta(hafta), "haftalar": [h.get("hafta") for h in _haftalar()],
-            "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
-            "son": son_sonuclar(), "liste": _liste(hafta), "durum": _last}
+def get_page_data():
+    return {"canli_hata": _canli["hata"], "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
+            "son": son_sonuclar(), "durum": _last}
+
+
+def get_bulten_data(hafta=None):
+    h = toto_hafta(hafta)
+    return {"canli_hata": _canli["hata"], "hafta": h, "haftalar": [x.get("hafta") for x in _haftalar()],
+            "liste": _liste(hafta), "durum": _last}
 
 
 def export_json():
