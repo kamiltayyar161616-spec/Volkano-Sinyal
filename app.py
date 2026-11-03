@@ -371,6 +371,16 @@ def toto_param_indir():
                     headers={"Content-Disposition": "attachment; filename=toto_param.json"})
 
 
+@app.route("/toto-bulten/kitap-indir")
+def toto_kitap_indir():
+    from flask import send_file, abort
+    import os as _os
+    p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "data", "toto_kitap.json.gz")
+    if not _os.path.exists(p):
+        abort(404)
+    return send_file(p, mimetype="application/gzip", as_attachment=True, download_name="toto_kitap.json.gz")
+
+
 @app.route("/toto/indir")
 def toto_indir():
     import json as _json

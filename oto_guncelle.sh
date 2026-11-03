@@ -19,3 +19,5 @@ python3 toto_girdi.py
 if [ -f toto_gecmis_oran.py ] && [ ! -f data/toto_gecmis_bitti ]; then (nohup flock -n /tmp/toto_gecmis.lock python3 toto_gecmis_oran.py >> data/toto_gecmis.log 2>&1 9>&- &) ; fi
 # Pinnacle/Crown/Sbobet zaman serisi (parametre arayisi): gecmis oranlar bittikten sonra, bitene kadar arka planda
 if [ -f toto_parametre.py ] && [ -f data/toto_gecmis_bitti ] && [ ! -f data/toto_param_bitti ]; then (nohup flock -n /tmp/toto_param.lock python3 toto_parametre.py >> data/toto_param.log 2>&1 9>&- &) ; fi
+# tum bürolarin acilis/kapanis/Kelly verisi (acilis arastirmasi): parametre verisi bittikten sonra
+if [ -f toto_kitap.py ] && [ -f data/toto_param_bitti ] && [ ! -f data/toto_kitap_bitti ]; then (nohup flock -n /tmp/toto_kitap.lock python3 toto_kitap.py >> data/toto_kitap.log 2>&1 9>&- &) ; fi
