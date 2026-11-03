@@ -17,6 +17,18 @@
   textarea, input{ width:100%; background:var(--navy-deep); color:var(--chalk); border:1px solid var(--navy-line); border-radius:8px; padding:8px; font-size:11px; box-sizing:border-box; }
   .kp{ font-weight:800; font-size:10.5px; padding:2px 6px; border-radius:6px; background:var(--navy-deep); border:1px solid var(--amber-dim); color:var(--amber-bright); white-space:nowrap; }
   .kp.w{ border-color:var(--turf); color:var(--turf-bright); } .kp.l{ border-color:var(--clay-dim); color:var(--clay); }
+  .mc{ margin:0 16px 8px; padding:10px 12px; background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; font-size:10.5px; }
+  .mc-ust{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .mc-ad{ min-width:0; flex:1; } .mc-ad b{ word-break:break-word; }
+  .mc-sag{ text-align:right; white-space:nowrap; flex-shrink:0; }
+  .og{ display:grid; grid-template-columns:44px repeat(3,1fr); gap:2px; margin-top:8px; font-size:10px; text-align:center; }
+  .og > div{ padding:4px 2px; background:var(--navy-deep); border-radius:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .og > .h{ background:none; color:var(--chalk-faint); font-weight:700; }
+  .og > .l{ background:none; color:var(--chalk-faint); text-align:left; font-size:9px; }
+  .og > .kc{ outline:1px solid var(--amber-dim); color:var(--amber-bright); font-weight:700; }
+  .og > .gel{ background:rgba(40,160,90,.28); }
+  .og > .py{ color:var(--turf-bright); font-weight:700; }
+  .mc-alt{ margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:9.5px; color:var(--chalk-faint); }
 </style>
 {% endblock %}
 {% macro yz(s, y, sonuc) %}{% if s and s[y] is not none %}{% set i = s[y] %}<span class="tag {{ ('w' if i == sonuc else 'l') if sonuc is not none else 'a' }}">{{ '1X2'[i] }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}{% endmacro %}
@@ -33,6 +45,27 @@
 {% for g in K.gunler + [K.toplam] %}<tr {% if g.gun == 'toplam' %}style="font-weight:700"{% endif %}><td class="l">{{ g.gun }}</td><td>{{ g.n }}</td><td class="{{ 'pos' if g.yuzde and g.yuzde >= 60 else '' }}">{{ g.w }} · %{{ g.yuzde }}</td>
 {% for t in ['TEK', 'ÇİFTE', 'KAPALI', 'dikkat'] %}<td>{% if g[t].n %}{{ g[t].w }}/{{ g[t].n }}<br><span class="ng-meta">%{{ g[t].y }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</table>
 {% endmacro %}
+{% macro kart(m, sonuc, border) %}{% set p = m.pin %}
+<div class="mc" style="border-color:{{ border }}">
+  <div class="mc-ust">
+    <div class="mc-ad"><b>{{ m.ad }}</b>{% if sonuc is not none %} <span class="tag {{ 'w' if m.kupon_tuttu else 'l' if m.kupon_tuttu is not none else '' }}">{{ m.skor }} · {{ '1X2'[sonuc] }}</span>{% elif m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}
+      <div class="ng-meta">{{ m.ko | localdatetime }}{% if m.lig %} · {{ m.lig }}{% endif %}</div></div>
+    <div class="mc-sag">{{ kp(m) }}<br><span class="ng-meta">F {{ yz(m.s, 'favori', sonuc) }} K {{ yz(m.s, 'kucuk', sonuc) }}</span></div>
+  </div>
+  {% if m.s %}<div class="og">
+    <div class="l"></div>{% for i in range(3) %}<div class="h">{{ '1X2'[i] }}{% if i == m.s.favori %} ★{% endif %}</div>{% endfor %}
+    <div class="l">fark</div>{% for i in range(3) %}<div class="{{ 'kc' if i == m.s.kucuk else '' }} {{ 'gel' if sonuc == i else '' }}">{{ '+' if m.s.fark[i] >= 0 else '−' }}%{{ m.s.fark[i]|abs }}</div>{% endfor %}
+    <div class="l">ort.</div>{% for i in range(3) %}<div class="{{ 'gel' if sonuc == i else '' }}">{{ '%.2f'|format(m.s.ort[i]) if m.s.ort else '-' }}</div>{% endfor %}
+    {% if p and p.oran and p.kaynak == 'Pinnacle' %}
+    <div class="l">📌 P</div>{% for i in range(3) %}<div class="{{ 'py' if i == p.pyon else '' }} {{ 'gel' if sonuc == i else '' }}">{{ '%.2f'|format(p.oran[i]) }}</div>{% endfor %}
+    {% if p.rel %}<div class="l">P/ort.</div>{% for i in range(3) %}<div class="{{ 'pos' if p.rel[i] < 0 else 'neg' if p.rel[i] > 0 else '' }} {{ 'gel' if sonuc == i else '' }}">{{ '+' if p.rel[i] > 0 else '−' if p.rel[i] < 0 else '' }}%{{ p.rel[i]|abs }}</div>{% endfor %}{% endif %}
+    {% endif %}
+  </div>{% endif %}
+  {% if (p and p.kaynak == 'Pinnacle') or m.banko is not none %}<div class="mc-alt">
+    {% if p and p.kaynak == 'Pinnacle' %}<span>Pinnacle favori <b>{{ '1X2'[p.fav] }}</b> %{{ (100*p.p[p.fav])|round|int }}</span>{% if p.akis is not none %}<span>akış <b class="{{ 'pos' if p.akis > 0 else 'neg' if p.akis < 0 else '' }}">{{ '+' if p.akis > 0 else '' }}{{ p.akis }}</b></span>{% endif %}{% if sonuc is not none %}<span class="tag {{ 'w' if sonuc == p.fav else 'l' }}">P {{ '1X2'[p.fav] }}</span>{% endif %}{% endif %}
+    {% if m.banko is not none %}<span class="tag {{ ('w' if sonuc == m.banko else 'l') if sonuc is not none else 'a' }}">🔒 BANKO {{ '1X2'[m.banko] }}</span>{% endif %}
+  </div>{% endif %}
+</div>{% endmacro %}
 {% block content %}
 {% set canli_var = d.yaklasan | selectattr("skor") | list | length > 0 %}{% if canli_var %}<script>setTimeout(function(){ if(!document.querySelector('textarea:focus,input:focus')) location.reload(); }, 60000);</script><div class="section-sub">🔴 Canlı maç var: sayfa dakikada bir kendini yeniler.</div>{% endif %}
 <div style="margin:12px 16px 0"><a href="/toto/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ TOTO verisini indir (JSON)</a></div>
@@ -67,14 +100,12 @@
 <h2 class="section">📅 YAKLAŞAN VE CANLI (başlama saatine göre; başlayan maç 2 saat listede kalır)</h2>
 <div class="section-sub">Canlı skor/dakika: AllSportsAPI (dakikada bir güncellenir). 70. dakikadan sonra berabere giden maçlar en üstte, çerçeveli.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %}</div>
 {% for m in d.yaklasan %}
-<div class="row" {% if m.ber70 %}style="border-color:var(--amber)"{% endif %}><span><b>{{ m.ad }}</b>{% if m.dk %} <span class="tag a">{% if m.skor %}{{ m.skor }} · {% endif %}{{ m.dk }}</span>{% endif %}{% if m.ber70 %} <span class="tag w">70+ BERABERE</span>{% endif %}<br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}<br>{{ od(m.s) }}{{ pn(m.pin, none, m.banko) }}</span></span>
-  <span style="text-align:right;white-space:nowrap">{{ kp(m) }}<br><span class="ng-meta">F {{ yz(m.s, 'favori', none) }} K {{ yz(m.s, 'kucuk', none) }}</span></span></div>
+{{ kart(m, none, 'var(--amber)' if m.ber70 else 'var(--navy-line)') }}
 {% else %}<div class="empty">Şu an kayıt yok (maçlar başlamadan 10-35 dk önce eklenir).</div>{% endfor %}
 
 <h2 class="section">🧾 SON SONUÇLAR (maç başındaki oranlarla)</h2>
 {% for m in d.son %}
-<div class="row" style="border-color:{{ 'var(--turf)' if m.kupon_tuttu else 'var(--clay-dim)' if m.kupon_tuttu is not none else 'var(--navy-line)' }}"><span><b>{{ m.ad }}</b> <span class="tag {{ 'w' if m.kupon_tuttu else 'l' if m.kupon_tuttu is not none else '' }}">{{ m.skor }} · {{ '1X2'[m.sonuc] }}</span><br><span class="ng-meta">{{ m.ko | localdatetime }} · {{ m.lig or '' }}<br>fark {{ fk(m.s) }}<br>{{ od(m.s) }}{{ pn(m.pin, m.sonuc, m.banko) }}</span></span>
-  <span style="text-align:right;white-space:nowrap">{{ kp(m) }}<br><span class="ng-meta">F {{ yz(m.s, 'favori', m.sonuc) }} K {{ yz(m.s, 'kucuk', m.sonuc) }}</span></span></div>
+{{ kart(m, m.sonuc, 'var(--turf)' if m.kupon_tuttu else 'var(--clay-dim)' if m.kupon_tuttu is not none else 'var(--navy-line)') }}
 {% else %}<div class="empty">Henüz sonuçlanan kayıt yok (veri toplanıyor).</div>{% endfor %}
 <div class="section-sub">Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else 'henüz çalışmadı' }} {{ d.durum.log }}</div>
 {% endblock %}
