@@ -38,6 +38,7 @@
 {% macro kp(m) %}{% if m.kupon %}{% set k = m.kupon %}<span class="kp {{ ('w' if m.kupon_tuttu else 'l') if m.kupon_tuttu is not none else '' }}">{{ k.tur }} {{ k.isaret }}{% if k.dikkat %} ⚠{% endif %}</span>{% if k.dikkat %}<br><span class="ng-meta">yedek: {{ k.isaret }}{{ k.yedek }}</span>{% endif %}<br><span class="ng-meta">{{ m.kupon_kaynak }}</span>{% else %}<span class="ng-meta">oran yok</span>{% endif %}{% endmacro %}
 {% block content %}
 {% set canli_var = (d.hafta.maclar if d.hafta else []) | selectattr("dk") | rejectattr("sonuc") | list | length > 0 %}{% if canli_var %}<script>setTimeout(function(){ if(!document.querySelector('textarea:focus,input:focus')) location.reload(); }, 60000);</script><div class="section-sub">🔴 Canlı maç var: sayfa dakikada bir kendini yeniler.</div>{% endif %}
+{% if msg %}<div class="row" style="border-color:var(--turf)"><b>{{ msg }}</b></div>{% endif %}
 <h2 class="section">📋 TOTO BÜLTENİ{% if d.hafta and d.hafta.hafta %} — {{ d.hafta.hafta }}{% endif %}</h2>
 {% if d.haftalar|length > 1 %}<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 16px 6px">{% for h in d.haftalar %}<a class="tag {{ 'a' if d.hafta and d.hafta.hafta == h else '' }}" href="/toto-bulten?hafta={{ h|urlencode }}">{{ h }}</a>{% endfor %}</div>{% endif %}
 {% if d.hafta %}
@@ -51,6 +52,7 @@
   <button style="padding:8px 12px;border-radius:8px;border:0;font-weight:700;background:var(--amber);color:#241a06">Dağıt</button>
 </form>
 <div class="row" style="border-color:var(--turf)"><span><b>{{ P.kolon }} kolon</b> · 15/15 ihtimali %{{ P.tutma }} · beklenen tutan {{ P.beklenen }}</span><span>{% if P.bitti %}tutan <b>{{ P.tutan }}/{{ P.bitti }}</b>{% else %}sonuç bekleniyor{% endif %}</span></div>
+<form method="post" action="/toto-bulten/kaydet" style="margin:0 16px 8px"><input type="hidden" name="tur" value="pinnacle"><input type="hidden" name="hafta" value="{{ d.hafta.hafta if d.hafta else '' }}"><input type="hidden" name="kolon" value="{{ P.butce }}"><button style="width:100%;padding:9px;border-radius:9px;border:1px solid var(--turf);background:var(--navy);color:var(--turf-bright);font-weight:700">💾 Bu kuponu kaydet</button></form>
 <table class="tt"><tr><th>#</th><th class="l">maç</th><th>Pinnacle 1 · X · 2</th><th>seçim</th><th>ihtimal</th><th>akış</th><th>sonuç</th></tr>
 {% for m in P.maclar %}<tr style="{{ 'background:rgba(40,160,90,.12)' if m.tuttu else 'background:rgba(200,70,60,.12)' if m.tuttu is not none else '' }}">
 <td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.ps and m.ps.kaynak != 'Pinnacle' %}<br><span class="ng-meta">({{ m.ps.kaynak }})</span>{% elif not m.ps %}<br><span class="ng-meta">(oran yok)</span>{% endif %}</td>
@@ -61,6 +63,7 @@
 {% endif %}
 <h2 class="section">🎫 FARK YÖNTEMİ KUPONU</h2>
 <div class="row" style="border-color:var(--amber)"><span><b>Kupon önerisi</b>{% if d.hafta.kolon %} · {{ d.hafta.kolon }} kolon{% endif %}</span><span>{% if d.hafta.say.kupon[0] %}tutan <b>{{ d.hafta.say.kupon[1] }}/{{ d.hafta.say.kupon[0] }}</b>{% else %}sonuç bekleniyor{% endif %}</span></div>
+<form method="post" action="/toto-bulten/kaydet" style="margin:0 16px 8px"><input type="hidden" name="tur" value="fark"><input type="hidden" name="hafta" value="{{ d.hafta.hafta if d.hafta else '' }}"><button style="width:100%;padding:9px;border-radius:9px;border:1px solid var(--turf);background:var(--navy);color:var(--turf-bright);font-weight:700">💾 Bu kuponu kaydet</button></form>
 {% for m in d.hafta.maclar %}{% set s = m.elle or m.toto or m.simdi or m.kap %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
 <div class="mk {{ 'ok' if m.kupon_tuttu else 'no' if m.kupon_tuttu is not none else '' }}" {% if m.ber70 %}style="border-color:var(--amber)"{% endif %}>
   <div class="mk-ust">
@@ -105,6 +108,18 @@
 </form>
 {% if msg %}<div class="row"><b>{{ msg }}</b></div>{% endif %}
 </details>
+{% set KY = d.kayit %}{% if KY and KY.kuponlar %}
+<h2 class="section">💾 KAYITLI KUPONLAR</h2>
+{% if KY.ozet %}<table class="tt"><tr><th class="l">kupon</th><th>biten hafta</th><th>ort. tutan</th><th>15</th><th>14+</th><th>13+</th></tr>
+{% for t, o in KY.ozet.items() %}<tr><td class="l">{{ 'Pinnacle' if t == 'pinnacle' else 'Fark yöntemi' }}</td><td>{{ o.n }}</td><td>{{ o.ort }}</td><td>{{ o.on5 }}</td><td>{{ o.on4 }}</td><td>{{ o.on3 }}</td></tr>{% endfor %}</table>{% endif %}
+{% for k in KY.kuponlar %}
+<div class="mk {{ 'ok' if k.tamam and k.yanlis == 0 else '' }}">
+  <div class="mk-ust"><span class="mk-ad"><b>{{ '📌 Pinnacle' if k.tur == 'pinnacle' else '🎫 Fark yöntemi' }}</b> · {{ k.hafta }} · {{ k.kolon }} kolon<br><span class="ng-meta">kaydedildi {{ k.at | localdatetime }}</span></span>
+  <span class="mk-kp">{% if k.bitti %}<b>{{ k.tutan }}/{{ k.bitti }}</b>{% if k.yanlis %} <span class="neg">· {{ k.yanlis }} yanlış</span>{% endif %}{% else %}<span class="ng-meta">sonuç bekleniyor</span>{% endif %}</span></div>
+  <div style="display:grid;grid-template-columns:repeat(15,1fr);gap:2px;margin-top:6px">{% for m in k.maclar %}<div title="{{ m.ad }}{% if m.skor %} {{ m.skor }}{% endif %}" style="text-align:center;font-size:9px;padding:3px 0;border-radius:4px;background:{{ 'rgba(40,160,90,.35)' if m.tuttu else 'rgba(200,70,60,.45)' if m.tuttu is not none else 'var(--navy-deep)' }}"><div class="ng-meta">{{ m.no }}</div><b>{{ m.isaret }}</b>{% if m.sonuc %}<div class="ng-meta">{{ m.sonuc }}</div>{% endif %}</div>{% endfor %}</div>
+  <form method="post" action="/toto-bulten/sil" style="text-align:right;margin-top:4px" onsubmit="return confirm('Bu kayıt silinsin mi?')"><input type="hidden" name="id" value="{{ k.id }}"><button style="background:none;border:0;color:var(--chalk-faint);font-size:10px">🗑 sil</button></form>
+</div>{% endfor %}
+{% endif %}
 {% set G = d.gecmis %}{% if G %}
 <h2 class="section">📚 GEÇMİŞ TOTO ({{ G.hafta }} hafta, {{ G.ilk }} – {{ G.son }} hafta)</h2>
 <div class="section-sub">Sadece sonuçlar (oran yok), tahmin yöntemi değil; kuponda ne kadar risk alınacağını ayarlamak için.</div>

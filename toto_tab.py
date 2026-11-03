@@ -876,6 +876,88 @@ def gecmis_test():
     return out
 
 
+# ------------------------------------------------------------------ KUPON KAYDETME (TOTO BULTEN)
+KUPON_KAYIT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_kupon_kayit.json")
+_kayit_lock = threading.Lock()
+
+
+def _kayit_oku():
+    try:
+        return json.load(open(KUPON_KAYIT, encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def kupon_kaydet(hafta, tur, kolon=None):
+    """tur: 'pinnacle' | 'fark'. O anki kuponu (isaretlerle) kaydeder."""
+    h = toto_hafta(hafta or None)
+    if not h:
+        return False, "Hafta bulunamadı."
+    if tur == "pinnacle":
+        try:
+            kolon = int(kolon) if kolon else PIN_KOLON
+        except ValueError:
+            kolon = PIN_KOLON
+        P = pin_kupon(h, kolon)
+        isr = [{"no": m["no"], "ad": m["ad"], "isaret": m["isaret"]} for m in P["maclar"]]
+        top = P["kolon"]
+    else:
+        isr = [{"no": x["no"], "ad": x["ad"], "isaret": (x.get("kupon") or {}).get("isaret") or "1X2"} for x in h["maclar"]]
+        top = 1
+        for m in isr:
+            top *= len(m["isaret"])
+    rec = {"id": int(time.time() * 1000), "at": ng._iso(ng._now()), "hafta": h.get("hafta") or hafta or "",
+           "tur": tur, "kolon": top, "isaret": isr}
+    with _kayit_lock:
+        L = _kayit_oku()
+        L.append(rec)
+        os.makedirs(os.path.dirname(KUPON_KAYIT), exist_ok=True)
+        json.dump(L, open(KUPON_KAYIT + ".tmp", "w", encoding="utf-8"), ensure_ascii=False)
+        os.replace(KUPON_KAYIT + ".tmp", KUPON_KAYIT)
+    return True, f"{'Pinnacle' if tur == 'pinnacle' else 'Fark yöntemi'} kuponu kaydedildi ({top} kolon)."
+
+
+def kupon_sil(kid):
+    with _kayit_lock:
+        L = [k for k in _kayit_oku() if str(k["id"]) != str(kid)]
+        json.dump(L, open(KUPON_KAYIT + ".tmp", "w", encoding="utf-8"), ensure_ascii=False)
+        os.replace(KUPON_KAYIT + ".tmp", KUPON_KAYIT)
+    return True, "Kayıt silindi."
+
+
+def kayitli_kuponlar():
+    """kaydedilen kuponlar + sonuclar (en yeni basta) ve tur bazinda ozet."""
+    L = _kayit_oku()
+    H = {}
+    out = []
+    for k in sorted(L, key=lambda k: k["id"], reverse=True):
+        if k["hafta"] not in H:
+            H[k["hafta"]] = toto_hafta(k["hafta"]) or {"maclar": []}
+        son = {x["no"]: x for x in H[k["hafta"]]["maclar"]}
+        ms = []
+        for m in k["isaret"]:
+            x = son.get(m["no"]) or {}
+            ms.append({"no": m["no"], "ad": m["ad"], "isaret": m["isaret"], "sonuc": x.get("sonuc"), "skor": x.get("skor"),
+                       "tuttu": (x["sonuc"] in m["isaret"]) if x.get("sonuc") else None})
+        bitti = [m for m in ms if m["tuttu"] is not None]
+        tutan = sum(1 for m in bitti if m["tuttu"])
+        out.append(dict(k, maclar=ms, bitti=len(bitti), tutan=tutan, yanlis=len(bitti) - tutan,
+                        tamam=len(bitti) == len(ms) and len(ms) > 0))
+    oz = {}
+    for k in out:
+        if not k["tamam"]:
+            continue
+        o = oz.setdefault(k["tur"], {"n": 0, "tutan": 0, "on5": 0, "on4": 0, "on3": 0})
+        o["n"] += 1
+        o["tutan"] += k["tutan"]
+        o["on5"] += k["tutan"] == 15
+        o["on4"] += k["tutan"] >= 14
+        o["on3"] += k["tutan"] >= 13
+    for o in oz.values():
+        o["ort"] = round(o["tutan"] / o["n"], 1)
+    return {"kuponlar": out, "ozet": oz}
+
+
 def get_bulten_data(hafta=None, kolon=None):
     h = toto_hafta(hafta)
     try:
@@ -883,7 +965,7 @@ def get_bulten_data(hafta=None, kolon=None):
     except ValueError:
         kolon = PIN_KOLON
     return {"canli_hata": _canli["hata"], "hafta": h, "haftalar": [x.get("hafta") for x in _haftalar()],
-            "liste": _liste(hafta), "durum": _last, "gecmis": gecmis_ozet(), "gtest": gecmis_test(), "pk": pin_kupon(h, kolon),
+            "liste": _liste(hafta), "durum": _last, "gecmis": gecmis_ozet(), "gtest": gecmis_test(), "pk": pin_kupon(h, kolon), "kayit": kayitli_kuponlar(),
             "kupon_x": sum(1 for x in h.get("maclar", []) if x.get("kupon") and "X" in (x["kupon"].get("isaret") or "")) if h else None}
 
 

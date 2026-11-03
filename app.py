@@ -345,6 +345,18 @@ def toto_bulten_page():
                            msg=request.args.get("m"), active_page="totobulten")
 
 
+@app.route("/toto-bulten/kaydet", methods=["POST"])
+def toto_kupon_kaydet():
+    ok, msg = toto_tab.kupon_kaydet(request.form.get("hafta", ""), request.form.get("tur", "fark"), request.form.get("kolon"))
+    return redirect(url_for("toto_bulten_page", m=msg, hafta=request.form.get("hafta") or None, kolon=request.form.get("kolon") or None))
+
+
+@app.route("/toto-bulten/sil", methods=["POST"])
+def toto_kupon_sil():
+    ok, msg = toto_tab.kupon_sil(request.form.get("id", ""))
+    return redirect(url_for("toto_bulten_page", m=msg))
+
+
 @app.route("/toto-bulten/liste", methods=["POST"])
 @app.route("/toto/liste", methods=["POST"])
 def toto_liste():
