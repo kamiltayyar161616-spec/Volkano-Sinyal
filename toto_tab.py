@@ -606,7 +606,8 @@ def yaklasan():
         if s:
             x = {"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"], "s": s,
                  "dk": tahmini_dakika(r["kickoff_utc"], now), "mid": r["mid"], "kupon": kupon_oneri(s)}
-            x["pin"] = pin_secim(r.get("simdi"), "simdi") if (r.get("simdi") or {}).get("pin") else pin_secim(r["on"], "on")
+            ps = pin_secim(r.get("simdi"), "simdi") if (r.get("simdi") or {}).get("pin") else pin_secim(r["on"], "on")
+            x["pin"] = ps if ps and ps["kaynak"] == "Pinnacle" else None
             if x["dk"]:
                 _canli_ekle(x, r["home"], r["away"], canli_skorlar())
             out.append(x)
