@@ -341,7 +341,7 @@ def toto_page():
 
 @app.route("/toto-bulten")
 def toto_bulten_page():
-    return render_template("toto_bulten.html", d=toto_tab.get_bulten_data(request.args.get("hafta")), yad=toto_tab.YON_AD,
+    return render_template("toto_bulten.html", d=toto_tab.get_bulten_data(request.args.get("hafta"), request.args.get("kolon")), yad=toto_tab.YON_AD,
                            msg=request.args.get("m"), active_page="totobulten")
 
 

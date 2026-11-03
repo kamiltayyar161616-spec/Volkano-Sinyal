@@ -89,7 +89,7 @@ def parse(body, ko, anlar):
             if "^" in x:
                 k, v = x.split("^", 1)
                 det[k] = v
-    acilis, an = [], {k: [] for k in anlar}
+    acilis, an, pin = [], {k: [] for k in anlar}, None
     for row in re.findall(r'"([^"]*)"', gm.group(1)):
         f = row.split("|")
         if len(f) < 21:
@@ -104,9 +104,22 @@ def parse(body, ko, anlar):
             cur = op
         h = sdoran._hist(det.get(f[1], ""))
         acilis.append(op)
+        ispin = f[2].strip() == "Pinnacle"
+        if ispin:
+            pin = {"first": op, "cur": cur, "hist": len(h)}
+            t6 = ko - timedelta(hours=6)
+            v6 = op
+            for tt, o in h:
+                if tt <= t6:
+                    v6 = o
+                else:
+                    break
+            pin["t360"] = v6
         for k, t in anlar.items():
             if t is None:
                 an[k].append(cur)
+                if ispin:
+                    pin[k] = cur
                 continue
             v = cur if (not h and t >= ko - timedelta(minutes=5)) else op
             for tt, o in h:
@@ -115,9 +128,13 @@ def parse(body, ko, anlar):
                 else:
                     break
             an[k].append(v)
+            if ispin:
+                pin[k] = v
     out = {"first": _ozet(acilis)}
     for k in anlar:
         out[k] = _ozet(an[k])
+    if pin:
+        out["pin"] = pin
     return out if out["first"] else None
 
 
@@ -476,6 +493,8 @@ def toto_hafta(hafta=None):
                     if s[y] is not None:
                         say[an][y][0] += 1
                         say[an][y][1] += s[y] == r["sonuc"]
+        x["pin"] = next((ps for ps in (pin_secim(r.get("son"), "toto"), pin_secim(r.get("simdi"), "simdi"), pin_secim(r.get("son"), "kap"))
+                         if ps and ps["kaynak"] == "Pinnacle"), None)
         kay, ks = next(((ad, x[k]) for k, ad in (("elle", "ekran"), ("toto", "kupon kapanışı"), ("simdi", "anlık"), ("kap", "maç başı")) if x.get(k)), (None, None))
         x["kupon"] = kupon_oneri(ks)
         x["kupon_kaynak"] = kay
@@ -647,9 +666,136 @@ def gunluk_kupon(gun=10, an="kap"):
     return {"gunler": out, "toplam": top}
 
 
+# ------------------------------------------------------------------ PINNACLE KUPONU
+# Ana olasilik Pinnacle (marjsiz). Kolon butcesi icinde TEK -> CIFTE -> KAPALI yukseltmeleri, tutma ihtimalini en cok
+# artiran sirayla yapilir. Pinnacle yoksa piyasa ortalamasi (ya da ekran goruntusu ortalamasi) kullanilir.
+PIN_KOLON = 192
+
+
+def _nvp(o):
+    try:
+        q = [1 / float(x) for x in o]
+        t = sum(q)
+        return [x / t for x in q]
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def pin_secim(d, an):
+    """d: parse ciktisi -> {'kaynak': 'Pinnacle'|'piyasa', 'oran': [..], 'p': [..], 'fav': i, 'akis': fav olasiligi degisimi
+    (son 6 saat, Pinnacle gecmisi varsa)}"""
+    pn = (d or {}).get("pin") or {}
+    o = pn.get(an)
+    if o and _nvp(o):
+        p = _nvp(o)
+        fav = max(range(3), key=lambda i: p[i])
+        akis = None
+        if pn.get("hist") and pn.get("t360") and _nvp(pn["t360"]):
+            akis = round(100 * (p[fav] - _nvp(pn["t360"])[fav]), 1)
+        return {"kaynak": "Pinnacle", "oran": o, "p": p, "fav": fav, "akis": akis,
+                "ilk": pn.get("first")}
+    L = (d or {}).get(an)
+    if L and L.get("p"):
+        p = L["p"]
+        return {"kaynak": "piyasa", "oran": L.get("ort"), "p": p, "fav": max(range(3), key=lambda i: p[i]), "akis": None}
+    return None
+
+
+def pin_dagit(P, kolon=PIN_KOLON):
+    """P: [olasilik3 | None] -> her mac icin isaret listesi (olasilik sirasiyla). Acgozlu: log(tutma) kazanci / log(kolon) maliyeti."""
+    import math
+    sira = [sorted(range(3), key=lambda i: -p[i]) if p else None for p in P]
+    lv = [1 if p else 3 for p in P]
+    tut = lambda i: sum(P[i][j] for j in sira[i][:lv[i]])
+    while True:
+        tot = 1
+        for v in lv:
+            tot *= v
+        best = None
+        for i, p in enumerate(P):
+            if not p or lv[i] == 3 or tot // lv[i] * (lv[i] + 1) > kolon:
+                continue
+            a = tut(i)
+            b = a + p[sira[i][lv[i]]]
+            g = (math.log(b) - math.log(max(a, 1e-9))) / math.log((lv[i] + 1) / lv[i])
+            if not best or g > best[0]:
+                best = (g, i)
+        if not best:
+            break
+        lv[best[1]] += 1
+    return ["".join("1X2"[j] for j in sorted(sira[i][:lv[i]])) if sira[i] else "1X2" for i in range(len(P))]
+
+
+def pin_kupon(h, kolon=PIN_KOLON):
+    """toto_hafta ciktisi -> Pinnacle kuponu."""
+    if not h:
+        return None
+    rows = []
+    for x in h["maclar"]:
+        ps = x.get("pin")
+        if not ps and x.get("elle") and x["elle"].get("ort"):
+            p = _nvp(x["elle"]["ort"])
+            ps = {"kaynak": "ekran", "oran": x["elle"]["ort"], "p": p, "fav": max(range(3), key=lambda i: p[i]), "akis": None} if p else None
+        rows.append((x, ps))
+    isr = pin_dagit([ps["p"] if ps else None for x, ps in rows], kolon)
+    out, top, tut, bek = [], 1, 1.0, 0.0
+    for (x, ps), i in zip(rows, isr):
+        top *= len(i)
+        pi = sum(ps["p"]["1X2".index(c)] for c in i) if ps else 1.0
+        tut *= pi
+        bek += pi
+        out.append({"no": x["no"], "ad": x["ad"], "ps": ps, "isaret": i, "tur": {1: "TEK", 2: "ÇİFTE", 3: "KAPALI"}[len(i)],
+                    "ihtimal": round(100 * pi), "sonuc": x.get("sonuc"), "skor": x.get("skor"),
+                    "tuttu": (x["sonuc"] in i) if x.get("sonuc") else None,
+                    "fark_ayni": (x.get("kupon") or {}).get("isaret") == i})
+    bitti = [m for m in out if m["tuttu"] is not None]
+    return {"maclar": out, "kolon": top, "butce": kolon, "tutma": round(100 * tut, 1), "beklenen": round(bek, 1),
+            "bitti": len(bitti), "tutan": sum(1 for m in bitti if m["tuttu"])}
+
+
+def pin_gunluk(gun=10, an="kap"):
+    """TOTO sekmesi: gun gun Pinnacle favorisi ve Pinnacle cifte (favori + 2.) basarisi; Pinnacle olan maclar."""
+    G = {}
+    for r in _kayitlar(gun):
+        if r["sonuc"] is None:
+            continue
+        d = r["on"] if an == "on" else r["son"]
+        ps = pin_secim(d, an)
+        if not ps or ps["kaynak"] != "Pinnacle":
+            continue
+        g = datetime.fromisoformat(r["kickoff_utc"]).astimezone(TR).strftime("%Y-%m-%d")
+        x = G.setdefault(g, {"gun": g, "n": 0, "fw": 0, "fe": 0.0, "cw": 0, "ce": 0.0, "kar": 0.0, "a_n": 0, "a_w": 0, "a_e": 0.0})
+        sr = sorted(range(3), key=lambda i: -ps["p"][i])
+        x["n"] += 1
+        x["fw"] += r["sonuc"] == sr[0]
+        x["fe"] += ps["p"][sr[0]]
+        x["cw"] += r["sonuc"] in sr[:2]
+        x["ce"] += ps["p"][sr[0]] + ps["p"][sr[1]]
+        x["kar"] += (ps["oran"][sr[0]] - 1) if r["sonuc"] == sr[0] else -1
+        if ps["akis"] is not None and ps["akis"] >= 1.0:          # para akisi favoriye (son 6 saat +1 puan ve ustu)
+            x["a_n"] += 1
+            x["a_w"] += r["sonuc"] == sr[0]
+            x["a_e"] += ps["p"][sr[0]]
+    out = sorted(G.values(), key=lambda d: d["gun"], reverse=True)
+    top = {"gun": "toplam"}
+    for k in ("n", "fw", "fe", "cw", "ce", "kar", "a_n", "a_w", "a_e"):
+        top[k] = sum(d[k] for d in out)
+    for d in out + [top]:
+        n = d["n"]
+        d["f"] = round(100 * d["fw"] / n, 1) if n else None
+        d["fb"] = round(100 * d["fe"] / n, 1) if n else None
+        d["c"] = round(100 * d["cw"] / n, 1) if n else None
+        d["cb"] = round(100 * d["ce"] / n, 1) if n else None
+        d["roi"] = round(100 * d["kar"] / n, 1) if n else None
+        d["a"] = round(100 * d["a_w"] / d["a_n"], 1) if d["a_n"] else None
+        d["ab"] = round(100 * d["a_e"] / d["a_n"], 1) if d["a_n"] else None
+    return {"gunler": out, "toplam": top}
+
+
 def get_page_data():
     return {"canli_hata": _canli["hata"], "perf": get_performance(), "perf7": get_performance(7), "yaklasan": yaklasan(),
-            "son": son_sonuclar(), "kupon": gunluk_kupon(), "kupon_on": gunluk_kupon(an="on"), "durum": _last}
+            "son": son_sonuclar(), "kupon": gunluk_kupon(), "kupon_on": gunluk_kupon(an="on"), "durum": _last,
+            "pin": pin_gunluk(), "pin_on": pin_gunluk(an="on")}
 
 
 # ------------------------------------------------------------------ GECMIS TOTO (210 hafta, sadece sonuclar)
@@ -730,10 +876,14 @@ def gecmis_test():
     return out
 
 
-def get_bulten_data(hafta=None):
+def get_bulten_data(hafta=None, kolon=None):
     h = toto_hafta(hafta)
+    try:
+        kolon = max(1, min(int(kolon), 100000)) if kolon else PIN_KOLON
+    except ValueError:
+        kolon = PIN_KOLON
     return {"canli_hata": _canli["hata"], "hafta": h, "haftalar": [x.get("hafta") for x in _haftalar()],
-            "liste": _liste(hafta), "durum": _last, "gecmis": gecmis_ozet(), "gtest": gecmis_test(),
+            "liste": _liste(hafta), "durum": _last, "gecmis": gecmis_ozet(), "gtest": gecmis_test(), "pk": pin_kupon(h, kolon),
             "kupon_x": sum(1 for x in h.get("maclar", []) if x.get("kupon") and "X" in (x["kupon"].get("isaret") or "")) if h else None}
 
 

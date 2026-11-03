@@ -42,6 +42,24 @@
 {% if d.haftalar|length > 1 %}<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 16px 6px">{% for h in d.haftalar %}<a class="tag {{ 'a' if d.hafta and d.hafta.hafta == h else '' }}" href="/toto-bulten?hafta={{ h|urlencode }}">{{ h }}</a>{% endfor %}</div>{% endif %}
 {% if d.hafta %}
 <div class="section-sub">Kupon kapanışı: {{ d.hafta.kapanis | localdatetime }}. <b>Kapanışta</b> = Toto kuponu kapanırken görünen oranlarla (oynanabilecek seçim). <b>Maç başında</b> = maç başlarken (NowGoal'daki "Live" son hali).</div>
+{% set P = d.pk %}{% if P %}
+<h2 class="section">📌 PINNACLE KUPONU</h2>
+<div class="section-sub">Olasılıklar Pinnacle'dan (marjsız). Kolon bütçesi içinde hangi maçın TEK / ÇİFTE / KAPALI olacağını, kuponun tutma ihtimalini en çok artıracak şekilde sistem dağıtır. Pinnacle oranı yoksa ekran görüntüsündeki ortalama oran kullanılır. <b>akış</b> = favorinin Pinnacle olasılığı son 6 saatte kaç puan değişti (+ favoriye para girdi).</div>
+<form method="get" action="/toto-bulten" style="display:flex;gap:6px;margin:0 16px 8px;align-items:center">
+  {% if d.hafta and d.hafta.hafta %}<input type="hidden" name="hafta" value="{{ d.hafta.hafta }}">{% endif %}
+  <span class="ng-meta" style="white-space:nowrap">kolon bütçesi</span><input name="kolon" type="number" min="1" value="{{ P.butce }}" style="width:110px">
+  <button style="padding:8px 12px;border-radius:8px;border:0;font-weight:700;background:var(--amber);color:#241a06">Dağıt</button>
+</form>
+<div class="row" style="border-color:var(--turf)"><span><b>{{ P.kolon }} kolon</b> · 15/15 ihtimali %{{ P.tutma }} · beklenen tutan {{ P.beklenen }}</span><span>{% if P.bitti %}tutan <b>{{ P.tutan }}/{{ P.bitti }}</b>{% else %}sonuç bekleniyor{% endif %}</span></div>
+<table class="tt"><tr><th>#</th><th class="l">maç</th><th>Pinnacle 1 · X · 2</th><th>seçim</th><th>ihtimal</th><th>akış</th><th>sonuç</th></tr>
+{% for m in P.maclar %}<tr style="{{ 'background:rgba(40,160,90,.12)' if m.tuttu else 'background:rgba(200,70,60,.12)' if m.tuttu is not none else '' }}">
+<td>{{ m.no }}</td><td class="l">{{ m.ad }}{% if m.ps and m.ps.kaynak != 'Pinnacle' %}<br><span class="ng-meta">({{ m.ps.kaynak }})</span>{% elif not m.ps %}<br><span class="ng-meta">(oran yok)</span>{% endif %}</td>
+<td>{% if m.ps and m.ps.oran %}{% for i in range(3) %}<span class="{{ 'k' if i == m.ps.fav else '' }}">{{ '%.2f'|format(m.ps.oran[i]) }}</span>{{ ' · ' if not loop.last else '' }}{% endfor %}<br><span class="ng-meta">{% for i in range(3) %}%{{ (100*m.ps.p[i])|round|int }}{{ ' · ' if not loop.last else '' }}{% endfor %}</span>{% else %}—{% endif %}</td>
+<td><span class="kp {{ ('w' if m.tuttu else 'l') if m.tuttu is not none else '' }}">{{ m.tur }} {{ m.isaret }}</span>{% if not m.fark_ayni %}<br><span class="ng-meta">fark yöntemi farklı</span>{% endif %}</td>
+<td>%{{ m.ihtimal }}</td><td>{% if m.ps and m.ps.akis is not none %}<span class="{{ 'pos' if m.ps.akis > 0 else 'neg' if m.ps.akis < 0 else '' }}">{{ '+' if m.ps.akis > 0 else '' }}{{ m.ps.akis }}</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td>
+<td>{% if m.sonuc %}{{ m.skor }} · {{ m.sonuc }}{% else %}<span class="ng-meta">—</span>{% endif %}</td></tr>{% endfor %}</table>
+{% endif %}
+<h2 class="section">🎫 FARK YÖNTEMİ KUPONU</h2>
 <div class="row" style="border-color:var(--amber)"><span><b>Kupon önerisi</b>{% if d.hafta.kolon %} · {{ d.hafta.kolon }} kolon{% endif %}</span><span>{% if d.hafta.say.kupon[0] %}tutan <b>{{ d.hafta.say.kupon[1] }}/{{ d.hafta.say.kupon[0] }}</b>{% else %}sonuç bekleniyor{% endif %}</span></div>
 {% for m in d.hafta.maclar %}{% set s = m.elle or m.toto or m.simdi or m.kap %}{% set sr = '1X2'.index(m.sonuc) if m.sonuc else none %}
 <div class="mk {{ 'ok' if m.kupon_tuttu else 'no' if m.kupon_tuttu is not none else '' }}" {% if m.ber70 %}style="border-color:var(--amber)"{% endif %}>

@@ -42,6 +42,17 @@
 {% if d.kupon.gunler %}{{ gtab(d.kupon) }}{% else %}<div class="empty">Henüz sonuçlanan kayıt yok.</div>{% endif %}
 {% if d.kupon_on.gunler %}<div class="section-sub">Maçtan 10-35 dk önceki oranlarla (oynanabilir an):</div>{{ gtab(d.kupon_on) }}{% endif %}
 
+
+<h2 class="section">📌 PINNACLE — GÜN GÜN</h2>
+<div class="section-sub">Sadece Pinnacle oranı kayıtlı maçlar (bu bölüm kurulduktan sonraki maçlar). <b>Favori</b> = Pinnacle'ın favorisi TEK, <b>Çifte</b> = favori + ikinci ihtimal. Parantezde Pinnacle olasılığının beklediği oran. <b>Akış</b> = son 6 saatte Pinnacle'da favoriye +1 puan ve üstü kayma olan maçlarda favori (sigorta adayı, pasif takip).</div>
+{% macro ptb(K) %}<table class="tt"><tr><th class="l">gün</th><th>maç</th><th>favori</th><th>çifte</th><th>ROI (Pinnacle oranı)</th><th>akış ↑</th></tr>
+{% for g in K.gunler + [K.toplam] %}<tr {% if g.gun == 'toplam' %}style="font-weight:700"{% endif %}><td class="l">{{ g.gun }}</td><td>{{ g.n }}</td>
+<td>{% if g.n %}%{{ g.f }}<br><span class="ng-meta">(%{{ g.fb }})</span>{% else %}—{% endif %}</td><td>{% if g.n %}%{{ g.c }}<br><span class="ng-meta">(%{{ g.cb }})</span>{% else %}—{% endif %}</td>
+<td class="{{ 'pos' if g.roi and g.roi > 0 else 'neg' }}">{% if g.n %}{{ '+' if g.roi > 0 else '' }}%{{ g.roi }}{% else %}—{% endif %}</td>
+<td>{% if g.a_n %}{{ g.a_w }}/{{ g.a_n }} %{{ g.a }}<br><span class="ng-meta">(%{{ g.ab }})</span>{% else %}<span class="ng-meta">—</span>{% endif %}</td></tr>{% endfor %}</table>{% endmacro %}
+{% if d.pin.gunler %}<div class="section-sub">Maç başı oranlarıyla:</div>{{ ptb(d.pin) }}{% else %}<div class="empty">Pinnacle kayıtlı sonuçlanmış maç henüz yok (yeni maçlarla dolacak).</div>{% endif %}
+{% if d.pin_on.gunler %}<div class="section-sub">Maçtan 10-35 dk önceki oranlarla:</div>{{ ptb(d.pin_on) }}{% endif %}
+
 <h2 class="section">📊 PERFORMANS (tüm maçlar, otomatik)</h2>
 <div class="section-sub">Maç başlarken görünen oranlarla (NowGoal "Live" son hali). ROI: o tarafın büro ortalaması oranıyla 1 birim. Kayıt geriye dönük {{ 10 }} güne kadar doldurulur.</div>
 {% for g in d.perf %}<div class="section-sub"><b>{{ g.ad }}</b> — {{ g.mac }} maç</div>{{ ptab(g, 'kap') }}{% endfor %}
