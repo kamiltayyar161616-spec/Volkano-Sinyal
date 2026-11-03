@@ -498,6 +498,7 @@ def toto_hafta(hafta=None):
         kay, ks = next(((ad, x[k]) for k, ad in (("elle", "ekran"), ("toto", "kupon kapanışı"), ("simdi", "anlık"), ("kap", "maç başı")) if x.get(k)), (None, None))
         x["kupon"] = kupon_oneri(ks)
         x["kupon_kaynak"] = kay
+        x["banko"] = banko(ks, x.get("pin"))
         if x["kupon"] and r.get("sonuc") is not None:
             x["kupon_tuttu"] = "1X2"[r["sonuc"]] in x["kupon"]["isaret"]
         x["dk"] = tahmini_dakika(m["ko"]) if m.get("ko") and x["sonuc"] is None else None
@@ -606,8 +607,9 @@ def yaklasan():
         if s:
             x = {"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"], "s": s,
                  "dk": tahmini_dakika(r["kickoff_utc"], now), "mid": r["mid"], "kupon": kupon_oneri(s)}
-            ps = pin_secim(r.get("simdi"), "simdi") if (r.get("simdi") or {}).get("pin") else pin_secim(r["on"], "on")
+            ps = pin_secim(r["on"], "on")
             x["pin"] = ps if ps and ps["kaynak"] == "Pinnacle" else None
+            x["banko"] = banko(s, x["pin"])
             if x["dk"]:
                 _canli_ekle(x, r["home"], r["away"], canli_skorlar())
             out.append(x)
@@ -626,7 +628,8 @@ def son_sonuclar(limit=60):
             out.append({"ko": r["kickoff_utc"], "ad": f"{r['home']} - {r['away']}", "lig": r["lig"],
                         "skor": f"{r['ft_h']}-{r['ft_a']}", "sonuc": r["sonuc"], "s": s, "kupon": k,
                         "kupon_tuttu": ("1X2"[r["sonuc"]] in k["isaret"]) if k else None,
-                        "pin": ps if ps and ps["kaynak"] == "Pinnacle" else None})
+                        "pin": ps if ps and ps["kaynak"] == "Pinnacle" else None,
+                        "banko": banko(s, ps if ps and ps["kaynak"] == "Pinnacle" else None)})
         if len(out) >= limit:
             break
     return out
@@ -696,13 +699,25 @@ def pin_secim(d, an):
         akis = None
         if pn.get("hist") and pn.get("t360") and _nvp(pn["t360"]):
             akis = round(100 * (p[fav] - _nvp(pn["t360"])[fav]), 1)
+        L = (d or {}).get(an) or {}
+        rel, pyon = None, None
+        if L.get("ort") and all(L["ort"]):
+            rel = [round(100 * (float(o[i]) / L["ort"][i] - 1), 1) for i in range(3)]      # Pinnacle / ortalama - 1
+            pyon = min(range(3), key=lambda i: rel[i])                                      # Pinnacle'in en cok guvendigi taraf
         return {"kaynak": "Pinnacle", "oran": o, "p": p, "fav": fav, "akis": akis,
-                "ilk": pn.get("first")}
+                "ilk": pn.get("first"), "rel": rel, "pyon": pyon}
     L = (d or {}).get(an)
     if L and L.get("p"):
         p = L["p"]
         return {"kaynak": "piyasa", "oran": L.get("ort"), "p": p, "fav": max(range(3), key=lambda i: p[i]), "akis": None}
     return None
+
+
+def banko(s, ps):
+    """fark yontemi favori = en kucuk fark = Pinnacle'in ortalamaya gore en dusuk verdigi taraf -> o taraf, degilse None"""
+    if not s or not ps or ps.get("kaynak") != "Pinnacle" or ps.get("pyon") is None:
+        return None
+    return s["favori"] if s["favori"] == s["kucuk"] == ps["pyon"] else None
 
 
 def pin_dagit(P, kolon=PIN_KOLON):
@@ -751,7 +766,7 @@ def pin_kupon(h, kolon=PIN_KOLON):
         out.append({"no": x["no"], "ad": x["ad"], "ps": ps, "isaret": i, "tur": {1: "TEK", 2: "ÇİFTE", 3: "KAPALI"}[len(i)],
                     "ihtimal": round(100 * pi), "sonuc": x.get("sonuc"), "skor": x.get("skor"),
                     "tuttu": (x["sonuc"] in i) if x.get("sonuc") else None,
-                    "fark_ayni": (x.get("kupon") or {}).get("isaret") == i})
+                    "fark_ayni": (x.get("kupon") or {}).get("isaret") == i, "banko": x.get("banko")})
     bitti = [m for m in out if m["tuttu"] is not None]
     return {"maclar": out, "kolon": top, "butce": kolon, "tutma": round(100 * tut, 1), "beklenen": round(bek, 1),
             "bitti": len(bitti), "tutan": sum(1 for m in bitti if m["tuttu"])}
@@ -769,7 +784,7 @@ def pin_gunluk(gun=10, an="kap"):
             continue
         g = datetime.fromisoformat(r["kickoff_utc"]).astimezone(TR).strftime("%Y-%m-%d")
         x = G.setdefault(g, {"gun": g, "n": 0, "fw": 0, "fe": 0.0, "cw": 0, "ce": 0.0, "kar": 0.0, "a_n": 0, "a_w": 0, "a_e": 0.0,
-                             "u_n": 0, "u_w": 0, "u_e": 0.0})
+                             "u_n": 0, "u_w": 0, "u_e": 0.0, "b_n": 0, "b_w": 0, "b_e": 0.0, "b_k": 0.0})
         sr = sorted(range(3), key=lambda i: -ps["p"][i])
         x["n"] += 1
         x["fw"] += r["sonuc"] == sr[0]
@@ -777,6 +792,12 @@ def pin_gunluk(gun=10, an="kap"):
         x["cw"] += r["sonuc"] in sr[:2]
         x["ce"] += ps["p"][sr[0]] + ps["p"][sr[1]]
         x["kar"] += (ps["oran"][sr[0]] - 1) if r["sonuc"] == sr[0] else -1
+        bk = banko(secim(d, an), ps)
+        if bk is not None:
+            x["b_n"] += 1
+            x["b_w"] += r["sonuc"] == bk
+            x["b_e"] += ps["p"][bk]
+            x["b_k"] += (ps["oran"][bk] - 1) if r["sonuc"] == bk else -1
         kk = kupon_oneri(secim(d, an))
         if kk and kk["tur"] == "TEK" and kk["isaret"] == "1X2"[sr[0]]:      # fark yontemi TEK = Pinnacle favorisi
             x["u_n"] += 1
@@ -788,7 +809,7 @@ def pin_gunluk(gun=10, an="kap"):
             x["a_e"] += ps["p"][sr[0]]
     out = sorted(G.values(), key=lambda d: d["gun"], reverse=True)
     top = {"gun": "toplam"}
-    for k in ("n", "fw", "fe", "cw", "ce", "kar", "a_n", "a_w", "a_e", "u_n", "u_w", "u_e"):
+    for k in ("n", "fw", "fe", "cw", "ce", "kar", "a_n", "a_w", "a_e", "u_n", "u_w", "u_e", "b_n", "b_w", "b_e", "b_k"):
         top[k] = sum(d[k] for d in out)
     for d in out + [top]:
         n = d["n"]
@@ -800,6 +821,8 @@ def pin_gunluk(gun=10, an="kap"):
         d["a"] = round(100 * d["a_w"] / d["a_n"], 1) if d["a_n"] else None
         d["ab"] = round(100 * d["a_e"] / d["a_n"], 1) if d["a_n"] else None
         d["u"] = round(100 * d["u_w"] / d["u_n"], 1) if d["u_n"] else None
+        d["b"] = round(100 * d["b_w"] / d["b_n"], 1) if d["b_n"] else None
+        d["bb"] = round(100 * d["b_e"] / d["b_n"], 1) if d["b_n"] else None
         d["ub"] = round(100 * d["u_e"] / d["u_n"], 1) if d["u_n"] else None
     return {"gunler": out, "toplam": top}
 
