@@ -1,6 +1,7 @@
 """Tek mac icin 6 büronun oran + Kelly zaman cizelgesi (Pinnacle, Sbobet, Crown, Betfair, 1xBet, Bet365).
   kullanim: python3 kelly_mac.py "Pohang" "Gamba"      (takim adlarinin bir kismi yeterli; son 3 gun + onumuzdeki 1 gun)
             python3 kelly_mac.py 2912345               (NowGoal mac numarasiyla)
+            python3 kelly_mac.py kontrol "Pohang:Gamba" "Seoul:Viettel" ...   (biten maclar: KELLY kuralina gore seviye + sonuc)
             python3 kelly_mac.py canli "Drita:Prishtina" "Rakow:Kluczbork" ...   (CANLI: mac basladiktan sonraki
                      degisiklikler dahil, her büronun son 6 degisikligi + su anki Kelly; birden cok mac)
 Kelly = büronun o anki orani x o anki piyasa ortalamasi (marjsiz). Saatler Turkiye saati."""
@@ -47,6 +48,21 @@ def bul(a):
 
 def main():
     a = sys.argv[1:]
+    if a and a[0] == "kontrol":
+        print("Kural (KELLY sekmesi): maca 15 dk kala Pinnacle+Sbobet ayni taraf en dusuk Kelly | A<=0.85 B<=0.88 (karsi>=1.00) C<=0.90 (karsi>=0.97) D=sartsiz\n")
+        say = {}
+        for q in a[1:]:
+            try:
+                r = kontrol(q.split(":"))
+            except Exception as e:
+                print(q, "HATA", str(e)[:80])
+                continue
+            if r:
+                say.setdefault(r[0], []).append(r[1])
+        for sv in sorted(say):
+            v = [x for x in say[sv] if x is not None]
+            print(f"Seviye {sv}: {len(say[sv])} mac, biten {len(v)}, tutan {sum(v)}")
+        return
     if a and a[0] == "canli":
         for q in a[1:]:
             try:
@@ -56,6 +72,72 @@ def main():
             print("=" * 60)
         return
     tek(a)
+
+
+def kontrol(a, dk=15):
+    """mac basindan dk dakika once Pinnacle+Sbobet Kelly -> (seviye, tuttu?)"""
+    r = bul(a)
+    if not r:
+        print(" ".join(a), ": bulunamadi")
+        return None
+    ko = datetime.fromisoformat(r["kickoff_utc"])
+    t = (ko - timedelta(minutes=dk)).timestamp()
+    body = T._fetch(r["mid"])
+    gm = re.search(r"var game=Array\((.*?)\);", body, re.S)
+    dm = re.search(r"var gameDetail=Array\((.*?)\);", body, re.S)
+    det = {}
+    if dm:
+        for x in re.findall(r'"([^"]*)"', dm.group(1)):
+            if "^" in x:
+                k, v = x.split("^", 1)
+                det[k] = v
+    O, kit = [], {}
+    for row in re.findall(r'"([^"]*)"', gm.group(1)) if gm else []:
+        f = row.split("|")
+        if len(f) < 21:
+            continue
+        try:
+            op = [float(x) for x in f[3:6]]
+        except ValueError:
+            continue
+        if min(op) <= 1.0:
+            continue
+        o = op
+        for tt, oo in sdoran._hist(det.get(f[1], "")):
+            if min(oo) > 1.0 and tt.timestamp() <= t:
+                o = oo
+        O.append(o)
+        if f[2].strip() in ("Pinnacle", "Sbobet"):
+            kit[f[2].strip()] = o
+    sk = f" | SONUC {r['ft_h']}-{r['ft_a']}" if r["ft_h"] is not None else " | sonuc yok"
+    bas = f"{r['home']} - {r['away']} ({ko.astimezone(TR):%d.%m %H:%M}){sk}"
+    if len(O) < 10 or len(kit) < 2:
+        print(bas, "\n   Pinnacle/Sbobet yok ya da az büro\n")
+        return None
+    P = [_nv(o) for o in O]
+    c = [sum(p[i] for p in P) / len(P) for i in range(3)]
+    kk = [p for p in P if max(abs(p[i] - c[i]) for i in range(3)) <= 0.12] or P
+    pm = [sum(p[i] for p in kk) / len(kk) for i in range(3)]
+    kp = [kit["Pinnacle"][i] * pm[i] for i in range(3)]
+    ks = [kit["Sbobet"][i] * pm[i] for i in range(3)]
+    i = min(range(3), key=lambda q: kp[q])
+    j = min(range(3), key=lambda q: ks[q])
+    kel = f"Kelly P {' / '.join(f'{x:.2f}' for x in kp)} | S {' / '.join(f'{x:.2f}' for x in ks)} | piyasa " + " / ".join(f"%{100 * x:.0f}" for x in pm)
+    if i != j:
+        print(bas, f"\n   SINYAL YOK (Pinnacle '{'1X2'[i]}', Sbobet '{'1X2'[j]}' gosteriyor) | {kel}\n")
+        return ("-", None)
+    sv = "D"
+    for ad, e, kr in (("A", 0.85, 1.00), ("B", 0.88, 1.00), ("C", 0.90, 0.97)):
+        if kp[i] <= e and ks[i] <= e and max(kp) >= kr and max(ks) >= kr:
+            sv = ad
+            break
+    ok = None
+    if r["ft_h"] is not None:
+        g = 0 if r["ft_h"] > r["ft_a"] else 1 if r["ft_h"] == r["ft_a"] else 2
+        ok = g == i
+    print(bas, f"\n   seviye {sv} -> '{'1X2'[i]}' @ {kit['Pinnacle'][i]:.2f} (bekl. %{100 * pm[i]:.0f})" +
+          ("" if ok is None else f" -> {'TUTTU' if ok else 'YATTI'}") + f" | {kel}\n")
+    return (sv, ok)
 
 
 def tek(a, canli=False):
