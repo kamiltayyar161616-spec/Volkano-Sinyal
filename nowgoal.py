@@ -978,6 +978,8 @@ def _cizgi_kaydet(c, recs, now):
              (SELECT mid, MAX(at) at FROM ng_line GROUP BY mid) x ON x.mid = l.mid AND x.at = l.at""")} if recs else {}
     for mid, r in recs.items():
         ah, ahh, ou, ouh = (_cizgi(x) for x in r[10:14])
+        if ou is not None and ou < 1.5:                    # 1.0 gibi degerler cizgi degil (kayit duzeni farkli ligler)
+            ou = ouh = None
         c.execute("UPDATE ng_match SET lid=? WHERE mid=? AND lid IS NULL", (r[1], mid))
         if r[2] == 0 and (ah is not None or ou is not None):
             if son.get(mid) != (ah, ahh, ou, ouh):
