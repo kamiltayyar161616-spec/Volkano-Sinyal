@@ -1,6 +1,8 @@
 """Yaklasan maclar icin Kelly taramasi (DENEME).
 Her mac: 7 büronun (Pinnacle, Sbobet, Crown, Betfair, 1xBet, Bet365, Marathon) su anki oranlari x piyasa ortalamasi = Kelly.
 Aday: en az ESIK büro en dusuk Kelly'yi ayni tarafa veriyor (Pinnacle sart degil), o tarafin ortalama orani >= ALT_ORAN.
+★: secim favori ve ayni taraftaki bürolarin ort. Kelly'si > 0.92 (gecmis test, 4000 mac, 3 saat kala: favori gücüne göre
+   ayni banttaki diger favorilerden +3..+8 puan fazla tuttu; dusuk Kelly'li ve favori olmayan uzlasmalar beklenenin altinda kaldi).
 Siralama: ayni tarafi gosteren büro sayisi, sonra ortalama Kelly (dusuk once). Son 6 saatte Pinnacle Kelly degisimi bilgi olarak.
   kullanim: python3 kelly_kupon.py [bas_saat=0] [bit_saat=6] [alt_oran=1.0] [adet=10] [esik=5]"""
 import json
@@ -127,6 +129,11 @@ def main():
         print(f"{j + 1}. {tr(r['kickoff_utc'])} {r['home']} - {r['away']} ({r['league_vk'] or r['league_ng'] or ''})")
         pin = "" if "P" not in d["kit"] else (" | Pinnacle ayni tarafta" if d["kit"]["P"]["lo"] == s else " | Pinnacle FARKLI")
         fv = "favori" if d["pm"][s] == max(d["pm"]) else "favori degil"
+        ak = sum(v["kel"][s] for v in d["kit"].values() if v["lo"] == s) / x["say"]
+        if fv == "favori" and ak > 0.92:
+            fv = f"favori, ort.Kelly {ak:.2f} > 0.92  ★ GECMISTE GUCLU"
+        else:
+            fv += f", ort.Kelly {ak:.2f}"
         print(f"   SECIM {'1X2'[s]} ({fv}{', BERABERLIK' if s == 1 else ''}){pin}  ort.oran {d['ort'][s]:.2f} | ort 1/X/2 {d['ort'][0]:.2f} / {d['ort'][1]:.2f} / {d['ort'][2]:.2f}{vk}")
         print(f"   ayni taraf {x['say']}/{x['top']} büro | Kelly {ks}" + (f" | Pinnacle Kelly son 6 saat {x['p6']:+.3f}" if x["p6"] is not None else ""))
         if j >= adet + 10:
