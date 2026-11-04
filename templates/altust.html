@@ -3,10 +3,10 @@
 {% block page_tag %}ALT/ÜST KUPON{% endblock %}
 {% block subtitle %}Adil oran Pinnacle'ın marjsız alt/üst fiyatından (The Odds API), yoksa diğer büroların medyanından, o da yoksa NowGoal piyasa çizgisinden üretilir ve Volkano oranıyla karşılaştırılır. Çizgi L → beklenen gol L + 0.20 (10 bin maçlık testte piyasa çizgisi gerçek gole 0.1 gol yakın). Değer = piyasa olasılığı × Volkano oranı − 1. Maçtan ~10-15 dk önce değeri ≥ %5 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
 {% block extra_style %}
+<style>
   .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:9.5px; }
   .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); } .tt .l{ text-align:left; }
   .muted{ color:var(--chalk-faint); font-size:9px; } .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
-<style>
   .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
   .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11.5px;
