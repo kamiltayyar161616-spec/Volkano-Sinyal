@@ -98,7 +98,7 @@
 {% for g in d.perf7 %}{% if g.mac %}<div class="section-sub">{{ g.ad }} — {{ g.mac }} maç</div>{{ ptab(g, 'kap') }}{% endif %}{% endfor %}
 
 <h2 class="section">📅 YAKLAŞAN VE CANLI (başlama saatine göre; başlayan maç 2 saat listede kalır)</h2>
-<div class="section-sub">Canlı skor/dakika: AllSportsAPI (dakikada bir güncellenir). 70. dakikadan sonra berabere giden maçlar en üstte, çerçeveli.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %}</div>
+<div class="section-sub">Canlı skor/dakika: 7M (dakikada bir güncellenir; 7M cevap vermezse AllSportsAPI yedek). 70. dakikadan sonra berabere giden maçlar en üstte, çerçeveli.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %}</div>
 {% for m in d.yaklasan %}
 {{ kart(m, none, 'var(--amber)' if m.ber70 else 'var(--navy-line)') }}
 {% else %}<div class="empty">Şu an kayıt yok (maçlar başlamadan 10-35 dk önce eklenir).</div>{% endfor %}

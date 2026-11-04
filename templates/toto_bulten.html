@@ -139,5 +139,5 @@
 <details style="margin:0 0 10px"><summary class="section-sub" style="cursor:pointer">Sıra bazında 1 / X / 2 (210 haftada fark çok küçük, büyük ihtimalle tesadüf)</summary>
 <table class="tt"><tr><th>sıra</th><th>1</th><th>X</th><th>2</th></tr>{% for r in G.sira %}<tr><td>{{ r.sira }}</td><td>%{{ r['1'] }}</td><td>%{{ r['X'] }}</td><td>%{{ r['2'] }}</td></tr>{% endfor %}</table></details>
 {% endif %}
-<div class="section-sub">Canlı skor: AllSportsAPI.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %} Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else "henüz çalışmadı" }} {{ d.durum.log }}</div>
+<div class="section-sub">Canlı skor: 7M.{% if d.canli_hata %} <span class="neg">Canlı skor alınamadı: {{ d.canli_hata }}</span>{% endif %} Toplayıcı: {{ d.durum.at | localdatetime if d.durum.at else "henüz çalışmadı" }} {{ d.durum.log }}</div>
 {% endblock %}

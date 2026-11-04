@@ -2290,44 +2290,21 @@ _probabilities_cache = {}  # date_str -> {(norm_home, norm_away): {"probs": {...
 
 
 def _fetch_probabilities_for_date(date_str: str) -> dict:
-    """Bir gun icin TUM maclarin AllSportsAPI olasilik tahminini TEK istekle ceker,
-    (norm_home, norm_away) anahtarli sozluge donusturup gunluk bellekte onbellekler.
-    Ayrica home_team_key/away_team_key'i de saklar (form kontrolu icin kullanilir)."""
-    if date_str in _probabilities_cache:
-        return _probabilities_cache[date_str]
-
-    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
-    if not api_key:
-        return {}
-
+    """Kasim 2026: AllSportsAPI yerine ORACLE (NowGoal takim gecmisi, Dixon-Coles) olasiliklari.
+    Bahis oranlarindan bagimsiz model rolu ayni: (norm_home, norm_away) -> {"probs": {"1","X","2"} yuzde}.
+    Kaynak: arka planda 30 dk'da bir hesaplanan Oracle karsilastirma onbellegi (sayfa canli hesap yapmaz)."""
     result = {}
-    try:
-        url = f"{ALLSPORTS_API_BASE}?met=Probabilities&from={date_str}&to={date_str}&APIkey={api_key}"
-        resp = httpx.get(url, timeout=8)
-        if resp.status_code == 200:
-            data = resp.json()
-            for ev in data.get("result", []) or []:
-                home = ev.get("event_home_team")
-                away = ev.get("event_away_team")
-                hw, d, aw = ev.get("event_HW"), ev.get("event_D"), ev.get("event_AW")
-                if not home or not away or hw is None:
-                    continue
-                try:
-                    probs = {"1": float(hw), "X": float(d), "2": float(aw)}
-                except (TypeError, ValueError):
-                    continue
-                result[(_norm(home), _norm(away))] = {
-                    "probs": probs,
-                    "league_key": ev.get("league_key"),
-                    "league_name": ev.get("league_name"),
-                    "country_name": ev.get("country_name"),
-                    "home_key": ev.get("home_team_key"),
-                    "away_key": ev.get("away_team_key"),
-                }
-    except Exception:
-        pass  # API erisilemezse sessizce bos doner, cagiran taraf bu durumu ele alir
-
-    _probabilities_cache[date_str] = result
+    for r in _oracle_comparison_cache.get("data") or []:
+        try:
+            if _parse_to_local(r["time"]).strftime("%Y-%m-%d") != date_str:
+                continue
+            q = [1 / float(r["oracle_1"]), 1 / float(r["oracle_x"]), 1 / float(r["oracle_2"])]
+        except Exception:
+            continue
+        t = sum(q)
+        result[(_norm(r["home"]), _norm(r["away"]))] = {
+            "probs": {"1": round(100 * q[0] / t, 1), "X": round(100 * q[1] / t, 1), "2": round(100 * q[2] / t, 1)},
+            "league_name": r.get("league"), "home_key": None, "away_key": None, "kaynak": "oracle"}
     return result
 
 
@@ -3387,9 +3364,6 @@ def record_oracle_log_results() -> dict:
         return {"kontrol_edilen": 0, "guncellenen": 0}
 
     now = datetime.now(timezone.utc)
-    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
-    if not api_key:
-        return {"kontrol_edilen": 0, "guncellenen": 0}
 
     # sonucu olmayan, kickoff'u yeterince eski kayitlarin benzersiz (ev,deplasman,mac_zamani) listesini cikar
     bekleyen_macler = {}
@@ -3415,18 +3389,15 @@ def record_oracle_log_results() -> dict:
         tarih_gruplari.setdefault(tarih_str, []).append((home, away, mt))
 
     sonuclar = {}  # (home,away,mt) -> (final_skor, gercek_taraf)
+    # Kasim 2026: AllSportsAPI yerine NowGoal veritabani + 7M (results_checker ile ayni kaynak)
+    from results_checker import _fetch_fixtures_by_date
     for tarih_str, mac_listesi in tarih_gruplari.items():
         for onceki_gun in [tarih_str, (datetime.strptime(tarih_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")]:
             try:
-                url = f"{ALLSPORTS_API_BASE}?met=Fixtures&from={onceki_gun}&to={onceki_gun}&APIkey={api_key}"
-                resp = httpx.get(url, timeout=15)
-                if resp.status_code != 200:
-                    continue
-                data = resp.json()
-                for ev in data.get("result", []) or []:
+                for ev in _fetch_fixtures_by_date(onceki_gun):
                     eh, ea = ev.get("event_home_team", ""), ev.get("event_away_team", "")
                     fs = ev.get("event_final_result", "")
-                    if not fs or fs.strip() in ("-", "", "- -"):
+                    if not fs or fs.strip() in ("-", "", "- -") or ev.get("event_status") != "Finished":
                         continue
                     for home, away, mt in mac_listesi:
                         if (home, away, mt) in sonuclar:
