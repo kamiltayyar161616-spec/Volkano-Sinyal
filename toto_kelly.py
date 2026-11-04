@@ -1,6 +1,6 @@
 """Pinnacle + Sbobet dakika dakika oran gecmisi ve o anki piyasa ortalamasi (Kelly icin).
 Maclar: data/toto_param.json (gecmis Toto + TOTO sekmesi, ~4000 mac). Sadece izinli yol: 1x2.goaloo908.com/<mid>.js.
-Her mac icin: Pinnacle ya da Sbobet'in oran degistirdigi her an -> [dakika (maca kalan, eksi = once), pin 1X2, sbo 1X2, piyasa olasiligi 1X2].
+Her mac icin: Pinnacle, Sbobet, Betfair (borsa) ya da Crown'in oran degistirdigi her an -> [dakika (eksi = once), pin, sbo, bf, crown 1X2, piyasa olasiligi 1X2].
 Kelly = büro orani x piyasa olasiligi. Kaldigi yerden devam eder. Cikti: data/toto_kelly.json.gz (indir: /toto-bulten/kelly-indir)"""
 import bisect
 import gzip
@@ -17,12 +17,12 @@ import sdoran
 import toto_tab as T
 
 KOK = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.join(KOK, "data", "toto_kelly_cache.db")
+CACHE = os.path.join(KOK, "data", "toto_kelly2_cache.db")
 CIKTI = os.path.join(KOK, "data", "toto_kelly.json.gz")
-BITTI = os.path.join(KOK, "data", "toto_kelly_bitti")
+BITTI = os.path.join(KOK, "data", "toto_kelly2_bitti")
 BEKLE = 1.5
 PENCERE_DK = 24 * 60          # maca 24 saat kala ve sonrasi (canli ilk dakikalar haric: ko + 0)
-KITAP = {"pin": "Pinnacle", "sbo": "Sbobet"}
+KITAP = {"pin": "Pinnacle", "sbo": "Sbobet", "bf": "Betfair", "crown": "Crown"}   # Betfair: borsa, Crown: Asya (limitsiz)
 
 
 def log(*a):
@@ -65,7 +65,7 @@ def coz(body, ko):
         for k, ad in KITAP.items():
             if f[2].strip() == ad:
                 kit[k] = (ts, os_)
-    if "pin" not in kit and "sbo" not in kit:
+    if not kit:
         return None
     k0 = ko.timestamp()
     anlar = sorted({t for k in kit.values() for t in k[0] if t != float("-inf") and k0 - PENCERE_DK * 60 <= t <= k0} | {k0 - PENCERE_DK * 60, k0})
@@ -80,9 +80,8 @@ def coz(body, ko):
         c = [sum(p[i] for p in P) / len(P) for i in range(3)]
         keep = [p for p in P if max(abs(p[i] - c[i]) for i in range(3)) <= 0.12] or P
         c = [round(sum(p[i] for p in keep) / len(keep), 4) for i in range(3)]
-        out.append([round((t - k0) / 60, 1), an_oran(kit["pin"], t) if "pin" in kit else None,
-                    an_oran(kit["sbo"], t) if "sbo" in kit else None, c])
-    return {"n_buro": len(seri), "hist": {k: len(v[0]) - 1 for k, v in kit.items()}, "a": out}
+        out.append([round((t - k0) / 60, 1)] + [an_oran(kit[k], t) if k in kit else None for k in KITAP] + [c])
+    return {"n_buro": len(seri), "hist": {k: len(v[0]) - 1 for k, v in kit.items()}, "sutun": ["dk"] + list(KITAP) + ["piyasa"], "a": out}
 
 
 def yaz(out):
