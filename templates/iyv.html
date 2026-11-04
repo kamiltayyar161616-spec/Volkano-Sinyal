@@ -34,19 +34,19 @@
 
 <div style="margin:12px 16px 0"><a href="/iy-ms-v/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ İY/MS V verisini indir (JSON)</a></div>
 {% set x1 = d.x1 %}{% if x1 %}
-<h2 class="section">🎯 X/1 DESENİ (ileriye dönük takip)</h2>
-<div class="section-sub">Ev sahibi favori (maç sonu ev olasılığı ≥ %{{ x1.esik }}) iken <b>X/1</b>: ilk yarı berabere, maçı ev sahibi kazanır. Geçmiş (1–4 Kasım, 355 maç): ev %60+ → 66 maç %30.3 tuttu, ROI +%33; ev %45–60 → 99 maç %24.2, ROI +%19. Oran: maçtan ~15 dk önce kilitlenen Volkano X/1 oranı, 1 birim. "Vergili" = Volkano'nun kazançtan %12 kesintisi sonrası. Takip başlangıcı: {{ x1.bas | localdatetime }}.</div>
-<table class="xt"><tr><th class="l">ev olasılığı</th><th>maç</th><th>tutan</th><th>ort. oran</th><th>ROI</th><th>vergili</th><th class="l">geçmiş</th></tr>
+<h2 class="section">🎯 0 / FAVORİ DESENİ (ileriye dönük takip)</h2>
+<div class="section-sub">Favori (maç sonu kazanma olasılığı ≥ %{{ x1.esik }}) ev sahibiyse <b>X/1</b>, deplasmansa <b>X/2</b>: ilk yarı berabere, maçı favori kazanır. Oran: maçtan ~15 dk önce kilitlenen Volkano oranı, 1 birim. <b>Gerçek ROI</b> = her maçın kendi oranıyla; <b>tahmini ROI</b> = tutma oranı × ortalama oran − 1; "vergili" = Volkano'nun kazançtan %12 kesintisi sonrası. Takip başlangıcı: {{ x1.bas | localdatetime }}.</div>
+<table class="xt"><tr><th class="l">favori</th><th>maç</th><th>tutan</th><th>ort. oran</th><th>gerçek ROI</th><th>tahmini ROI<br>(vergili)</th></tr>
 {% for o in x1.oz %}<tr><td class="l"><b>{{ o.ad }}</b></td><td>{{ o.n }}</td><td>{% if o.n %}{{ o.w }} · <b>%{{ o.yuzde }}</b>{% else %}—{% endif %}</td><td>{{ o.ort_oran or '—' }}</td>
 <td>{% if o.roi is not none %}<b class="{{ 'pos' if o.roi > 0 else 'neg' }}">{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}</b>{% else %}—{% endif %}</td>
-<td>{% if o.roi_v is not none %}<span class="{{ 'pos' if o.roi_v > 0 else 'neg' }}">{{ '+' if o.roi_v > 0 else '' }}%{{ o.roi_v }}</span>{% else %}—{% endif %}</td>
-<td class="l"><span class="ng-meta">{% if o.gecmis %}{{ o.gecmis.n }} maç, %{{ o.gecmis.yuzde }}, +%{{ o.gecmis.roi }}{% else %}165 maç, %26.7, +%25{% endif %}</span></td></tr>{% endfor %}</table>
-{% macro x1k(x, durum) %}<div class="row"><span><b>{{ x.mac }}</b><br><span class="ng-meta">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %} · ev %{{ x.p1 }} ({{ x.bant }})</span>{% if x.skor %}<br><span class="ng-meta">{{ x.skor }} → {{ x.gercek }}</span>{% endif %}</span>
-<span style="text-align:right;white-space:nowrap"><span class="tag a">X/1 @ {{ '%.2f'|format(x.oran) }}</span>{% if durum == 'bitti' %}<br><span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ 'tuttu +' ~ ('%.2f'|format(x.oran - 1)) if x.tuttu else 'yattı −1' }}</span>{% elif durum == 'oyn' %}<br><span class="tag">kilitli · oynanıyor</span>{% else %}<br><span class="ng-meta">kilitlenmedi</span>{% endif %}</span></div>{% endmacro %}
-<h2 class="section">⏳ X/1 BEKLEYEN ({{ x1.bekleyen|length + x1.oynaniyor|length }})</h2>
+<td>{% if o.t_roi is not none %}<span class="{{ 'pos' if o.t_roi > 0 else 'neg' }}">{{ '+' if o.t_roi > 0 else '' }}%{{ o.t_roi }}</span><br><span class="{{ 'pos' if o.t_roi_v > 0 else 'neg' }}">({{ '+' if o.t_roi_v > 0 else '' }}%{{ o.t_roi_v }})</span>{% else %}—{% endif %}</td></tr>
+{% if o.gecmis %}<tr><td class="l" colspan="6" style="border-top:none;padding-top:0"><span class="ng-meta">geçmiş (1–4 Kasım): {{ o.gecmis.n }} maç · %{{ o.gecmis.yuzde }} · ort. oran {{ o.gecmis.oran }} · ROI {{ '+' if o.gecmis.roi > 0 else '' }}%{{ o.gecmis.roi }}</span></td></tr>{% endif %}{% endfor %}</table>
+{% macro x1k(x, durum) %}<div class="row"><span><b>{{ x.mac }}</b><br><span class="ng-meta">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %} · favori %{{ x.p1 }} ({{ x.bant }})</span>{% if x.skor %}<br><span class="ng-meta">{{ x.skor }} → {{ x.gercek }}</span>{% endif %}</span>
+<span style="text-align:right;white-space:nowrap"><span class="tag a">{{ x.sec or 'X/1' }} @ {{ '%.2f'|format(x.oran) }}</span>{% if durum == 'bitti' %}<br><span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ 'tuttu +' ~ ('%.2f'|format(x.oran - 1)) if x.tuttu else 'yattı −1' }}</span>{% elif durum == 'oyn' %}<br><span class="tag">kilitli · oynanıyor</span>{% else %}<br><span class="ng-meta">kilitlenmedi</span>{% endif %}</span></div>{% endmacro %}
+<h2 class="section">⏳ 0/FAVORİ BEKLEYEN ({{ x1.bekleyen|length + x1.oynaniyor|length }})</h2>
 {% for x in x1.oynaniyor %}{{ x1k(x, 'oyn') }}{% endfor %}
-{% for x in x1.bekleyen %}{{ x1k(x, 'bek') }}{% else %}{% if not x1.oynaniyor %}<div class="section-sub">Önümüzdeki 12 saatte ev sahibinin favori olduğu maç yok.</div>{% endif %}{% endfor %}
-{% if x1.biten %}<h2 class="section">🧾 X/1 SONUÇLANAN ({{ x1.biten|length }})</h2>
+{% for x in x1.bekleyen %}{{ x1k(x, 'bek') }}{% else %}{% if not x1.oynaniyor %}<div class="section-sub">Önümüzdeki 12 saatte favorisi %45 ve üstü olan maç yok.</div>{% endif %}{% endfor %}
+{% if x1.biten %}<h2 class="section">🧾 0/FAVORİ SONUÇLANAN ({{ x1.biten|length }})</h2>
 {% for x in x1.biten %}{{ x1k(x, 'bitti') }}{% endfor %}{% endif %}
 {% endif %}
 <h2 class="section">📊 PERFORMANS (kilitli oranla, 1 birim)</h2>

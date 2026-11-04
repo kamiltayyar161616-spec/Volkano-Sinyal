@@ -103,11 +103,22 @@ def get_performance(days=None):
 X1_BAS = "2026-11-04T22:10:00+00:00"
 X1_ESIK = 0.45
 VERGI = 0.12
-X1_GECMIS = {"%60+": {"n": 66, "yuzde": 30.3, "roi": 33}, "%45-60": {"n": 99, "yuzde": 24.2, "roi": 19}}
+# ev favori -> X/1, deplasman favori -> X/2 (5 Kasim: dep %45-60 43 mac %27.9; dep %60+ 20 mac %15.0)
+X1_GECMIS = {"ev %60+": {"n": 66, "yuzde": 30.3, "oran": 4.44, "roi": 33}, "ev %45-60": {"n": 99, "yuzde": 24.2, "oran": 5.02, "roi": 19},
+             "dep %60+": {"n": 20, "yuzde": 15.0, "oran": 4.53, "roi": -37}, "dep %45-60": {"n": 43, "yuzde": 27.9, "oran": 5.18, "roi": 45},
+             "toplam": {"n": 228, "yuzde": 25.9, "oran": 4.84, "roi": 23}}
 
 
-def _x1_bant(p):
-    return "%60+" if p >= 0.6 else "%45-60"
+def _x1_bant(p, f=0):
+    return ("ev " if f == 0 else "dep ") + ("%60+" if p >= 0.6 else "%45-60")
+
+
+def _fav(P):
+    """(favori indeksi 0/2, olasilik, secim) ya da None"""
+    if not P:
+        return None
+    f = 0 if P[0] >= P[2] else 2
+    return (f, P[f], "X/1" if f == 0 else "X/2") if P[f] >= X1_ESIK else None
 
 
 def x1_takip():
@@ -124,23 +135,23 @@ def x1_takip():
     bek = []
     for r in c.execute("SELECT * FROM iyv_aday WHERE ko > ? ORDER BY ko", (now,)):
         M = json.loads(r["model"]) if r["model"] else {}
-        p1 = (M.get("p1x2") or [0])[0]
-        if p1 < X1_ESIK:
+        F = _fav(M.get("p1x2"))
+        if not F:
             continue
         h = {k: od for k, od, p, ol, sp, b in json.loads(r["sec"] or "[]")}
-        if "X/1" in h:
-            bek.append({"mid": r["mid"], "ko": r["ko"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"], "p1": round(100 * p1),
-                        "oran": h["X/1"], "bant": _x1_bant(p1), "p1x2": M.get("p1x2")})
+        if F[2] in h:
+            bek.append({"mid": r["mid"], "ko": r["ko"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"], "p1": round(100 * F[1]),
+                        "sec": F[2], "oran": h[F[2]], "bant": _x1_bant(F[1], F[0]), "p1x2": M.get("p1x2")})
     c.close()
     bit = []
     for r in _kilit():
-        if r["sonuc"] != "X/1" or r["ko"] < X1_BAS:
+        if r["sonuc"] not in ("X/1", "X/2") or r["ko"] < X1_BAS:
             continue
-        P = model.get(r["mid"])
-        if not P or P[0] < X1_ESIK:
+        F = _fav(model.get(r["mid"]))
+        if not F or F[2] != r["sonuc"]:
             continue
-        x = {"mid": r["mid"], "ko": r["ko"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"], "p1": round(100 * P[0]),
-             "oran": r["oran"], "bant": _x1_bant(P[0]), "tuttu": r["tuttu"], "gercek": r["gercek"],
+        x = {"mid": r["mid"], "ko": r["ko"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"], "p1": round(100 * F[1]),
+             "sec": r["sonuc"], "oran": r["oran"], "bant": _x1_bant(F[1], F[0]), "tuttu": r["tuttu"], "gercek": r["gercek"],
              "skor": f"İY {r['skor'][0]}-{r['skor'][1]} · MS {r['skor'][2]}-{r['skor'][3]}" if r["skor"] else None}
         if x["tuttu"] is None and r["ko"] > now:
             continue
@@ -148,15 +159,19 @@ def x1_takip():
     kilitli = {x["mid"] for x in bit}
     bek = [x for x in bek if x["mid"] not in kilitli]
     oz = []
-    for ad in ("%60+", "%45-60", "toplam"):
+    for ad in ("ev %60+", "ev %45-60", "dep %60+", "dep %45-60", "toplam"):
         B = [x for x in bit if x["tuttu"] is not None and (ad == "toplam" or x["bant"] == ad)]
         n = len(B)
+        oo = sum(x["oran"] for x in B) / n if n else None
+        tt = sum(1 for x in B if x["tuttu"]) / n if n else None
         k = sum((x["oran"] - 1) if x["tuttu"] else -1 for x in B)
         kv = sum((x["oran"] - 1) * (1 - VERGI) if x["tuttu"] else -1 for x in B)
         oz.append({"ad": ad, "n": n, "w": sum(1 for x in B if x["tuttu"]),
                    "yuzde": round(100 * sum(1 for x in B if x["tuttu"]) / n, 1) if n else None,
                    "ort_oran": round(sum(x["oran"] for x in B) / n, 2) if n else None,
                    "roi": round(100 * k / n, 1) if n else None, "roi_v": round(100 * kv / n, 1) if n else None,
+                   "t_roi": round(100 * (tt * oo - 1), 1) if n else None,
+                   "t_roi_v": round(100 * (tt * (1 + (oo - 1) * (1 - VERGI)) - 1), 1) if n else None,
                    "gecmis": X1_GECMIS.get(ad)})
     return {"bekleyen": bek, "biten": [x for x in bit if x["tuttu"] is not None][:80],
             "oynaniyor": [x for x in bit if x["tuttu"] is None], "oz": oz, "bas": X1_BAS, "esik": int(100 * X1_ESIK)}
