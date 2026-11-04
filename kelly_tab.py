@@ -408,7 +408,8 @@ def _sonuclar(mids):
     with ng._db_lock:
         c = ng._conn()
         r = {x[0]: (x[1], x[2], x[3], x[4]) for x in c.execute(
-            f"""SELECT mid, ft_h, ft_a, COALESCE(ou_kapanis, ou_son), ou_ilk FROM ng_match
+            f"""SELECT mid, ft_h, ft_a, CASE WHEN COALESCE(ou_kapanis, ou_son) >= 1.5 THEN COALESCE(ou_kapanis, ou_son) END,
+                       CASE WHEN ou_ilk >= 1.5 THEN ou_ilk END FROM ng_match
                 WHERE ft_h IS NOT NULL AND status='finished' AND mid IN ({','.join(map(str, mids))})""")}
         c.close()
     return r
@@ -479,8 +480,8 @@ def _taban(gun=30):
     with ng._db_lock:
         c = ng._conn()
         r = c.execute(f"""SELECT COUNT(*), AVG(ft_h + ft_a), {', '.join(f'AVG(CASE WHEN ft_h + ft_a > {x} THEN 1.0 ELSE 0 END)' for x in CIZGI)},
-                          AVG(CASE WHEN ou_kapanis IS NOT NULL THEN ou_kapanis END),
-                          AVG(CASE WHEN ou_kapanis IS NOT NULL AND ft_h + ft_a > ou_kapanis THEN 1.0 WHEN ou_kapanis IS NOT NULL THEN 0 END)
+                          AVG(CASE WHEN ou_kapanis >= 1.5 THEN ou_kapanis END),
+                          AVG(CASE WHEN ou_kapanis >= 1.5 AND ft_h + ft_a > ou_kapanis THEN 1.0 WHEN ou_kapanis >= 1.5 THEN 0 END)
                           FROM ng_match WHERE ft_h IS NOT NULL AND status='finished' AND kickoff_utc > ?""",
                       (ng._iso(ng._now() - timedelta(days=gun)),)).fetchone()
         c.close()
