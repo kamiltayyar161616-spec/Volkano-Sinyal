@@ -21,6 +21,12 @@ SEVIYE = (("A", "güçlü", 0.85, 1.00), ("B", "orta", 0.88, 1.00), ("C", "geni�
 GECMIS_SEV = {"A": {"n": 20, "yuzde": 60.0, "bekl": 35.8}, "B": {"n": 24, "yuzde": 62.5, "bekl": 43.3},
               "C": {"n": 95, "yuzde": 37.9, "bekl": 38.0}, "D": {"n": None}}
 PENCERE = (3, 30)            # maca kalan dakika
+# KUPON: maca ~3 saat kala 7 büro; en az KUPON_ESIK büro en dusuk Kelly'yi ayni tarafa veriyor (Pinnacle sart degil).
+# ★ = secim favori ve o taraftaki bürolarin ort. Kelly'si > 0.92 (gecmis test 4000 mac: favori gücü sabitken +3..+8 puan).
+KUPON_BURO = {"Pinnacle": "P", "Sbobet": "S", "Crown": "C", "Betfair": "BF", "1xBet": "1x", "Bet 365": "365", "Marathon": "MR"}
+KUPON_PENCERE = (150, 210)   # maca kalan dakika
+KUPON_ESIK = 5
+_kbak = set()
 CYCLE_SEC = 300
 BEKLE = 1.5
 TR = timezone(timedelta(hours=3))
@@ -43,6 +49,8 @@ def _db():
         c.execute("ALTER TABLE sinyal ADD COLUMN canli7m TEXT")
     if "seviye" not in have:
         c.execute("ALTER TABLE sinyal ADD COLUMN seviye TEXT DEFAULT 'A'")
+    c.execute("""CREATE TABLE IF NOT EXISTS kupon (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, dk REAL, mac TEXT, lig TEXT,
+                 taraf INTEGER, say INTEGER, top INTEGER, ak REAL, fav INTEGER, yildiz INTEGER, kit TEXT, piyasa TEXT)""")
     c.execute("""CREATE TABLE IF NOT EXISTS yakin (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, mac TEXT, lig TEXT, taraf INTEGER,
                  pin TEXT, kel_pin TEXT, kel_sbo TEXT, piyasa TEXT)""")
     return c
@@ -73,7 +81,7 @@ def oranlar(mid):
         if min(cur) <= 1.0:
             continue
         rows.append(cur)
-        if f[2].strip() in ("Pinnacle", "Sbobet"):
+        if f[2].strip() in KUPON_BURO:
             kit[f[2].strip()] = cur
     if len(rows) < 10:
         return None
@@ -129,6 +137,10 @@ def run_cycle():
                        json.dumps(kp), json.dumps(ks), json.dumps([round(x, 4) for x in pm])))
         k.commit()
     try:
+        _kupon_tara(k, now)
+    except Exception as e:
+        _last["kupon"] = str(e)[:100]
+    try:
         _m7_doldur(k)
         _m7_canli_doldur(k)
     except Exception as e:
@@ -136,6 +148,79 @@ def run_cycle():
     k.close()
     _last["at"] = ng._iso(ng._now())
     _last["log"] = f"{len(rows)} mac pencerede, {n_bak} bakildi, {n_sin} yeni sinyal"
+
+
+def _kupon_tara(k, now):
+    with ng._db_lock:
+        c = ng._conn()
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, league_vk, league_ng FROM ng_match
+                            WHERE kickoff_utc BETWEEN ? AND ? AND home IS NOT NULL""",
+                         (ng._iso(now + timedelta(minutes=KUPON_PENCERE[0])), ng._iso(now + timedelta(minutes=KUPON_PENCERE[1])))).fetchall()
+        c.close()
+    var = {r[0] for r in k.execute("SELECT mid FROM kupon")}
+    n = 0
+    for r in rows:
+        if r["mid"] in var or r["mid"] in _kbak:
+            continue
+        _kbak.add(r["mid"])
+        if re.search(r"\b(u1\d|u2\d|women|reserves?|w)\b|\(w\)", ((r["home"] or "") + " " + (r["away"] or "")).lower()):
+            continue
+        try:
+            d = oranlar(r["mid"])
+        except Exception:
+            d = None
+        time.sleep(BEKLE)
+        if not d or len(d["kit"]) < KUPON_ESIK:
+            continue
+        pm = d["pm"]
+        kel = {KUPON_BURO[a]: [round(o[i] * pm[i], 3) for i in range(3)] for a, o in d["kit"].items()}
+        lo = {b: min(range(3), key=lambda i: v[i]) for b, v in kel.items()}
+        say = [list(lo.values()).count(i) for i in range(3)]
+        i = max(range(3), key=lambda q: say[q])
+        if say[i] < KUPON_ESIK:
+            continue
+        ak = sum(kel[b][i] for b in kel if lo[b] == i) / say[i]
+        fav = int(pm[i] == max(pm))
+        ko = datetime.fromisoformat(r["kickoff_utc"])
+        k.execute("INSERT OR IGNORE INTO kupon VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (r["mid"], ng._iso(now), r["kickoff_utc"], round((ko - now).total_seconds() / 60, 1), f"{r['home']} - {r['away']}",
+                   r["league_vk"] or r["league_ng"] or "", i, say[i], len(kel), round(ak, 3), fav, int(fav and ak > 0.92),
+                   json.dumps({KUPON_BURO[a]: o for a, o in d["kit"].items()}), json.dumps([round(x, 4) for x in pm])))
+        k.commit()
+        n += 1
+    if len(_kbak) > 5000:
+        _kbak.clear()
+    _last["kupon"] = f"{len(rows)} mac kupon penceresinde, {n} yeni"
+
+
+def _kupon_veri():
+    k = _db()
+    R = k.execute("SELECT * FROM kupon ORDER BY ko DESC LIMIT 400").fetchall()
+    k.close()
+    sk = _sonuclar([r["mid"] for r in R])
+    L = []
+    for r in R:
+        pm, kit, i = json.loads(r["piyasa"]), json.loads(r["kit"]), r["taraf"]
+        ort = sum(o[i] for o in kit.values()) / len(kit)
+        x = {"mid": r["mid"], "ko": r["ko"], "mac": r["mac"], "lig": r["lig"], "taraf": "1X2"[i], "i": i, "say": r["say"], "top": r["top"],
+             "ak": r["ak"], "fav": bool(r["fav"]), "yildiz": bool(r["yildiz"]), "oran": round(kit.get("P", [ort] * 3)[i] if "P" in kit else ort, 2),
+             "bekl": round(100 * pm[i]), "pm": pm, "skor": None, "tuttu": None}
+        s = sk.get(r["mid"])
+        if s:
+            g = 0 if s[0] > s[1] else 1 if s[0] == s[1] else 2
+            x.update(skor=f"{s[0]}-{s[1]}", tuttu=g == i)
+        x["grup"] = "★" if x["yildiz"] else ("favori" if x["fav"] else ("beraberlik" if i == 1 else "favori değil"))
+        L.append(x)
+    oz = []
+    for g in ("★", "favori", "favori değil", "beraberlik"):
+        B = [x for x in L if x["grup"] == g and x["tuttu"] is not None]
+        m = len(B)
+        oz.append({"grup": g, "n": sum(1 for x in L if x["grup"] == g), "bitti": m, "tutan": sum(1 for x in B if x["tuttu"]),
+                   "yuzde": round(100 * sum(1 for x in B if x["tuttu"]) / m, 1) if m else None,
+                   "bekl": round(sum(x["pm"][x["i"]] for x in B) * 100 / m, 1) if m else None})
+    bek = sorted([x for x in L if x["tuttu"] is None], key=lambda x: (not x["yildiz"], x["ko"]))
+    return {"bekleyen": bek, "biten": [x for x in L if x["tuttu"] is not None][:80], "oz": oz,
+            "esik": KUPON_ESIK, "pencere": KUPON_PENCERE, "durum": _last.get("kupon", "")}
 
 
 # ------------------------------------------------------------------ 7M alt/ust (ana cizgi + oranlar), takim adiyla eslestirme
@@ -453,12 +538,12 @@ def get_page_data():
     ust_sev = [(f"{a}", _ust_ozet([x for x in Ball if x["seviye"] == a])) for a in "ABCD"]
     now = ng._iso(ng._now())
     return {"bekleyen": bek, "biten": Ball[:150], "n_biten": len(Ball), "ust_sev": ust_sev, "oz": oz, "gecmis": GECMIS,
-            "yakin": yk, "oy": oy, "durum": _last, "cizgiler": CIZGI, "sev": sev,
+            "yakin": yk, "oy": oy, "durum": _last, "cizgiler": CIZGI, "sev": sev, "kupon": _kupon_veri(),
             "ust": {"sinyal": _ust_ozet(B), "yakin": _ust_ozet(yb), "tum": _taban()}, "esik": ESIK, "karsi": KARSI, "pencere": PENCERE, "now": now}
 
 
 def export_json():
     d = get_page_data()
     return {"exported_at": ng._iso(ng._now()), "kural": {"esik": ESIK, "karsi": KARSI, "pencere_dk": PENCERE},
-            "ozet": d["oz"], "sinyaller": d["bekleyen"] + d["biten"], "yakin": d["yakin"],
+            "ozet": d["oz"], "sinyaller": d["bekleyen"] + d["biten"], "yakin": d["yakin"], "kupon": d["kupon"],
             "not": "canli_seri: 7M mac ici alt/ust (ou) ve handikap (ah) oranlari [saat UTC, dakika, skor, cizgi, ust/ev, alt/dep]"}

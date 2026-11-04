@@ -66,6 +66,18 @@
 {% for ad, o in [('🎯 A+B', d.ust.sinyal)] + d.ust_sev + [('yakın', d.ust.yakin), ('tüm maçlar (30 gün)', d.ust.tum)] %}{% if o %}<tr><td class="l">{{ ad }}</td><td>{{ o.n }}</td><td>{{ o.gol }}</td>{% for c in d.cizgiler %}<td>%{{ o[c|string] }}</td>{% endfor %}<td>{{ o.cizgi if o.cizgi else '—' }}</td><td>{% if o.cizgi_ust is not none %}%{{ o.cizgi_ust }}{% else %}—{% endif %}</td></tr>{% endif %}{% endfor %}</table>
 {% if d.ust.sinyal and d.ust.sinyal.m7_n %}<div class="section-sub">7M Pinnacle ana çizgisiyle (maç başı): {{ d.ust.sinyal.m7_n }} sinyal maçı, ortalama çizgi {{ d.ust.sinyal.m7_cizgi }}, üstü %{{ d.ust.sinyal.m7_ust }}, altı %{{ d.ust.sinyal.m7_alt }}.</div>{% endif %}
 
+
+<h2 class="section">🎫 KELLY KUPONU (maça ~3 saat kala, 7 büro)</h2>
+<div class="section-sub">Pinnacle, Sbobet, Crown, Betfair, 1xBet, Bet365, Marathon. Maça {{ (d.kupon.pencere[1]/60)|round(1) }}–{{ (d.kupon.pencere[0]/60)|round(1) }} saat kala en az <b>{{ d.kupon.esik }} büro</b> en düşük Kelly'yi aynı tarafa veriyorsa kaydedilir (Pinnacle şart değil, oran sınırı yok). <b>★</b> = seçim favori ve o taraftaki büroların ortalama Kelly'si &gt; 0.92 (geçmiş testte en iyi grup).</div>
+<table class="tt"><tr><th class="l">grup</th><th>maç</th><th>tutan</th><th>beklenen</th></tr>
+{% for g in d.kupon.oz %}<tr><td class="l">{{ g.grup }}</td><td>{{ g.n }}</td><td>{% if g.bitti %}{{ g.tutan }}/{{ g.bitti }} <b class="{{ 'pos' if g.yuzde > g.bekl else 'neg' }}">%{{ g.yuzde }}</b>{% else %}—{% endif %}</td><td>{% if g.bekl is not none %}%{{ g.bekl }}{% else %}—{% endif %}</td></tr>{% endfor %}</table>
+<table class="tt"><tr><th class="l">maç</th><th>seçim</th><th>büro</th><th>ort.K</th><th>sonuç</th></tr>
+{% for x in d.kupon.bekleyen + d.kupon.biten %}<tr><td class="l">{% if x.yildiz %}★ {% endif %}<b>{{ x.mac }}</b><br><span class="ng-meta">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %} · {{ x.grup }}</span></td>
+<td>{{ x.taraf }} @ {{ '%.2f'|format(x.oran) }}<br><span class="ng-meta">%{{ x.bekl }}</span></td><td>{{ x.say }}/{{ x.top }}</td><td>{{ '%.2f'|format(x.ak) }}</td>
+<td>{% if x.skor %}<span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ x.skor }}</span>{% else %}<span class="ng-meta">bekliyor</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="ng-meta">Henüz kupon maçı yok (tarayıcı her 5 dakikada ~3 saat sonraki maçlara bakıyor).</td></tr>{% endfor %}</table>
+<div class="section-sub">Kupon tarayıcı: {{ d.kupon.durum }}</div>
+
 <h2 class="section">⏳ BEKLEYEN SİNYALLER</h2>
 {% for x in d.bekleyen %}{{ kart(x) }}{% else %}<div class="empty">Şu an bekleyen sinyal yok.</div>{% endfor %}
 
