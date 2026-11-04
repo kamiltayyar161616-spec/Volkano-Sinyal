@@ -178,6 +178,59 @@ def _desen_sonuc(g, L, taraf):
     return u if taraf == "UST" else 1.0 - u
 
 
+DESEN_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "altust_desen.db")
+
+
+def _ddb():
+    c = sqlite3.connect(DESEN_DB, timeout=30)
+    c.row_factory = sqlite3.Row
+    c.execute("""CREATE TABLE IF NOT EXISTS oran (mid INTEGER PRIMARY KEY, at TEXT, durum TEXT, id7m INTEGER,
+                 buro TEXT, cizgi REAL, ust REAL, alt REAL)""")
+    return c
+
+
+def desen_doldur():
+    """Baslamis desen maclari icin 7M'den mac basi (kapanis) alt/ust cizgisi + oranlari: Pinnacle, yoksa Sbobet, yoksa Bet365.
+    kelly_tab arka plan dongusunden 5 dk'da bir cagrilir."""
+    import kelly_tab as K
+    from datetime import datetime
+    now = ng._now()
+    with ng._db_lock:
+        c = ng._conn()
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, ou_son, ah_son FROM ng_match
+                            WHERE kickoff_utc > ? AND kickoff_utc BETWEEN ? AND ? AND ou_son IS NOT NULL""",
+                         (DESEN_BAS, ng._iso(now - timedelta(hours=24)), ng._iso(now - timedelta(minutes=5)))).fetchall()
+        c.close()
+    d = _ddb()
+    var = {r[0] for r in d.execute("SELECT mid FROM oran")}
+    for r in rows:
+        if r["mid"] in var or not desen_secim(r["ou_son"], r["ah_son"]):
+            continue
+        ko = datetime.fromisoformat(r["kickoff_utc"])
+        try:
+            b = K.m7_bul(r["home"], r["away"], ko)
+            if not b:
+                d.execute("INSERT OR REPLACE INTO oran (mid, at, durum) VALUES (?,?,?)", (r["mid"], ng._iso(now), "eslesmedi"))
+                d.commit()
+                continue
+            ou = K.m7_ou(b[1], ko, ko)
+            sec = next(((k, ou[k]["kap"]) for k in ("pin", "sbo", "b365") if ou.get(k) and ou[k].get("kap")), None)
+            if sec:
+                d.execute("INSERT OR REPLACE INTO oran VALUES (?,?,?,?,?,?,?,?)",
+                          (r["mid"], ng._iso(now), "tamam", b[1], sec[0], sec[1][0], sec[1][1], sec[1][2]))
+            else:
+                d.execute("INSERT OR REPLACE INTO oran (mid, at, durum, id7m) VALUES (?,?,?,?)", (r["mid"], ng._iso(now), "oran yok", b[1]))
+            d.commit()
+        except Exception:
+            continue
+    d.close()
+
+
+def _kar(s, o):
+    """Asya alt/ust kazanci: s = 1 / 0.75 / 0.5 / 0.25 / 0 -> birim"""
+    return (o - 1) * max(0.0, (s - 0.5) * 2) - max(0.0, (0.5 - s) * 2)
+
+
 def desen():
     now = ng._now()
     with ng._db_lock:
@@ -203,6 +256,21 @@ def desen():
             bit.append(x)
         elif r["kickoff_utc"] > ng._iso(now - timedelta(hours=3)):
             bek.append(x)
+    try:
+        d = _ddb()
+        O = {r["mid"]: dict(r) for r in d.execute("SELECT * FROM oran")}
+        d.close()
+    except Exception:
+        O = {}
+    for x in bek + bit:
+        o = O.get(x["mid"])
+        x["oran7"] = o if o and o.get("durum") == "tamam" else None
+        x["oran_durum"] = o.get("durum") if o else None
+        if x["oran7"] and x.get("gol") is not None:
+            L = o["cizgi"]
+            od = o["ust"] if x["taraf"] == "UST" else o["alt"]
+            x["kar"] = round(_kar(_desen_sonuc(x["gol"], L, x["taraf"]), od), 2)
+            x["oyna"] = f"{L} {'Ü' if x['taraf'] == 'UST' else 'A'} @ {od:.2f}"
     bek.sort(key=lambda x: x["ko"])
     bit.sort(key=lambda x: x["ko"], reverse=True)
     oz = []
@@ -212,7 +280,11 @@ def desen():
         oz.append({"taraf": t, "n": n, "puan": round(sum(x["sonuc"] for x in B), 1),
                    "yuzde": round(100 * sum(x["sonuc"] for x in B) / n, 1) if n else None,
                    "u15": round(100 * sum(x["u15"] for x in B) / n) if n else None,
-                   "u25": round(100 * sum(x["u25"] for x in B) / n) if n else None, "gecmis": DESEN_GECMIS[t]})
+                   "u25": round(100 * sum(x["u25"] for x in B) / n) if n else None, "gecmis": DESEN_GECMIS[t],
+                   "n_oran": sum(1 for x in B if x.get("kar") is not None),
+                   "kar": round(sum(x["kar"] for x in B if x.get("kar") is not None), 2),
+                   "roi": round(100 * sum(x["kar"] for x in B if x.get("kar") is not None) / max(1, sum(1 for x in B if x.get("kar") is not None)), 1)
+                          if any(x.get("kar") is not None for x in B) else None})
     return {"bekleyen": bek, "biten": bit[:100], "oz": oz, "bas": DESEN_BAS}
 
 

@@ -137,6 +137,11 @@ def run_cycle():
                        json.dumps(kp), json.dumps(ks), json.dumps([round(x, 4) for x in pm])))
         k.commit()
     try:
+        import altust
+        altust.desen_doldur()
+    except Exception as e:
+        _last["desen"] = str(e)[:100]
+    try:
         _kupon_tara(k, now)
     except Exception as e:
         _last["kupon"] = str(e)[:100]
