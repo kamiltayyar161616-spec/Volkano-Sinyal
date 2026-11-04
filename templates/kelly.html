@@ -36,6 +36,9 @@
     <div class="l">Kelly S</div>{% for i in range(3) %}<div class="{{ 's' if i == x.i else '' }}">{{ '%.2f'|format(x.ks[i]) }}</div>{% endfor %}
     <div class="l">piyasa %</div>{% for i in range(3) %}<div>%{{ (100*x.pm[i])|round|int }}</div>{% endfor %}
   </div>
+  {% set m = x.m7 %}{% if m and m.durum == 'tamam' %}<div class="ng-meta" style="margin-top:6px">📈 7M alt/üst ({{ m.ad7m }}):{% for b, ad in [('pin','Pinnacle'),('sbo','Sbobet'),('b365','Bet365')] %}{% set v = m.ou[b] if m.ou else none %}{% if v and v.kap %}<br>{{ ad }}: {% if v.an %}sinyalde {{ v.an[0] }} Ü {{ v.an[1] }} / A {{ v.an[2] }} → {% endif %}maç başı <b>{{ v.kap[0] }}</b> Ü {{ v.kap[1] }} / A {{ v.kap[2] }}{% if x.gol is not none %} → <span class="{{ 'pos' if x.gol > v.kap[0] else 'neg' if x.gol < v.kap[0] else '' }}">{{ 'üst' if x.gol > v.kap[0] else 'alt' if x.gol < v.kap[0] else 'iade' }}</span>{% endif %}{% endif %}{% endfor %}</div>
+  {% elif m and m.durum %}<div class="ng-meta" style="margin-top:6px">📈 7M: {{ 'eşleşmedi' if m.durum == 'eslesmedi' else 'bulunamadı' }}</div>
+  {% elif x.gol is none %}<div class="ng-meta" style="margin-top:6px">📈 7M alt/üst: maç başlayınca eklenecek</div>{% endif %}
   {% if x.gol is not none %}<div class="ng-meta" style="margin-top:6px">⚽ {{ x.gol }} gol{% if x.ou_kap is not none %} · çizgi {{ x.ou_kap }} ({{ 'üst' if x.gol > x.ou_kap else 'alt' if x.gol < x.ou_kap else 'iade' }}){% endif %} · {% for c in d.cizgiler %}<span class="{{ 'pos' if x.ust[c] else 'neg' }}">{{ c }}Ü {{ '✓' if x.ust[c] else '✗' }}</span>{{ ' ' if not loop.last }}{% endfor %}</div>{% endif %}
 </div>{% endmacro %}
 {% block content %}
@@ -51,9 +54,10 @@
 
 
 <h2 class="section">⚽ GOL / ALT-ÜST KAYDI</h2>
-<div class="section-sub">Sinyal maçlarında kaç gol oldu, karşılaştırma için aynı dönemde biten bütün maçlar. <b>Çizgi</b> = NowGoal'un maç başındaki alt/üst çizgisi (Asya). Her çizgi için oran verisi şimdilik yok, sadece sonuç tutuluyor.</div>
+<div class="section-sub">Sinyal maçlarında kaç gol oldu, karşılaştırma için aynı dönemde biten bütün maçlar. <b>Çizgi</b> = NowGoal'un maç başındaki alt/üst çizgisi (Asya). Kartlarda ayrıca 7M'den Pinnacle, Sbobet ve Bet365'in ana alt/üst çizgisi ve oranları var: sinyal anında ve maç başında (7M'de her büro için tek ana çizgi var, 0.5-3.5'in ayrı oranları yok).</div>
 <table class="tt"><tr><th class="l">grup</th><th>maç</th><th>ort. gol</th>{% for c in d.cizgiler %}<th>{{ c }} üst</th>{% endfor %}<th>ort. çizgi</th><th>çizgi üstü</th></tr>
 {% for ad, o in [('🎯 sinyal', d.ust.sinyal), ('yakın', d.ust.yakin), ('tüm maçlar (30 gün)', d.ust.tum)] %}{% if o %}<tr><td class="l">{{ ad }}</td><td>{{ o.n }}</td><td>{{ o.gol }}</td>{% for c in d.cizgiler %}<td>%{{ o[c|string] }}</td>{% endfor %}<td>{{ o.cizgi if o.cizgi else '—' }}</td><td>{% if o.cizgi_ust is not none %}%{{ o.cizgi_ust }}{% else %}—{% endif %}</td></tr>{% endif %}{% endfor %}</table>
+{% if d.ust.sinyal and d.ust.sinyal.m7_n %}<div class="section-sub">7M Pinnacle ana çizgisiyle (maç başı): {{ d.ust.sinyal.m7_n }} sinyal maçı, ortalama çizgi {{ d.ust.sinyal.m7_cizgi }}, üstü %{{ d.ust.sinyal.m7_ust }}, altı %{{ d.ust.sinyal.m7_alt }}.</div>{% endif %}
 
 <h2 class="section">⏳ BEKLEYEN SİNYALLER</h2>
 {% for x in d.bekleyen %}{{ kart(x) }}{% else %}<div class="empty">Şu an bekleyen sinyal yok. Günde ortalama 1-2 sinyal bekleniyor.</div>{% endfor %}

@@ -31,6 +31,9 @@ def _db():
     c.row_factory = sqlite3.Row
     c.execute("""CREATE TABLE IF NOT EXISTS sinyal (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, dk REAL, mac TEXT, lig TEXT,
                  taraf INTEGER, pin TEXT, sbo TEXT, kel_pin TEXT, kel_sbo TEXT, piyasa TEXT, n_buro INTEGER)""")
+    have = {r[1] for r in c.execute("PRAGMA table_info(sinyal)")}
+    if "ou7m" not in have:
+        c.execute("ALTER TABLE sinyal ADD COLUMN ou7m TEXT")
     c.execute("""CREATE TABLE IF NOT EXISTS yakin (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, mac TEXT, lig TEXT, taraf INTEGER,
                  pin TEXT, kel_pin TEXT, kel_sbo TEXT, piyasa TEXT)""")
     return c
@@ -104,7 +107,8 @@ def run_cycle():
         mac, lig = f"{r['home']} - {r['away']}", r["league_vk"] or r["league_ng"] or ""
         if kp[i] <= ESIK and ks[i] <= ESIK and max(kp) >= KARSI and max(ks) >= KARSI:
             ko = datetime.fromisoformat(r["kickoff_utc"])
-            k.execute("INSERT OR IGNORE INTO sinyal VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            k.execute("""INSERT OR IGNORE INTO sinyal (mid, at, ko, dk, mac, lig, taraf, pin, sbo, kel_pin, kel_sbo, piyasa, n_buro)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (r["mid"], ng._iso(now), r["kickoff_utc"], round((ko - now).total_seconds() / 60, 1), mac, lig, i,
                        json.dumps(d["kit"]["Pinnacle"]), json.dumps(d["kit"]["Sbobet"]), json.dumps(kp), json.dumps(ks),
                        json.dumps([round(x, 4) for x in pm]), d["n"]))
@@ -114,9 +118,136 @@ def run_cycle():
                       (r["mid"], ng._iso(now), r["kickoff_utc"], mac, lig, i, json.dumps(d["kit"]["Pinnacle"]),
                        json.dumps(kp), json.dumps(ks), json.dumps([round(x, 4) for x in pm])))
         k.commit()
+    try:
+        _m7_doldur(k)
+    except Exception as e:
+        _last["m7"] = str(e)[:100]
     k.close()
     _last["at"] = ng._iso(ng._now())
     _last["log"] = f"{len(rows)} mac pencerede, {n_bak} bakildi, {n_sin} yeni sinyal"
+
+
+# ------------------------------------------------------------------ 7M alt/ust (ana cizgi + oranlar), takim adiyla eslestirme
+M7_SXL = "https://js-live.7mdt.com/datafile/sxl.js"
+M7_AD = "https://data.7mdt.com/goaldata/en/{id}.js"
+M7_OU = "https://px-odds.7mdt.com/DataByLive2/{id}_ou.js"
+M7_BURO = {"Pinnacle Sports": "pin", "SBOBET": "sbo", "Bet365": "b365"}
+GMT8 = timezone(timedelta(hours=8))
+_m7 = {"sxl": None, "sxl_at": 0, "ad": {}}
+
+
+def _get7(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.read().decode("utf-8", errors="replace").lstrip("\ufeff")
+
+
+def _t8(s):
+    try:
+        y, mo, d, h, mi, se = (int(x) for x in s.split(","))
+        return datetime(y, mo, d, h, mi, se, tzinfo=GMT8).astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _m7_program():
+    if not _m7["sxl"] or time.time() - _m7["sxl_at"] > 1800:
+        b = _get7(M7_SXL)
+        L = {}
+        for mid, arr in re.findall(r"sDt2\[(\d+)\]=\[([^\]]*)\]", b):
+            f = re.findall(r"'([^']*)'|(-?\d+)", arr)
+            vals = [a if a else n for a, n in f]
+            ko = _t8(vals[8]) if len(vals) > 8 else None
+            if ko:
+                L[int(mid)] = ko
+        _m7["sxl"], _m7["sxl_at"] = L, time.time()
+    return _m7["sxl"]
+
+
+def _m7_ad(i):
+    if i not in _m7["ad"]:
+        b = _get7(M7_AD.format(id=i))
+        ta = re.search(r"d_ta\s*=\s*'([^']*)'", b)
+        tb = re.search(r"d_tb\s*=\s*'([^']*)'", b)
+        mn = re.search(r"d_mn\s*=\s*'([^']*)'", b)
+        _m7["ad"][i] = (ta.group(1) if ta else "", tb.group(1) if tb else "", mn.group(1) if mn else "")
+        time.sleep(0.5)
+    return _m7["ad"][i]
+
+
+_TR = str.maketrans("çğıöşüÇĞİÖŞÜáàâäãåéèêëíìîïóòôõúùûñ", "cgiosuCGIOSUaaaaaaeeeeiiiioooouuun")
+_STOP = {"fc", "cf", "sc", "ac", "fk", "sk", "cd", "club", "the", "de", "u19", "u20", "u21", "u23", "ii", "b"}
+
+
+def _tok(s):
+    return {w for w in re.sub(r"[^a-z0-9 ]", " ", (s or "").translate(_TR).lower()).split() if len(w) >= 3 and w not in _STOP}
+
+
+def _benz(a, b):
+    A, B = _tok(a), _tok(b)
+    if not A or not B:
+        return 0
+    return sum(1 for w in A if w in B or any((len(w) >= 4 and (w in x or x in w)) for x in B if len(x) >= 4)) / len(A)
+
+
+def m7_bul(home, away, ko):
+    """NowGoal maci -> 7M mac numarasi (ayni baslama saati + takim adlari). Bulamazsa None."""
+    P = _m7_program()
+    aday = [i for i, k in P.items() if abs((k - ko).total_seconds()) <= 300]
+    best = None
+    for i in aday[:25]:
+        ta, tb, mn = _m7_ad(i)
+        s1, s2 = _benz(home, ta) + _benz(ta, home), _benz(away, tb) + _benz(tb, away)
+        if s1 > 0 and s2 > 0 and (not best or s1 + s2 > best[0]):
+            best = (s1 + s2, i, ta, tb)
+    return best
+
+
+def m7_ou(i, an, ko):
+    """7M alt/ust dosyasi -> {buro: {'an': [cizgi, ust, alt], 'kap': [..], 'ilk': [..]}} (an: sinyal ani, kap: mac basi)"""
+    b = _get7(M7_OU.format(id=i))
+    out = {}
+    for blk in re.split(r"p\['\d+'\]\s*=\s*", b)[1:]:
+        nm = re.search(r"'name':'([^']*)'", blk)
+        k = M7_BURO.get(nm.group(1)) if nm else None
+        if not k:
+            continue
+        pts = []
+        for p1, p2, p3, dt in re.findall(r"'p1':'([^']*)','p2':'([^']*)','p3':'([^']*)','dt':'([^']*)'", blk):
+            t = _t8(dt)
+            try:
+                pts.append((t, [float(p3), float(p1), float(p2)]))
+            except ValueError:
+                pass
+        pts = sorted([x for x in pts if x[0]], key=lambda x: x[0])
+        if not pts:
+            continue
+        sec = lambda T: next((v for t, v in reversed(pts) if t <= T), None)
+        out[k] = {"ilk": pts[0][1], "an": sec(an), "kap": sec(ko)}
+    return out
+
+
+def _m7_doldur(k):
+    """sinyali olup 7M verisi olmayan, baslamis maclar icin 7M alt/ust kaydi"""
+    now = ng._now()
+    for r in k.execute("SELECT mid, at, ko, mac FROM sinyal WHERE ou7m IS NULL").fetchall():
+        ko = datetime.fromisoformat(r["ko"])
+        if ko > now - timedelta(minutes=5) or ko < now - timedelta(days=1):
+            if ko < now - timedelta(days=1):
+                k.execute("UPDATE sinyal SET ou7m=? WHERE mid=?", (json.dumps({"durum": "bulunamadi"}), r["mid"]))
+            continue
+        ev, dep = (r["mac"].split(" - ", 1) + [""])[:2]
+        try:
+            b = m7_bul(ev, dep, ko)
+            if not b:
+                k.execute("UPDATE sinyal SET ou7m=? WHERE mid=?", (json.dumps({"durum": "eslesmedi"}), r["mid"]))
+                continue
+            ou = m7_ou(b[1], datetime.fromisoformat(r["at"]), ko)
+            k.execute("UPDATE sinyal SET ou7m=? WHERE mid=?",
+                      (json.dumps({"durum": "tamam", "id7m": b[1], "ad7m": f"{b[2]} - {b[3]}", "ou": ou}), r["mid"]))
+        except Exception as e:
+            _last["m7"] = str(e)[:100]
+        k.commit()
 
 
 def _loop():
@@ -156,6 +287,10 @@ def _kayit(r, sk):
     x = {"mid": r["mid"], "ko": r["ko"], "mac": r["mac"], "lig": r["lig"], "taraf": "1X2"[i], "i": i, "pin": pin,
          "kp": kp, "ks": ks, "pm": pm, "oran": pin[i], "bekl": round(100 * pm[i]), "skor": None, "tuttu": None,
          "dk": r["dk"] if "dk" in r.keys() else None, "fav": i == max(range(3), key=lambda q: pm[q])}
+    try:
+        x["m7"] = json.loads(r["ou7m"]) if "ou7m" in r.keys() and r["ou7m"] else None
+    except Exception:
+        x["m7"] = None
     if s:
         g = 0 if s[0] > s[1] else 1 if s[0] == s[1] else 2
         x["skor"] = f"{s[0]}-{s[1]}"
@@ -181,6 +316,17 @@ def _ust_ozet(L):
         alt = sum(1 for x in K if x["gol"] < x["ou_kap"])
         o["cizgi_ust"] = round(100 * ust / len(K), 1)
         o["cizgi_alt"] = round(100 * alt / len(K), 1)
+    M = []
+    for x in B:
+        m = x.get("m7") or {}
+        pk = ((m.get("ou") or {}).get("pin") or {}).get("kap")
+        if pk:
+            M.append((x["gol"], pk[0]))
+    if M:
+        o["m7_n"] = len(M)
+        o["m7_cizgi"] = round(sum(c for g, c in M) / len(M), 2)
+        o["m7_ust"] = round(100 * sum(1 for g, c in M if g > c) / len(M), 1)
+        o["m7_alt"] = round(100 * sum(1 for g, c in M if g < c) / len(M), 1)
     return o
 
 
