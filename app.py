@@ -40,6 +40,7 @@ import htft_tab
 import iyv_tab
 import toto_tab
 import kelly_tab
+import m7
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -512,4 +513,5 @@ if __name__ == "__main__":
     sdoran.start_background()
     toto_tab.start_background()
     kelly_tab.start_background()
+    m7.start_background()
     app.run(host="0.0.0.0", port=8080)

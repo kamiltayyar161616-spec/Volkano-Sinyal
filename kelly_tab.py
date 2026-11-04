@@ -34,6 +34,8 @@ def _db():
     have = {r[1] for r in c.execute("PRAGMA table_info(sinyal)")}
     if "ou7m" not in have:
         c.execute("ALTER TABLE sinyal ADD COLUMN ou7m TEXT")
+    if "canli7m" not in have:
+        c.execute("ALTER TABLE sinyal ADD COLUMN canli7m TEXT")
     c.execute("""CREATE TABLE IF NOT EXISTS yakin (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, mac TEXT, lig TEXT, taraf INTEGER,
                  pin TEXT, kel_pin TEXT, kel_sbo TEXT, piyasa TEXT)""")
     return c
@@ -120,6 +122,7 @@ def run_cycle():
         k.commit()
     try:
         _m7_doldur(k)
+        _m7_canli_doldur(k)
     except Exception as e:
         _last["m7"] = str(e)[:100]
     k.close()
@@ -250,6 +253,45 @@ def _m7_doldur(k):
         k.commit()
 
 
+M7_AH = "https://px-odds.7mdt.com/DataByLive2/{id}_ah.js"
+
+
+def m7_seri(url):
+    """7M alt/ust ya da handikap dosyasi -> {buro: [[saat(UTC iso), dakika, skor, cizgi, p1, p2], ...]} (eski -> yeni, mac ici dahil)"""
+    b = _get7(url)
+    out = {}
+    for blk in re.split(r"p\['\d+'\]\s*=\s*", b)[1:]:
+        nm = re.search(r"'name':'([^']*)'", blk)
+        k = M7_BURO.get(nm.group(1)) if nm else None
+        if not k:
+            continue
+        L = []
+        for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
+            g = dict(re.findall(r"'(\w+)':'([^']*)'", e))
+            t = _t8(g.get("dt", ""))
+            try:
+                L.append([t.isoformat()[:16], g.get("htime", ""), g.get("score", ""), float(g["p3"]), float(g["p1"]), float(g["p2"])])
+            except (KeyError, ValueError, AttributeError):
+                continue
+        out[k] = sorted(L)
+    return out
+
+
+def _m7_canli_doldur(k):
+    """7M eslesmesi olan ve bitmis (ko + 130 dk) sinyal maclari: mac ici alt/ust ve handikap oran serisini kaydet"""
+    now = ng._now()
+    for r in k.execute("SELECT mid, ko, ou7m FROM sinyal WHERE canli7m IS NULL AND ou7m LIKE '%tamam%'").fetchall():
+        if datetime.fromisoformat(r["ko"]) > now - timedelta(minutes=130):
+            continue
+        try:
+            i = json.loads(r["ou7m"])["id7m"]
+            seri = {"ou": m7_seri(M7_OU.format(id=i)), "ah": m7_seri(M7_AH.format(id=i))}
+            k.execute("UPDATE sinyal SET canli7m=? WHERE mid=?", (json.dumps(seri), r["mid"]))
+            k.commit()
+        except Exception as e:
+            _last["m7"] = str(e)[:100]
+
+
 def _loop():
     while True:
         try:
@@ -291,6 +333,14 @@ def _kayit(r, sk):
         x["m7"] = json.loads(r["ou7m"]) if "ou7m" in r.keys() and r["ou7m"] else None
     except Exception:
         x["m7"] = None
+    x["canli7m"] = None
+    if "canli7m" in r.keys() and r["canli7m"]:
+        try:
+            cs = json.loads(r["canli7m"])
+            x["canli7m"] = {t: {b: len(v) for b, v in (cs.get(t) or {}).items()} for t in ("ou", "ah")}
+            x["canli_seri"] = cs
+        except Exception:
+            pass
     if s:
         g = 0 if s[0] > s[1] else 1 if s[0] == s[1] else 2
         x["skor"] = f"{s[0]}-{s[1]}"
@@ -378,4 +428,5 @@ def get_page_data():
 def export_json():
     d = get_page_data()
     return {"exported_at": ng._iso(ng._now()), "kural": {"esik": ESIK, "karsi": KARSI, "pencere_dk": PENCERE},
-            "ozet": d["oz"], "sinyaller": d["bekleyen"] + d["biten"], "yakin": d["yakin"]}
+            "ozet": d["oz"], "sinyaller": d["bekleyen"] + d["biten"], "yakin": d["yakin"],
+            "not": "canli_seri: 7M mac ici alt/ust (ou) ve handikap (ah) oranlari [saat UTC, dakika, skor, cizgi, ust/ev, alt/dep]"}

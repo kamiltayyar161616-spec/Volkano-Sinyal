@@ -533,7 +533,15 @@ def _as_key():
 
 
 def canli_skorlar():
-    """AllSportsAPI Livescore -> [{ev, dep, skor, dk, iy}] (60 sn onbellek)."""
+    """7M (m7.py) canli skor; yoksa AllSportsAPI Livescore -> [{ev, dep, skor, dk, iy}] (60 sn onbellek)."""
+    try:
+        import m7
+        L = m7.canli()
+    except Exception:
+        L = []
+    if L:                                   # 7M canli skor (AllSportsAPI yerine), yoksa API'ye duser
+        _canli["hata"] = None
+        return L
     if time.time() - _canli["at"] < CANLI_TTL:
         return _canli["maclar"]
     _canli["at"] = time.time()
