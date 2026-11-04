@@ -186,6 +186,8 @@ def _ddb():
     c.row_factory = sqlite3.Row
     c.execute("""CREATE TABLE IF NOT EXISTS oran (mid INTEGER PRIMARY KEY, at TEXT, durum TEXT, id7m INTEGER,
                  buro TEXT, cizgi REAL, ust REAL, alt REAL)""")
+    if "canli" not in {r[1] for r in c.execute("PRAGMA table_info(oran)")}:
+        c.execute("ALTER TABLE oran ADD COLUMN canli TEXT")
     return c
 
 
@@ -220,6 +222,20 @@ def desen_doldur():
                           (r["mid"], ng._iso(now), "tamam", b[1], sec[0], sec[1][0], sec[1][1], sec[1][2]))
             else:
                 d.execute("INSERT OR REPLACE INTO oran (mid, at, durum, id7m) VALUES (?,?,?,?)", (r["mid"], ng._iso(now), "oran yok", b[1]))
+            d.commit()
+        except Exception:
+            continue
+    # mac bitince (ko + 130 dk): mac ici alt/ust + handikap oran serisi (dakika, skor, cizgi, oranlar) -> canli test icin
+    for r in d.execute("SELECT o.mid, o.id7m FROM oran o WHERE o.durum='tamam' AND o.canli IS NULL").fetchall():
+        with ng._db_lock:
+            c = ng._conn()
+            x = c.execute("SELECT kickoff_utc FROM ng_match WHERE mid=?", (r["mid"],)).fetchone()
+            c.close()
+        if not x or x[0] > ng._iso(now - timedelta(minutes=130)):
+            continue
+        try:
+            seri = {"ou": K.m7_seri(K.M7_OU.format(id=r["id7m"])), "ah": K.m7_seri(K.M7_AH.format(id=r["id7m"]))}
+            d.execute("UPDATE oran SET canli=? WHERE mid=?", (json.dumps(seri), r["mid"]))
             d.commit()
         except Exception:
             continue
@@ -271,6 +287,7 @@ def desen():
             od = o["ust"] if x["taraf"] == "UST" else o["alt"]
             x["kar"] = round(_kar(_desen_sonuc(x["gol"], L, x["taraf"]), od), 2)
             x["oyna"] = f"{L} {'Ü' if x['taraf'] == 'UST' else 'A'} @ {od:.2f}"
+        x["canli_var"] = bool(o and o.get("canli"))
     bek.sort(key=lambda x: x["ko"])
     bit.sort(key=lambda x: x["ko"], reverse=True)
     oz = []
@@ -329,4 +346,14 @@ def get_page_data():
 
 
 def export_json():
-    return {"exported_at": ng._iso(ng._now()), "desen": desen(), "kupon": _kupon(), "performans": get_performance()}
+    try:
+        d = _ddb()
+        canli = {r["mid"]: json.loads(r["canli"]) for r in d.execute("SELECT mid, canli FROM oran WHERE canli IS NOT NULL")}
+        d.close()
+    except Exception:
+        canli = {}
+    ds = desen()
+    for x in ds["biten"]:
+        x["canli_seri"] = canli.get(x["mid"])
+    return {"exported_at": ng._iso(ng._now()), "desen": ds, "kupon": _kupon(), "performans": get_performance(),
+            "not": "canli_seri: 7M mac ici alt/ust (ou) ve handikap (ah) [saat UTC, dakika, skor, cizgi, ust/ev, alt/dep] - pin/sbo/b365"}
