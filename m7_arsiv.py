@@ -115,49 +115,55 @@ def seri(body, anahtar):
     return out, ko
 
 
-def topla(ust, alt):
+def cek(i):
+    """tek mac numarasi -> ('bos', i, kod) ya da ('mac', satir)"""
+    so, bo = get(f"https://px-odds.7mdt.com/DataByLive2/{i}_ou.js")
+    time.sleep(BEKLE)
+    if so != 200 or "'name'" not in bo:
+        return ("bos", i, so)
+    ou, ko = seri(bo, "ou")
+    if not ou:
+        return ("bos", i, -1)
+    sa, ba = get(f"https://px-odds.7mdt.com/DataByLive2/{i}_ah.js")
+    time.sleep(BEKLE)
+    ah, ko2 = seri(ba, "ah") if sa == 200 else ({}, None)
+    sg, bg = get(f"https://data.7mdt.com/goaldata/en/{i}.js")
+    time.sleep(BEKLE)
+    g = lambda k: (re.search(rf"{k}\s*=\s*'((?:[^'\\]|\\.)*)'", bg) or [None, ""])[1].replace("\\'", "'")
+    bf = re.search(r"d_bf\s*=\s*\[([^\]]*)\]", bg)
+    goller = re.findall(r"'(\d+-\d+)'", bf.group(1)) if bf else []
+    skor, kay = (goller[-1], "goaldata") if goller else (None, None)
+    if not skor:                                     # golsuz ya da bilgi yok: oran dosyasindaki son mac ici skor
+        ss = [v["son_skor"] for v in list(ou.values()) + list(ah.values()) if v.get("son_skor")]
+        if ss:
+            skor, kay = max(ss, key=lambda s: sum(int(x) for x in s.split("-")) if re.match(r"^\d+-\d+$", s) else -1), "oran"
+    gl = goller_oku(bg)
+    return ("mac", (i, g("d_ta"), g("d_tb"), g("d_mn"), ko or ko2, skor, kay, json.dumps(ou), json.dumps(ah),
+                    datetime.now(timezone.utc).isoformat()[:19], json.dumps(gl) if gl is not None else None))
+
+
+def topla(ust, alt, isci=4):
+    """isci kadar paralel istek akisi (her biri istekler arasi BEKLE sn) -> ~ isci x 2-3 istek/sn"""
+    from concurrent.futures import ThreadPoolExecutor
     c = db()
     var = {r[0] for r in c.execute("SELECT id FROM mac")} | {r[0] for r in c.execute("SELECT id FROM bos")}
+    ids = [i for i in range(ust, alt - 1, -1) if i not in var]
+    print(f"{len(ids)} numara taranacak, {isci} paralel", flush=True)
     n_ok = n_bos = 0
     t0 = time.time()
-    for i in range(ust, alt - 1, -1):
-        if i in var:
-            continue
-        so, bo = get(f"https://px-odds.7mdt.com/DataByLive2/{i}_ou.js")
-        time.sleep(BEKLE)
-        if so != 200 or "'name'" not in bo:
-            c.execute("INSERT OR REPLACE INTO bos VALUES (?,?)", (i, so))
-            n_bos += 1
-            if n_bos % 200 == 0:
-                c.commit()
-            continue
-        ou, ko = seri(bo, "ou")
-        if not ou:
-            c.execute("INSERT OR REPLACE INTO bos VALUES (?,?)", (i, -1))
-            continue
-        sa, ba = get(f"https://px-odds.7mdt.com/DataByLive2/{i}_ah.js")
-        time.sleep(BEKLE)
-        ah, ko2 = seri(ba, "ah") if sa == 200 else ({}, None)
-        sg, bg = get(f"https://data.7mdt.com/goaldata/en/{i}.js")
-        time.sleep(BEKLE)
-        g = lambda k: (re.search(rf"{k}\s*=\s*'((?:[^'\\]|\\.)*)'", bg) or [None, ""])[1].replace("\\'", "'")
-        bf = re.search(r"d_bf\s*=\s*\[([^\]]*)\]", bg)
-        goller = re.findall(r"'(\d+-\d+)'", bf.group(1)) if bf else []
-        skor, kay = (goller[-1], "goaldata") if goller else (None, None)
-        if not skor:                                     # golsuz ya da bilgi yok: oran dosyasindaki son mac ici skor
-            ss = [v["son_skor"] for v in list(ou.values()) + list(ah.values()) if v.get("son_skor")]
-            if ss:
-                skor, kay = max(ss, key=lambda s: sum(int(x) for x in s.split("-")) if re.match(r"^\d+-\d+$", s) else -1), "oran"
-        gl = goller_oku(bg)
-        c.execute("INSERT OR REPLACE INTO mac VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                  (i, g("d_ta"), g("d_tb"), g("d_mn"), ko or ko2, skor, kay, json.dumps(ou), json.dumps(ah),
-                   datetime.now(timezone.utc).isoformat()[:19], json.dumps(gl) if gl is not None else None))
-        n_ok += 1
-        if n_ok % 25 == 0:
+    with ThreadPoolExecutor(max_workers=isci) as ex:
+        for j in range(0, len(ids), 40):
+            for r in ex.map(cek, ids[j:j + 40]):
+                if r[0] == "bos":
+                    c.execute("INSERT OR REPLACE INTO bos VALUES (?,?)", (r[1], r[2]))
+                    n_bos += 1
+                else:
+                    c.execute("INSERT OR REPLACE INTO mac VALUES (?,?,?,?,?,?,?,?,?,?,?)", r[1])
+                    n_ok += 1
             c.commit()
             hiz = (n_ok + n_bos) / max(1, time.time() - t0)
-            print(f"{datetime.now():%H:%M} id {i} | kayit {n_ok} bos {n_bos} | {hiz:.1f} id/sn", flush=True)
-    c.commit()
+            kalan = (len(ids) - j - 40) / max(hiz, 0.01) / 3600
+            print(f"{datetime.now():%H:%M} id {ids[min(j + 39, len(ids) - 1)]} | kayit {n_ok} bos {n_bos} | {hiz:.1f} id/sn | kalan ~{max(kalan, 0):.1f} saat", flush=True)
     c.close()
     print("BITTI", n_ok, n_bos, flush=True)
 
