@@ -153,6 +153,69 @@ def get_performance(days=None):
     return out
 
 
+# ---- CIZGI DESENI (4 Kasim analizi, 1311 mac): orta favori (Asya handikap 0.5-1.25) varken
+#   cizgi <= 2.50 -> UST (%58.5, n=241), cizgi 2.75-3.00 -> ALT (%54.4, n=262). Ileriye donuk takip BASLANGIC'tan sonra.
+DESEN_BAS = "2026-11-04T18:30:00+00:00"
+DESEN_GECMIS = {"UST": {"n": 241, "yuzde": 58.5}, "ALT": {"n": 262, "yuzde": 54.4}}
+
+
+def desen_secim(ou, ah):
+    if ou is None or ah is None or ou < 1.5:
+        return None
+    if 0.5 <= abs(ah) <= 1.25:
+        if ou <= 2.5:
+            return "UST"
+        if 2.75 <= ou <= 3.0:
+            return "ALT"
+    return None
+
+
+def _desen_sonuc(g, L, taraf):
+    """1 kazandi, 0.5 iade/yarim, 0 kaybetti (ceyrek cizgi = iki yarim bahis)"""
+    if abs(L * 2 - round(L * 2)) > 1e-6:
+        return (_desen_sonuc(g, L - 0.25, taraf) + _desen_sonuc(g, L + 0.25, taraf)) / 2
+    u = 1.0 if g > L else 0.5 if g == L else 0.0
+    return u if taraf == "UST" else 1.0 - u
+
+
+def desen():
+    now = ng._now()
+    with ng._db_lock:
+        c = ng._conn()
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, league_vk, league_ng, ft_h, ft_a, status,
+                                   ou_son, ah_son, ou_kapanis, ah_kapanis FROM ng_match
+                            WHERE kickoff_utc > ? AND kickoff_utc < ? AND home IS NOT NULL AND ou_son IS NOT NULL""",
+                         (DESEN_BAS, ng._iso(now + timedelta(hours=12)))).fetchall()
+        c.close()
+    bek, bit = [], []
+    for r in rows:
+        bitti = r["ft_h"] is not None and r["status"] == "finished"
+        ou = (r["ou_kapanis"] if bitti and r["ou_kapanis"] else r["ou_son"])
+        ah = (r["ah_kapanis"] if bitti and r["ah_kapanis"] is not None else r["ah_son"])
+        t = desen_secim(ou, ah)
+        if not t:
+            continue
+        x = {"mid": r["mid"], "ko": r["kickoff_utc"], "mac": f"{r['home']} - {r['away']}", "lig": r["league_vk"] or r["league_ng"] or "",
+             "cizgi": ou, "ah": ah, "taraf": t, "skor": None, "sonuc": None}
+        if bitti:
+            g = r["ft_h"] + r["ft_a"]
+            x.update(skor=f"{r['ft_h']}-{r['ft_a']}", gol=g, sonuc=_desen_sonuc(g, ou, t), u15=g > 1.5, u25=g > 2.5)
+            bit.append(x)
+        elif r["kickoff_utc"] > ng._iso(now - timedelta(hours=3)):
+            bek.append(x)
+    bek.sort(key=lambda x: x["ko"])
+    bit.sort(key=lambda x: x["ko"], reverse=True)
+    oz = []
+    for t in ("UST", "ALT"):
+        B = [x for x in bit if x["taraf"] == t]
+        n = len(B)
+        oz.append({"taraf": t, "n": n, "puan": round(sum(x["sonuc"] for x in B), 1),
+                   "yuzde": round(100 * sum(x["sonuc"] for x in B) / n, 1) if n else None,
+                   "u15": round(100 * sum(x["u15"] for x in B) / n) if n else None,
+                   "u25": round(100 * sum(x["u25"] for x in B) / n) if n else None, "gecmis": DESEN_GECMIS[t]})
+    return {"bekleyen": bek, "biten": bit[:100], "oz": oz, "bas": DESEN_BAS}
+
+
 def get_page_data():
     now = ng._iso(ng._now())
     kup = _kupon()
@@ -190,8 +253,8 @@ def get_page_data():
                 ("up" if a["pz_son"] > a["pz_ilk"] else "down")
     # su an degerli secimler (kupon kriterini gecen), degere gore
     firsat = sorted(([a, ln, tr, od, dg] for a in aday for ln, tr, od, dg in a["secim"]), key=lambda x: -x[4])
-    return {"aktif": aktif, "son": son, "aday": aday, "firsat": firsat, "hazir": c is not None}
+    return {"aktif": aktif, "son": son, "aday": aday, "firsat": firsat, "hazir": c is not None, "desen": desen()}
 
 
 def export_json():
-    return {"exported_at": ng._iso(ng._now()), "kupon": _kupon(), "performans": get_performance()}
+    return {"exported_at": ng._iso(ng._now()), "desen": desen(), "kupon": _kupon(), "performans": get_performance()}

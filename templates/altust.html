@@ -3,6 +3,9 @@
 {% block page_tag %}ALT/ÜST KUPON{% endblock %}
 {% block subtitle %}Adil oran Pinnacle'ın marjsız alt/üst fiyatından (The Odds API), yoksa diğer büroların medyanından, o da yoksa NowGoal piyasa çizgisinden üretilir ve Volkano oranıyla karşılaştırılır. Çizgi L → beklenen gol L + 0.20 (10 bin maçlık testte piyasa çizgisi gerçek gole 0.1 gol yakın). Değer = piyasa olasılığı × Volkano oranı − 1. Maçtan ~10-15 dk önce değeri ≥ %5 (oran 1.30–12.00) olan her seçim kupona yazılır ve {{ bahis|int }} € sabit bahisle takip edilir.{% endblock %}
 {% block extra_style %}
+  .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:9.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); } .tt .l{ text-align:left; }
+  .muted{ color:var(--chalk-faint); font-size:9px; } .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
 <style>
   .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
   .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
@@ -44,6 +47,19 @@
 {% endmacro %}
 
 {% block content %}
+{% set ds = d.desen %}
+<h2 class="section">📐 ÇİZGİ DESENİ (yeni, ileriye dönük takip)</h2>
+<div class="section-sub">NowGoal piyasa çizgisi + Asya handikabı. Orta favori (handikap 0.5–1.25) varken: çizgi <b>≤ 2.50 → ÜST</b>, çizgi <b>2.75–3.00 → ALT</b>. Geçmiş (1311 maç): ÜST %58.5 (241 maç), ALT %54.4 (262 maç); piyasa çizgisi doğruysa %50 olmalı. Çeyrek çizgide yarım kazanç/iade 0.5 sayılır. Takip başlangıcı: {{ ds.bas | localdatetime }}.</div>
+<table class="tt"><tr><th class="l">seçim</th><th>maç</th><th>tutan</th><th>1.5 üst</th><th>2.5 üst</th><th class="l">geçmiş</th></tr>
+{% for o in ds.oz %}<tr><td class="l"><b>{{ 'ÜST' if o.taraf == 'UST' else 'ALT' }}</b></td><td>{{ o.n }}</td><td>{% if o.n %}{{ o.puan }}/{{ o.n }} <b class="{{ 'pos' if o.yuzde > 50 else 'neg' }}">%{{ o.yuzde }}</b>{% else %}—{% endif %}</td>
+<td>{% if o.n %}%{{ o.u15 }}{% else %}—{% endif %}</td><td>{% if o.n %}%{{ o.u25 }}{% else %}—{% endif %}</td><td class="l"><span class="muted">{{ o.gecmis.n }} maç, %{{ o.gecmis.yuzde }}</span></td></tr>{% endfor %}</table>
+<table class="tt"><tr><th class="l">maç</th><th>çizgi</th><th>handikap</th><th>seçim</th><th>sonuç</th></tr>
+{% for x in ds.bekleyen + ds.biten %}<tr><td class="l"><b>{{ x.mac }}</b><br><span class="muted">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %}</span></td>
+<td>{{ x.cizgi }}</td><td>{{ x.ah }}</td><td><b>{{ x.cizgi }} {{ 'ÜST' if x.taraf == 'UST' else 'ALT' }}</b></td>
+<td>{% if x.skor %}<span class="tag" style="color:{{ 'var(--turf-bright)' if x.sonuc > 0.5 else 'var(--clay)' if x.sonuc < 0.5 else 'inherit' }}">{{ x.skor }} · {{ 'tuttu' if x.sonuc == 1 else 'yarım' if x.sonuc == 0.75 else 'iade' if x.sonuc == 0.5 else 'yarım kayıp' if x.sonuc == 0.25 else 'yattı' }}</span><br><span class="muted">1.5{{ 'Ü' if x.u15 else 'A' }} · 2.5{{ 'Ü' if x.u25 else 'A' }}</span>{% else %}<span class="muted">bekliyor</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">Henüz desene uyan maç yok (önümüzdeki 12 saat taranıyor).</td></tr>{% endfor %}</table>
+<div class="section-sub">Aşağıdaki eski "değer" kuponu (Volkano vs adil oran) durduruldu: 105 maçta piyasanın beklediğinden az tuttu. Kayıtları kıyas için duruyor.</div>
+
 {% if not d.hazir %}
 <div class="empty">Alt/üst defteri henüz oluşmadı. VPS'te defter 'aday' işi çalışınca veriler burada görünecek.</div>
 {% else %}
