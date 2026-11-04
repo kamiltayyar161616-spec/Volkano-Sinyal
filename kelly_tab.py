@@ -16,9 +16,10 @@ import nowgoal as ng
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "kelly.db")
 ESIK, KARSI = 0.85, 1.00
 # seviyeler (en sıkıdan gevşeğe): sinyal, uyduğu en sıkı seviyeyle kaydedilir. Geçmiş test (4000 maç, son 30 dk, her seviye kendi dilimi):
-SEVIYE = (("A", "güçlü", 0.85, 1.00), ("B", "orta", 0.88, 1.00), ("C", "geniş", 0.90, 0.97))
+SEVIYE = (("A", "güçlü", 0.85, 1.00), ("B", "orta", 0.88, 1.00), ("C", "geniş", 0.90, 0.97),
+          ("D", "takip", 9.99, 0.0))   # D: Kelly sarti yok, sadece Pinnacle+Sbobet ayni taraf (canli takip / alt-ust verisi icin)
 GECMIS_SEV = {"A": {"n": 20, "yuzde": 60.0, "bekl": 35.8}, "B": {"n": 24, "yuzde": 62.5, "bekl": 43.3},
-              "C": {"n": 95, "yuzde": 37.9, "bekl": 38.0}}
+              "C": {"n": 95, "yuzde": 37.9, "bekl": 38.0}, "D": {"n": None}}
 PENCERE = (3, 30)            # maca kalan dakika
 CYCLE_SEC = 300
 BEKLE = 1.5
@@ -334,7 +335,7 @@ def _kayit(r, sk):
     i = r["taraf"]
     s = sk.get(r["mid"])
     x = {"mid": r["mid"], "ko": r["ko"], "mac": r["mac"], "lig": r["lig"], "taraf": "1X2"[i], "i": i, "pin": pin,
-         "kp": kp, "ks": ks, "pm": pm, "oran": pin[i], "bekl": round(100 * pm[i]), "skor": None, "tuttu": None,
+         "kp": kp, "ks": ks, "pm": pm, "oran": pin[i], "bekl": round(100 * pm[i]), "skor": None, "tuttu": None, "gol": None,
          "dk": r["dk"] if "dk" in r.keys() else None, "fav": i == max(range(3), key=lambda q: pm[q]),
          "seviye": (r["seviye"] if "seviye" in r.keys() else None) or ("A" if "dk" in r.keys() else None)}
     try:
@@ -416,16 +417,17 @@ def get_page_data():
     k.close()
     sk = _sonuclar([r["mid"] for r in S] + [r["mid"] for r in Y])
     L = [_kayit(r, sk) for r in S]
-    B = [x for x in L if x["tuttu"] is not None]
+    Ball = [x for x in L if x["tuttu"] is not None]
+    B = [x for x in Ball if x["seviye"] in ("A", "B")]
     n = len(B)
-    oz = {"n": len(L), "bitti": n, "tutan": sum(1 for x in B if x["tuttu"]),
+    oz = {"n": sum(1 for x in L if x["seviye"] in ("A", "B")), "bitti": n, "tutan": sum(1 for x in B if x["tuttu"]),
           "yuzde": round(100 * sum(1 for x in B if x["tuttu"]) / n, 1) if n else None,
           "bekl": round(sum(x["pm"][x["i"]] for x in B) * 100 / n, 1) if n else None,
           "roi": round(100 * sum((x["oran"] - 1) if x["tuttu"] else -1 for x in B) / n, 1) if n else None,
           "kar": round(sum((x["oran"] - 1) if x["tuttu"] else -1 for x in B), 2)}
     sev = []
     for ad, isim, e, kk in SEVIYE:
-        Bs = [x for x in B if x["seviye"] == ad]
+        Bs = [x for x in Ball if x["seviye"] == ad]
         m = len(Bs)
         sev.append({"ad": ad, "isim": isim, "esik": e, "karsi": kk, "n": sum(1 for x in L if x["seviye"] == ad), "bitti": m,
                     "tutan": sum(1 for x in Bs if x["tuttu"]),
@@ -437,8 +439,20 @@ def get_page_data():
     yb = [x for x in yk if x["tuttu"] is not None]
     oy = {"bitti": len(yb), "tutan": sum(1 for x in yb if x["tuttu"]),
           "bekl": round(sum(x["pm"][x["i"]] for x in yb) * 100 / len(yb), 1) if yb else None}
+    try:
+        import m7
+        cm = {m["id"]: m for m in m7.canli()}
+    except Exception:
+        cm = {}
+    for x in L:
+        m = cm.get((x.get("m7") or {}).get("id7m"))
+        if m and x["tuttu"] is None:
+            x["canli"] = {"skor": m["skor"], "dk": m["dk"]}
+    bek = [x for x in L if x["tuttu"] is None]
+    bek.sort(key=lambda x: (0 if x.get("canli") else 1, x["ko"]))
+    ust_sev = [(f"{a}", _ust_ozet([x for x in Ball if x["seviye"] == a])) for a in "ABCD"]
     now = ng._iso(ng._now())
-    return {"bekleyen": [x for x in L if x["tuttu"] is None], "biten": B, "oz": oz, "gecmis": GECMIS,
+    return {"bekleyen": bek, "biten": Ball[:150], "n_biten": len(Ball), "ust_sev": ust_sev, "oz": oz, "gecmis": GECMIS,
             "yakin": yk, "oy": oy, "durum": _last, "cizgiler": CIZGI, "sev": sev,
             "ust": {"sinyal": _ust_ozet(B), "yakin": _ust_ozet(yb), "tum": _taban()}, "esik": ESIK, "karsi": KARSI, "pencere": PENCERE, "now": now}
 

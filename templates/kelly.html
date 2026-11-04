@@ -25,7 +25,7 @@
 {% macro kart(x) %}
 <div class="mc" style="border-color:{{ 'var(--turf)' if x.tuttu else 'var(--clay-dim)' if x.tuttu is not none else 'var(--amber-dim)' }}">
   <div class="mc-ust">
-    <div class="mc-ad"><b>{{ x.mac }}</b>{% if x.skor %} <span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ x.skor }} · {{ x.sonuc }}</span>{% endif %}
+    <div class="mc-ad"><b>{{ x.mac }}</b>{% if x.canli %} <span class="tag a">🔴 {{ x.canli.skor }} · {{ x.canli.dk }}'</span>{% endif %}{% if x.skor %} <span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ x.skor }} · {{ x.sonuc }}</span>{% endif %}
       <div class="ng-meta">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %}{% if x.dk %} · sinyal maça {{ x.dk|round|int }} dk kala{% endif %}</div></div>
     <div class="mc-sag">{% if x.seviye %}<span class="tag">{{ x.seviye }}</span> {% endif %}<span class="tag {{ ('w' if x.tuttu else 'l') if x.tuttu is not none else 'a' }}">{{ x.taraf }} @ {{ '%.2f'|format(x.oran) }}</span><div class="ng-meta">{{ 'favori' if x.fav else 'favori değil' }} · bekl. %{{ x.bekl }}</div></div>
   </div>
@@ -52,24 +52,24 @@
   <div><b class="{{ 'pos' if d.oz.roi and d.oz.roi > 0 else 'neg' if d.oz.roi else '' }}">{% if d.oz.roi is not none %}{{ '+' if d.oz.roi > 0 else '' }}%{{ d.oz.roi }}{% else %}—{% endif %}</b><span>ROI (Pinnacle oranı)</span></div>
 </div>
 <table class="tt"><tr><th class="l">seviye</th><th>sinyal</th><th>tutan</th><th>beklenen</th><th>ROI</th><th class="l">geçmiş test</th></tr>
-{% for v in d.sev %}<tr><td class="l"><b>{{ v.ad }}</b> {{ v.isim }}<br><span class="ng-meta">≤ {{ v.esik }} / ≥ {{ '%.2f'|format(v.karsi) }}</span></td><td>{{ v.n }}</td>
+{% for v in d.sev %}<tr><td class="l"><b>{{ v.ad }}</b> {{ v.isim }}<br><span class="ng-meta">{% if v.ad == 'D' %}Kelly şartı yok{% else %}≤ {{ v.esik }} / ≥ {{ '%.2f'|format(v.karsi) }}{% endif %}</span></td><td>{{ v.n }}</td>
 <td>{% if v.bitti %}{{ v.tutan }}/{{ v.bitti }}<br><b class="{{ 'pos' if v.yuzde > v.bekl else 'neg' }}">%{{ v.yuzde }}</b>{% else %}—{% endif %}</td><td>{% if v.bekl is not none %}%{{ v.bekl }}{% else %}—{% endif %}</td>
 <td class="{{ 'pos' if v.roi and v.roi > 0 else 'neg' if v.roi else '' }}">{% if v.roi is not none %}{{ '+' if v.roi > 0 else '' }}%{{ v.roi }}{% else %}—{% endif %}</td>
-<td class="l"><span class="ng-meta">{{ v.gecmis.n }} maç, %{{ v.gecmis.yuzde }} (bekl. %{{ v.gecmis.bekl }})</span></td></tr>{% endfor %}</table>
-<div class="section-sub">C seviyesi geçmiş testte beklenen kadar tuttu (avantaj görünmedi); hacim için eklendi, ayrı izleniyor.</div>
+<td class="l"><span class="ng-meta">{% if v.gecmis.n %}{{ v.gecmis.n }} maç, %{{ v.gecmis.yuzde }} (bekl. %{{ v.gecmis.bekl }}){% else %}veri toplama{% endif %}</span></td></tr>{% endfor %}</table>
+<div class="section-sub">Üstteki özet kutuları sadece A+B. C geçmişte beklenen kadar tuttu (avantaj yok). D'de Kelly şartı yok: Pinnacle ve Sbobet'in en düşük Kelly'yi aynı tarafa verdiği her maç; canlı takip ve alt/üst parametresi aramak için 7M çizgileri ve maç içi serisi kaydediliyor.</div>
 <div class="section-sub">Geçmiş test (4000 maç): A kuralına {{ d.gecmis.n }} maç uydu, {{ d.gecmis.tutan }} tuttu (%{{ d.gecmis.yuzde }}, beklenen %{{ d.gecmis.bekl }}), ROI +%{{ d.gecmis.roi }}. Örnek az olduğu için canlı takip asıl testtir.</div>
 
 
 <h2 class="section">⚽ GOL / ALT-ÜST KAYDI</h2>
 <div class="section-sub">Sinyal maçlarında kaç gol oldu, karşılaştırma için aynı dönemde biten bütün maçlar. <b>Çizgi</b> = NowGoal'un maç başındaki alt/üst çizgisi (Asya). Kartlarda ayrıca 7M'den Pinnacle, Sbobet ve Bet365'in ana alt/üst çizgisi ve oranları var: sinyal anında ve maç başında (7M'de her büro için tek ana çizgi var, 0.5-3.5'in ayrı oranları yok).</div>
 <table class="tt"><tr><th class="l">grup</th><th>maç</th><th>ort. gol</th>{% for c in d.cizgiler %}<th>{{ c }} üst</th>{% endfor %}<th>ort. çizgi</th><th>çizgi üstü</th></tr>
-{% for ad, o in [('🎯 sinyal', d.ust.sinyal), ('yakın', d.ust.yakin), ('tüm maçlar (30 gün)', d.ust.tum)] %}{% if o %}<tr><td class="l">{{ ad }}</td><td>{{ o.n }}</td><td>{{ o.gol }}</td>{% for c in d.cizgiler %}<td>%{{ o[c|string] }}</td>{% endfor %}<td>{{ o.cizgi if o.cizgi else '—' }}</td><td>{% if o.cizgi_ust is not none %}%{{ o.cizgi_ust }}{% else %}—{% endif %}</td></tr>{% endif %}{% endfor %}</table>
+{% for ad, o in [('🎯 A+B', d.ust.sinyal)] + d.ust_sev + [('yakın', d.ust.yakin), ('tüm maçlar (30 gün)', d.ust.tum)] %}{% if o %}<tr><td class="l">{{ ad }}</td><td>{{ o.n }}</td><td>{{ o.gol }}</td>{% for c in d.cizgiler %}<td>%{{ o[c|string] }}</td>{% endfor %}<td>{{ o.cizgi if o.cizgi else '—' }}</td><td>{% if o.cizgi_ust is not none %}%{{ o.cizgi_ust }}{% else %}—{% endif %}</td></tr>{% endif %}{% endfor %}</table>
 {% if d.ust.sinyal and d.ust.sinyal.m7_n %}<div class="section-sub">7M Pinnacle ana çizgisiyle (maç başı): {{ d.ust.sinyal.m7_n }} sinyal maçı, ortalama çizgi {{ d.ust.sinyal.m7_cizgi }}, üstü %{{ d.ust.sinyal.m7_ust }}, altı %{{ d.ust.sinyal.m7_alt }}.</div>{% endif %}
 
 <h2 class="section">⏳ BEKLEYEN SİNYALLER</h2>
-{% for x in d.bekleyen %}{{ kart(x) }}{% else %}<div class="empty">Şu an bekleyen sinyal yok. Günde ortalama 1-2 sinyal bekleniyor.</div>{% endfor %}
+{% for x in d.bekleyen %}{{ kart(x) }}{% else %}<div class="empty">Şu an bekleyen sinyal yok.</div>{% endfor %}
 
-<h2 class="section">🧾 SONUÇLANAN SİNYALLER</h2>
+<h2 class="section">🧾 SONUÇLANAN SİNYALLER{% if d.n_biten > d.biten|length %} <span class="ng-meta">(son {{ d.biten|length }} / {{ d.n_biten }})</span>{% endif %}</h2>
 {% for x in d.biten %}{{ kart(x) }}{% else %}<div class="empty">Henüz sonuçlanan sinyal yok.</div>{% endfor %}
 
 <details style="margin:0 0 10px"><summary class="section-sub" style="cursor:pointer">Yakın olanlar (hiçbir seviyeye uymayan: ikisi aynı tarafta Kelly ≤ 0.92) — {{ d.yakin|length }} maç{% if d.oy.bitti %}, biten {{ d.oy.bitti }}: tutan {{ d.oy.tutan }} (beklenen %{{ d.oy.bekl }}){% endif %}</summary>
