@@ -18,6 +18,8 @@
   .oz{ display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin:0 16px 10px; text-align:center; }
   .oz > div{ background:var(--navy); border:1px solid var(--navy-line); border-radius:8px; padding:8px 4px; }
   .oz b{ display:block; font-size:16px; } .oz span{ font-size:9px; color:var(--chalk-faint); }
+  .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:9.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); } .tt .l{ text-align:left; }
 </style>
 {% endblock %}
 {% macro kart(x) %}
@@ -34,6 +36,7 @@
     <div class="l">Kelly S</div>{% for i in range(3) %}<div class="{{ 's' if i == x.i else '' }}">{{ '%.2f'|format(x.ks[i]) }}</div>{% endfor %}
     <div class="l">piyasa %</div>{% for i in range(3) %}<div>%{{ (100*x.pm[i])|round|int }}</div>{% endfor %}
   </div>
+  {% if x.gol is not none %}<div class="ng-meta" style="margin-top:6px">⚽ {{ x.gol }} gol{% if x.ou_kap is not none %} · çizgi {{ x.ou_kap }} ({{ 'üst' if x.gol > x.ou_kap else 'alt' if x.gol < x.ou_kap else 'iade' }}){% endif %} · {% for c in d.cizgiler %}<span class="{{ 'pos' if x.ust[c] else 'neg' }}">{{ c }}Ü {{ '✓' if x.ust[c] else '✗' }}</span>{{ ' ' if not loop.last }}{% endfor %}</div>{% endif %}
 </div>{% endmacro %}
 {% block content %}
 <div style="margin:12px 16px 0"><a href="/kelly/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ KELLY verisini indir (JSON)</a></div>
@@ -45,6 +48,12 @@
   <div><b class="{{ 'pos' if d.oz.roi and d.oz.roi > 0 else 'neg' if d.oz.roi else '' }}">{% if d.oz.roi is not none %}{{ '+' if d.oz.roi > 0 else '' }}%{{ d.oz.roi }}{% else %}—{% endif %}</b><span>ROI (Pinnacle oranı)</span></div>
 </div>
 <div class="section-sub">Geçmiş test (4000 maç): bu kurala {{ d.gecmis.n }} maç uydu, {{ d.gecmis.tutan }} tuttu (%{{ d.gecmis.yuzde }}, beklenen %{{ d.gecmis.bekl }}), ROI +%{{ d.gecmis.roi }}. Örnek az olduğu için canlı takip asıl testtir.</div>
+
+
+<h2 class="section">⚽ GOL / ALT-ÜST KAYDI</h2>
+<div class="section-sub">Sinyal maçlarında kaç gol oldu, karşılaştırma için aynı dönemde biten bütün maçlar. <b>Çizgi</b> = NowGoal'un maç başındaki alt/üst çizgisi (Asya). Her çizgi için oran verisi şimdilik yok, sadece sonuç tutuluyor.</div>
+<table class="tt"><tr><th class="l">grup</th><th>maç</th><th>ort. gol</th>{% for c in d.cizgiler %}<th>{{ c }} üst</th>{% endfor %}<th>ort. çizgi</th><th>çizgi üstü</th></tr>
+{% for ad, o in [('🎯 sinyal', d.ust.sinyal), ('yakın', d.ust.yakin), ('tüm maçlar (30 gün)', d.ust.tum)] %}{% if o %}<tr><td class="l">{{ ad }}</td><td>{{ o.n }}</td><td>{{ o.gol }}</td>{% for c in d.cizgiler %}<td>%{{ o[c|string] }}</td>{% endfor %}<td>{{ o.cizgi if o.cizgi else '—' }}</td><td>{% if o.cizgi_ust is not none %}%{{ o.cizgi_ust }}{% else %}—{% endif %}</td></tr>{% endif %}{% endfor %}</table>
 
 <h2 class="section">⏳ BEKLEYEN SİNYALLER</h2>
 {% for x in d.bekleyen %}{{ kart(x) }}{% else %}<div class="empty">Şu an bekleyen sinyal yok. Günde ortalama 1-2 sinyal bekleniyor.</div>{% endfor %}
