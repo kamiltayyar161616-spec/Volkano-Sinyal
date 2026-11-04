@@ -2,6 +2,7 @@
   topla : python3 m7_arsiv.py topla [ust_id=5183000] [alt_id=5138000]   (yeniden eskiye; kaldigi yerden devam eder)
   durum : python3 m7_arsiv.py durum
   analiz: python3 m7_arsiv.py analiz [büro=SBOBET]
+  karsilastir: python3 m7_arsiv.py karsilastir [min_mac=200]   (tüm bürolar + strateji adaylari)
 Kaynaklar (izinli yollar): px-odds.7mdt.com/DataByLive2/<id>_ou.js / _ah.js, data.7mdt.com/goaldata/en/<id>.js
 Mac numaralari mac eklenince verilir (tarih sirali degil); bos numaralar 'bos' tablosuna yazilir, tekrar denenmez."""
 import json
@@ -192,11 +193,75 @@ def analiz(buro="SBOBET"):
             print(f"{k:38s} n={n:5d} ort.gol {gg / n:4.2f} | ÜST tuttu %{100 * sp / n:5.1f} | ÜST ROI %{100 * ku / n:+6.1f} | ALT ROI %{100 * ka / n:+6.1f}")
 
 
+def karsilastir(min_n=200):
+    """Tüm bürolar: mac basi alt/ust cizgisinin dogrulugu + düz ROI; ayrica strateji adaylari:
+    (1) en iyi oran (bürolar arasi en yüksek ust / alt orani), (2) büronun cizgisi piyasa ortancasindan farkliysa ters tarafi oyna."""
+    c = db()
+    rows = c.execute("SELECT ou, ah, skor, lig, ta, tb FROM mac WHERE skor IS NOT NULL").fetchall()
+    c.close()
+    B = defaultdict(lambda: [0, 0.0, 0.0, 0.0, 0.0, 0.0])        # n, ust puan, ust kar, alt kar, marj, (gol-cizgi)
+    S = defaultdict(lambda: [0, 0.0, 0.0])                         # strateji: n, kar, puan
+    H = defaultdict(lambda: [0, 0.0, 0.0])                         # handikap: n, favori kar, surpriz kar
+    for ou, ah, skor, lig, ta, tb in rows:
+        m = re.match(r"^(\d+)-(\d+)$", skor or "")
+        if not m:
+            continue
+        gh, ga = int(m.group(1)), int(m.group(2))
+        g = gh + ga
+        O = {k: v["kap"] for k, v in json.loads(ou).items() if v["kap"][1] >= 0.5 and v["kap"][2] > 1 and v["kap"][3] > 1}
+        if not O:
+            continue
+        for k, (t, L, u, a) in O.items():
+            sp = asya(g - L)
+            x = B[k]
+            x[0] += 1; x[1] += sp; x[2] += kar(sp, u); x[3] += kar(1 - sp, a); x[4] += 1 / u + 1 / a - 1; x[5] += g - L
+        if len(O) >= 4:
+            Ls = sorted(v[1] for v in O.values())
+            med = Ls[len(Ls) // 2]
+            # (1) en iyi oran, ortanca cizgide
+            ayni = {k: v for k, v in O.items() if v[1] == med}
+            if ayni:
+                sp = asya(g - med)
+                bu = max(v[2] for v in ayni.values()); ba = max(v[3] for v in ayni.values())
+                for ad, kk, ss in (("en iyi oran ÜST", bu, sp), ("en iyi oran ALT", ba, 1 - sp)):
+                    y = S[ad]; y[0] += 1; y[1] += kar(ss, kk); y[2] += ss
+            # (2) cizgisi ortancadan farkli büro: yuksekse ALT, dusukse UST (o büronun oraniyla)
+            for k, (t, L, u, a) in O.items():
+                d = L - med
+                if abs(d) >= 0.25:
+                    sp = asya(g - L)
+                    taraf, od, ss = ("ALT", a, 1 - sp) if d > 0 else ("ÜST", u, sp)
+                    for ad in (f"farkli cizgi -> {taraf} (tüm bürolar)", f"farkli cizgi -> {taraf} | {k}"):
+                        y = S[ad]; y[0] += 1; y[1] += kar(ss, od); y[2] += ss
+        for k, v in json.loads(ah or "{}").items():
+            t, L, oh, oa = v["kap"]
+            if oh <= 1 or oa <= 1 or L == 0:
+                continue
+            sp = asya((gh - ga) + L)                  # ev tarafi (L: ev handikabi, eksi = ev veriyor)
+            fk, sk = (kar(sp, oh), kar(1 - sp, oa)) if L < 0 else (kar(1 - sp, oa), kar(sp, oh))
+            z = H[k]; z[0] += 1; z[1] += fk; z[2] += sk
+    print("== ALT/ÜST: büro büro (maç başı çizgi ve oran) ==")
+    print(f"{'büro':18s} {'maç':>6s} {'gol-çizgi':>9s} {'ÜST %':>6s} {'marj':>6s} {'ÜST ROI':>8s} {'ALT ROI':>8s}")
+    for k, (n, sp, ku, ka, mj, fk) in sorted(B.items(), key=lambda t: -t[1][0]):
+        if n >= min_n:
+            print(f"{k:18s} {n:6d} {fk / n:+9.2f} {100 * sp / n:6.1f} {100 * mj / n:5.1f}% {100 * ku / n:+7.1f}% {100 * ka / n:+7.1f}%")
+    print("\n== STRATEJİ ADAYLARI ==")
+    for k, (n, kk, sp) in sorted(S.items(), key=lambda t: (t[0].count("|"), -t[1][1] / max(1, t[1][0]))):
+        if n >= max(50, min_n // 4):
+            print(f"{k:52s} n={n:6d} tuttu %{100 * sp / n:5.1f} ROI %{100 * kk / n:+6.1f}")
+    print("\n== ASYA HANDİKAP: büro büro ==")
+    for k, (n, fk, sk) in sorted(H.items(), key=lambda t: -t[1][0]):
+        if n >= min_n:
+            print(f"{k:18s} n={n:6d} favori ROI %{100 * fk / n:+6.1f} | sürpriz ROI %{100 * sk / n:+6.1f}")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if not a or a[0] == "durum":
         durum()
     elif a[0] == "topla":
         topla(int(a[1]) if len(a) > 1 else 5183000, int(a[2]) if len(a) > 2 else 5138000)
+    elif a[0] == "karsilastir":
+        karsilastir(int(a[1]) if len(a) > 1 else 200)
     elif a[0] == "analiz":
         analiz(a[1] if len(a) > 1 else "SBOBET")
