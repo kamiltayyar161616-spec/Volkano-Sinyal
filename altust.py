@@ -71,7 +71,7 @@ def _kupon():
     c = _defter()
     if not c:
         return []
-    rows = [dict(r) for r in c.execute("SELECT * FROM au_kupon ORDER BY ko DESC")]
+    rows = [dict(r) for r in c.execute("SELECT * FROM au_kupon WHERE ko < ? ORDER BY ko DESC", ("2026-11-04T18:30:00+00:00",))]
     c.close()
     res = _sonuclar({r["mid"] for r in rows})
     for r in rows:

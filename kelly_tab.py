@@ -143,6 +143,11 @@ def run_cycle():
     except Exception as e:
         _last["desen"] = str(e)[:100]
     try:
+        import htft_tab
+        htft_tab.oto_kaydet()
+    except Exception as e:
+        _last["desen"] = str(e)[:100]
+    try:
         _kupon_tara(k, now)
     except Exception as e:
         _last["kupon"] = str(e)[:100]

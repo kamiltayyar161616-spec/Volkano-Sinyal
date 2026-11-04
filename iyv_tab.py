@@ -97,6 +97,71 @@ def get_performance(days=None):
     return out
 
 
+# ------------------------------------------------------------------ X/1 DESENI (5 Kasim analizi, 355 mac, 1-4 Kasim):
+# ev sahibi favori (modelin MS ev olasiligi >= %45) iken X/1 (ilk yari berabere, maci ev sahibi kazanir):
+# %60+: 66 mac %30.3 tuttu ROI +%33 | %45-60: 99 mac %24.2 ROI +%19 (Volkano orani, vergisiz). Ileriye donuk takip X1_BAS'tan sonra.
+X1_BAS = "2026-11-04T22:10:00+00:00"
+X1_ESIK = 0.45
+VERGI = 0.12
+X1_GECMIS = {"%60+": {"n": 66, "yuzde": 30.3, "roi": 33}, "%45-60": {"n": 99, "yuzde": 24.2, "roi": 19}}
+
+
+def _x1_bant(p):
+    return "%60+" if p >= 0.6 else "%45-60"
+
+
+def x1_takip():
+    c = _c()
+    if not c:
+        return None
+    now = ng._iso(ng._now())
+    model = {}
+    for mid, mo in c.execute("SELECT mid, model FROM iyv_islenen WHERE model IS NOT NULL"):
+        try:
+            model[mid] = json.loads(mo).get("p1x2")
+        except Exception:
+            pass
+    bek = []
+    for r in c.execute("SELECT * FROM iyv_aday WHERE ko > ? ORDER BY ko", (now,)):
+        M = json.loads(r["model"]) if r["model"] else {}
+        p1 = (M.get("p1x2") or [0])[0]
+        if p1 < X1_ESIK:
+            continue
+        h = {k: od for k, od, p, ol, sp, b in json.loads(r["sec"] or "[]")}
+        if "X/1" in h:
+            bek.append({"mid": r["mid"], "ko": r["ko"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"], "p1": round(100 * p1),
+                        "oran": h["X/1"], "bant": _x1_bant(p1), "p1x2": M.get("p1x2")})
+    c.close()
+    bit = []
+    for r in _kilit():
+        if r["sonuc"] != "X/1" or r["ko"] < X1_BAS:
+            continue
+        P = model.get(r["mid"])
+        if not P or P[0] < X1_ESIK:
+            continue
+        x = {"mid": r["mid"], "ko": r["ko"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"], "p1": round(100 * P[0]),
+             "oran": r["oran"], "bant": _x1_bant(P[0]), "tuttu": r["tuttu"], "gercek": r["gercek"],
+             "skor": f"İY {r['skor'][0]}-{r['skor'][1]} · MS {r['skor'][2]}-{r['skor'][3]}" if r["skor"] else None}
+        if x["tuttu"] is None and r["ko"] > now:
+            continue
+        bit.append(x)
+    kilitli = {x["mid"] for x in bit}
+    bek = [x for x in bek if x["mid"] not in kilitli]
+    oz = []
+    for ad in ("%60+", "%45-60", "toplam"):
+        B = [x for x in bit if x["tuttu"] is not None and (ad == "toplam" or x["bant"] == ad)]
+        n = len(B)
+        k = sum((x["oran"] - 1) if x["tuttu"] else -1 for x in B)
+        kv = sum((x["oran"] - 1) * (1 - VERGI) if x["tuttu"] else -1 for x in B)
+        oz.append({"ad": ad, "n": n, "w": sum(1 for x in B if x["tuttu"]),
+                   "yuzde": round(100 * sum(1 for x in B if x["tuttu"]) / n, 1) if n else None,
+                   "ort_oran": round(sum(x["oran"] for x in B) / n, 2) if n else None,
+                   "roi": round(100 * k / n, 1) if n else None, "roi_v": round(100 * kv / n, 1) if n else None,
+                   "gecmis": X1_GECMIS.get(ad)})
+    return {"bekleyen": bek, "biten": [x for x in bit if x["tuttu"] is not None][:80],
+            "oynaniyor": [x for x in bit if x["tuttu"] is None], "oz": oz, "bas": X1_BAS, "esik": int(100 * X1_ESIK)}
+
+
 # ------------------------------------------------------------------ TERS YONTEM: Volkano IY/MS -> MS 1X2 ve IY 1X2 olmasi gereken
 TBANT = (("≥ +%8", lambda d: d >= 0.08), ("+%4 … +%8", lambda d: 0.04 <= d < 0.08), ("+%2 … +%4", lambda d: 0.02 <= d < 0.04),
          ("+%0.5 … +%2", lambda d: 0.005 <= d < 0.02), ("≈ 0 (±%0.5)", lambda d: abs(d) < 0.005),
@@ -185,7 +250,7 @@ def get_page_data():
         c.close()
     secim = sorted([(a, k, x) for a in aday for k, x in a["sec"]], key=lambda t: -t[2]["sapma"])
     return {"aday": aday, "secim": secim, "son": son, "son_eksi": son_eksi, "bias": bias, "son_liste": SON, "hazir": c is not None,
-            "kilit_mac": len({r["mid"] for r in kil})}
+            "kilit_mac": len({r["mid"] for r in kil}), "x1": x1_takip()}
 
 
 def export_json():
@@ -218,4 +283,4 @@ def export_json():
         c.close()
     L = sorted(M.values(), key=lambda m: m["ko"], reverse=True)
     return {"exported_at": ng._iso(ng._now()), "mac_sayisi": len(L), "sonuclu": sum(1 for m in L if m["skor"]),
-            "performans": get_performance(), "ters_performans": ters_perf(), "maclar": L}
+            "performans": get_performance(), "ters_performans": ters_perf(), "x1_takip": x1_takip(), "maclar": L}

@@ -131,7 +131,7 @@ SISTEM_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "
 BOYUT = (1, 2, 3, 4, 5)          # sistem 1-2-3-4-5 / 10
 
 
-def _adaylar(min_dk=20, saat=14):
+def _adaylar(min_dk=20, saat=14, haric=()):
     c = _defter()
     if not c:
         return []
@@ -139,6 +139,8 @@ def _adaylar(min_dk=20, saat=14):
     out = []
     for r in c.execute("SELECT * FROM ht_aday WHERE ko > ? AND ko < ? ORDER BY ko",
                        (ng._iso(now + timedelta(minutes=min_dk)), ng._iso(now + timedelta(hours=saat)))):
+        if r["mid"] in haric:
+            continue
         for k, od, p, adil, dg, kp in json.loads(r["sec"] or "[]"):
             out.append({"mid": r["mid"], "ko": r["ko"], "home": r["home"], "away": r["away"], "lig": r["lig"],
                         "sonuc": k, "oran": od, "p": p, "adil": adil, "deger": dg})
@@ -146,10 +148,10 @@ def _adaylar(min_dk=20, saat=14):
     return out
 
 
-def kur_kupon(min_deger=-9.0, yedek_deger=-9.0):
+def kur_kupon(min_deger=-9.0, yedek_deger=-9.0, haric=()):
     """Her IY/MS sonucu icin (en az bulunandan baslayarak) en olasi + fiyati adil (deger >= min) maci sec,
     her mac bir kez; 10. ayak = kalanlar icinde en yuksek olasilikli secim. Bulunamazsa deger >= yedek ile (isaretli)."""
-    A = _adaylar()
+    A = _adaylar(haric=haric)
     used, legs = set(), []
     say = lambda k, m: sum(1 for x in A if x["sonuc"] == k and x["deger"] >= m and x["mid"] not in used)
     for k in sorted(SON, key=lambda k: say(k, min_deger)):
@@ -216,8 +218,24 @@ def kupon_kaydet(filtre=False):
         return False
     L = _kayitli()
     L.insert(0, {"at": ng._iso(ng._now()), "legs": legs, "hesap": sistem_hesap(legs), "filtre": filtre})
-    json.dump(L[:100], open(SISTEM_FILE, "w"), ensure_ascii=False)
+    json.dump(L[:400], open(SISTEM_FILE, "w"), ensure_ascii=False)
     return True
+
+
+def oto_kaydet():
+    """Otomatik kayit: daha once (ayni turde) kaydedilmis kuponlarda olmayan maclardan 10 ayak dolunca kaydet.
+    Hem saf olasilik hem fiyat filtreli. kelly_tab arka plan dongusunden 5 dk'da bir cagrilir."""
+    L = _kayitli()
+    n = 0
+    for filtre in (False, True):
+        used = {l["mid"] for k in L if bool(k.get("filtre")) == filtre for l in k["legs"]}
+        legs = kur_kupon(0.0, -0.05, haric=used) if filtre else kur_kupon(haric=used)
+        if len(legs) >= 10:
+            L.insert(0, {"at": ng._iso(ng._now()), "legs": legs, "hesap": sistem_hesap(legs), "filtre": filtre, "oto": True})
+            n += 1
+    if n:
+        json.dump(L[:400], open(SISTEM_FILE, "w"), ensure_ascii=False)
+    return n
 
 
 def kayitli_kuponlar():
