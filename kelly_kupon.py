@@ -84,7 +84,7 @@ def main():
     print(f"{len(rows)} mac taraniyor ({bas}-{bit} saat sonrasi), lutfen bekle...", flush=True)
     aday = []
     for r in rows:
-        if re.search(r"\b(u1\d|u2\d|women|reserves?)\b", T._fold((r["home"] or "") + " " + (r["away"] or ""))):
+        if re.search(r"\b(u1\d|u2\d|women|reserves?)\b|\(w\)", T._fold((r["home"] or "") + " " + (r["away"] or ""))):
             continue
         try:
             ko = __import__("datetime").datetime.fromisoformat(r["kickoff_utc"])
