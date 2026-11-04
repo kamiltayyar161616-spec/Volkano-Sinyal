@@ -17,12 +17,12 @@ import sdoran
 import toto_tab as T
 
 KOK = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.join(KOK, "data", "toto_kelly3_cache.db")
+CACHE = os.path.join(KOK, "data", "toto_kelly4_cache.db")
 CIKTI = os.path.join(KOK, "data", "toto_kelly.json.gz")
-BITTI = os.path.join(KOK, "data", "toto_kelly3_bitti")
+BITTI = os.path.join(KOK, "data", "toto_kelly4_bitti")
 BEKLE = 1.5
 PENCERE_DK = 24 * 60          # maca 24 saat kala ve sonrasi (canli ilk dakikalar haric: ko + 0)
-KITAP = {"pin": "Pinnacle", "sbo": "Sbobet", "bf": "Betfair", "crown": "Crown", "b365": "Bet 365"}   # Betfair: borsa, Crown: Asya, Bet365: en yaygin
+KITAP = {"pin": "Pinnacle", "sbo": "Sbobet", "bf": "Betfair", "crown": "Crown", "b365": "Bet 365", "1xbet": "1xBet"}   # Betfair: borsa, Crown: Asya, Bet365: en yaygin
 
 
 def log(*a):

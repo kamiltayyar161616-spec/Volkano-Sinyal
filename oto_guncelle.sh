@@ -22,4 +22,4 @@ if [ -f toto_parametre.py ] && [ -f data/toto_gecmis_bitti ] && [ ! -f data/toto
 # tum bürolarin acilis/kapanis/Kelly verisi (acilis arastirmasi): parametre verisi bittikten sonra
 if [ -f toto_kitap.py ] && [ -f data/toto_param_bitti ] && [ ! -f data/toto_kitap_bitti ]; then (nohup flock -n /tmp/toto_kitap.lock python3 toto_kitap.py >> data/toto_kitap.log 2>&1 9>&- &) ; fi
 # Pinnacle+Sbobet dakika dakika gecmis (Kelly arastirmasi)
-if [ -f toto_kelly.py ] && [ -f data/toto_param.json ] && [ ! -f data/toto_kelly3_bitti ]; then (nohup flock -n /tmp/toto_kelly3.lock python3 toto_kelly.py >> data/toto_kelly.log 2>&1 9>&- &) ; fi
+if [ -f toto_kelly.py ] && [ -f data/toto_param.json ] && [ ! -f data/toto_kelly4_bitti ]; then (nohup flock -n /tmp/toto_kelly4.lock python3 toto_kelly.py >> data/toto_kelly.log 2>&1 9>&- &) ; fi
