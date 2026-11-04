@@ -2,6 +2,7 @@
   topla : python3 m7_arsiv.py topla [ust_id=5183000] [alt_id=5138000]   (yeniden eskiye; kaldigi yerden devam eder)
   durum : python3 m7_arsiv.py durum
   analiz: python3 m7_arsiv.py analiz [büro=SBOBET]
+  iy_doldur  : python3 m7_arsiv.py iy_doldur   (eski kayitlara gol dakikalari -> ilk yari skoru; toplama bitince)
   karsilastir: python3 m7_arsiv.py karsilastir [min_mac=200]   (tüm bürolar + strateji adaylari)
 Kaynaklar (izinli yollar): px-odds.7mdt.com/DataByLive2/<id>_ou.js / _ah.js, data.7mdt.com/goaldata/en/<id>.js
 Mac numaralari mac eklenince verilir (tarih sirali degil); bos numaralar 'bos' tablosuna yazilir, tekrar denenmez."""
@@ -35,7 +36,37 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS mac (id INTEGER PRIMARY KEY, ta TEXT, tb TEXT, lig TEXT, ko TEXT, skor TEXT,
                  skor_kaynak TEXT, ou TEXT, ah TEXT, at TEXT)""")
     c.execute("CREATE TABLE IF NOT EXISTS bos (id INTEGER PRIMARY KEY, kod INTEGER)")
+    if "goller" not in {r[1] for r in c.execute("PRAGMA table_info(mac)")}:
+        c.execute("ALTER TABLE mac ADD COLUMN goller TEXT")     # [[dakika, skor], ...] -> ilk yari skoru
     return c
+
+
+def goller_oku(bg):
+    tm = re.search(r"d_tm\s*=\s*\[([^\]]*)\]", bg)
+    bf = re.search(r"d_bf\s*=\s*\[([^\]]*)\]", bg)
+    if not tm or not bf:
+        return None
+    dk = re.findall(r"'([^']*)'", tm.group(1))
+    sk = re.findall(r"'([^']*)'", bf.group(1))
+    return [[d, s] for d, s in zip(dk, sk)]
+
+
+def iy_doldur():
+    """eski kayitlar icin goaldata'dan gol dakikalari (ilk yari skoru icin)"""
+    c = db()
+    ids = [r[0] for r in c.execute("SELECT id FROM mac WHERE goller IS NULL")]
+    print(len(ids), "mac icin gol dakikasi cekilecek", flush=True)
+    for j, i in enumerate(ids):
+        sg_, bg = get(f"https://data.7mdt.com/goaldata/en/{i}.js")
+        time.sleep(BEKLE)
+        g = goller_oku(bg) if sg_ == 200 else None
+        c.execute("UPDATE mac SET goller=? WHERE id=?", (json.dumps(g) if g is not None else "[]", i))
+        if j % 50 == 0:
+            c.commit()
+            print(f"{datetime.now():%H:%M} {j}/{len(ids)}", flush=True)
+    c.commit()
+    c.close()
+    print("BITTI", flush=True)
 
 
 def t8(s):
@@ -117,9 +148,10 @@ def topla(ust, alt):
             ss = [v["son_skor"] for v in list(ou.values()) + list(ah.values()) if v.get("son_skor")]
             if ss:
                 skor, kay = max(ss, key=lambda s: sum(int(x) for x in s.split("-")) if re.match(r"^\d+-\d+$", s) else -1), "oran"
-        c.execute("INSERT OR REPLACE INTO mac VALUES (?,?,?,?,?,?,?,?,?,?)",
+        gl = goller_oku(bg)
+        c.execute("INSERT OR REPLACE INTO mac VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                   (i, g("d_ta"), g("d_tb"), g("d_mn"), ko or ko2, skor, kay, json.dumps(ou), json.dumps(ah),
-                   datetime.now(timezone.utc).isoformat()[:19]))
+                   datetime.now(timezone.utc).isoformat()[:19], json.dumps(gl) if gl is not None else None))
         n_ok += 1
         if n_ok % 25 == 0:
             c.commit()
@@ -261,6 +293,8 @@ if __name__ == "__main__":
         durum()
     elif a[0] == "topla":
         topla(int(a[1]) if len(a) > 1 else 5183000, int(a[2]) if len(a) > 2 else 5138000)
+    elif a[0] == "iy_doldur":
+        iy_doldur()
     elif a[0] == "karsilastir":
         karsilastir(int(a[1]) if len(a) > 1 else 200)
     elif a[0] == "analiz":
