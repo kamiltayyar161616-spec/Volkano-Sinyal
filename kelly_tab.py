@@ -15,6 +15,10 @@ import nowgoal as ng
 
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "kelly.db")
 ESIK, KARSI = 0.85, 1.00
+# seviyeler (en sıkıdan gevşeğe): sinyal, uyduğu en sıkı seviyeyle kaydedilir. Geçmiş test (4000 maç, son 30 dk, her seviye kendi dilimi):
+SEVIYE = (("A", "güçlü", 0.85, 1.00), ("B", "orta", 0.88, 1.00), ("C", "geniş", 0.90, 0.97))
+GECMIS_SEV = {"A": {"n": 20, "yuzde": 60.0, "bekl": 35.8}, "B": {"n": 24, "yuzde": 62.5, "bekl": 43.3},
+              "C": {"n": 95, "yuzde": 37.9, "bekl": 38.0}}
 PENCERE = (3, 30)            # maca kalan dakika
 CYCLE_SEC = 300
 BEKLE = 1.5
@@ -36,6 +40,8 @@ def _db():
         c.execute("ALTER TABLE sinyal ADD COLUMN ou7m TEXT")
     if "canli7m" not in have:
         c.execute("ALTER TABLE sinyal ADD COLUMN canli7m TEXT")
+    if "seviye" not in have:
+        c.execute("ALTER TABLE sinyal ADD COLUMN seviye TEXT DEFAULT 'A'")
     c.execute("""CREATE TABLE IF NOT EXISTS yakin (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, mac TEXT, lig TEXT, taraf INTEGER,
                  pin TEXT, kel_pin TEXT, kel_sbo TEXT, piyasa TEXT)""")
     return c
@@ -107,15 +113,16 @@ def run_cycle():
         if min(range(3), key=lambda q: ks[q]) != i:
             continue
         mac, lig = f"{r['home']} - {r['away']}", r["league_vk"] or r["league_ng"] or ""
-        if kp[i] <= ESIK and ks[i] <= ESIK and max(kp) >= KARSI and max(ks) >= KARSI:
+        sev = next((ad for ad, _, e, kk in SEVIYE if kp[i] <= e and ks[i] <= e and max(kp) >= kk and max(ks) >= kk), None)
+        if sev:
             ko = datetime.fromisoformat(r["kickoff_utc"])
-            k.execute("""INSERT OR IGNORE INTO sinyal (mid, at, ko, dk, mac, lig, taraf, pin, sbo, kel_pin, kel_sbo, piyasa, n_buro)
-                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            k.execute("""INSERT OR IGNORE INTO sinyal (mid, at, ko, dk, mac, lig, taraf, pin, sbo, kel_pin, kel_sbo, piyasa, n_buro, seviye)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (r["mid"], ng._iso(now), r["kickoff_utc"], round((ko - now).total_seconds() / 60, 1), mac, lig, i,
                        json.dumps(d["kit"]["Pinnacle"]), json.dumps(d["kit"]["Sbobet"]), json.dumps(kp), json.dumps(ks),
-                       json.dumps([round(x, 4) for x in pm]), d["n"]))
+                       json.dumps([round(x, 4) for x in pm]), d["n"], sev))
             n_sin += 1
-        elif kp[i] <= 0.88 and ks[i] <= 0.88:            # yakin: kurala uymayan ama yaklasan (bilgi icin)
+        elif kp[i] <= 0.92 and ks[i] <= 0.92:            # yakin: hicbir seviyeye uymayan ama yaklasan (bilgi icin)
             k.execute("INSERT OR REPLACE INTO yakin VALUES (?,?,?,?,?,?,?,?,?,?)",
                       (r["mid"], ng._iso(now), r["kickoff_utc"], mac, lig, i, json.dumps(d["kit"]["Pinnacle"]),
                        json.dumps(kp), json.dumps(ks), json.dumps([round(x, 4) for x in pm])))
@@ -328,7 +335,8 @@ def _kayit(r, sk):
     s = sk.get(r["mid"])
     x = {"mid": r["mid"], "ko": r["ko"], "mac": r["mac"], "lig": r["lig"], "taraf": "1X2"[i], "i": i, "pin": pin,
          "kp": kp, "ks": ks, "pm": pm, "oran": pin[i], "bekl": round(100 * pm[i]), "skor": None, "tuttu": None,
-         "dk": r["dk"] if "dk" in r.keys() else None, "fav": i == max(range(3), key=lambda q: pm[q])}
+         "dk": r["dk"] if "dk" in r.keys() else None, "fav": i == max(range(3), key=lambda q: pm[q]),
+         "seviye": (r["seviye"] if "seviye" in r.keys() else None) or ("A" if "dk" in r.keys() else None)}
     try:
         x["m7"] = json.loads(r["ou7m"]) if "ou7m" in r.keys() and r["ou7m"] else None
     except Exception:
@@ -415,13 +423,23 @@ def get_page_data():
           "bekl": round(sum(x["pm"][x["i"]] for x in B) * 100 / n, 1) if n else None,
           "roi": round(100 * sum((x["oran"] - 1) if x["tuttu"] else -1 for x in B) / n, 1) if n else None,
           "kar": round(sum((x["oran"] - 1) if x["tuttu"] else -1 for x in B), 2)}
+    sev = []
+    for ad, isim, e, kk in SEVIYE:
+        Bs = [x for x in B if x["seviye"] == ad]
+        m = len(Bs)
+        sev.append({"ad": ad, "isim": isim, "esik": e, "karsi": kk, "n": sum(1 for x in L if x["seviye"] == ad), "bitti": m,
+                    "tutan": sum(1 for x in Bs if x["tuttu"]),
+                    "yuzde": round(100 * sum(1 for x in Bs if x["tuttu"]) / m, 1) if m else None,
+                    "bekl": round(sum(x["pm"][x["i"]] for x in Bs) * 100 / m, 1) if m else None,
+                    "roi": round(100 * sum((x["oran"] - 1) if x["tuttu"] else -1 for x in Bs) / m, 1) if m else None,
+                    "gecmis": GECMIS_SEV[ad]})
     yk = [_kayit(r, sk) for r in Y]
     yb = [x for x in yk if x["tuttu"] is not None]
     oy = {"bitti": len(yb), "tutan": sum(1 for x in yb if x["tuttu"]),
           "bekl": round(sum(x["pm"][x["i"]] for x in yb) * 100 / len(yb), 1) if yb else None}
     now = ng._iso(ng._now())
     return {"bekleyen": [x for x in L if x["tuttu"] is None], "biten": B, "oz": oz, "gecmis": GECMIS,
-            "yakin": yk, "oy": oy, "durum": _last, "cizgiler": CIZGI,
+            "yakin": yk, "oy": oy, "durum": _last, "cizgiler": CIZGI, "sev": sev,
             "ust": {"sinyal": _ust_ozet(B), "yakin": _ust_ozet(yb), "tum": _taban()}, "esik": ESIK, "karsi": KARSI, "pencere": PENCERE, "now": now}
 
 
