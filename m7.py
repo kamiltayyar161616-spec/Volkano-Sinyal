@@ -133,3 +133,23 @@ def canli():
         if time.time() - _canli["at"] > 180:
             return []
         return list(_canli["maclar"])
+
+
+def bitenler():
+    """bugunku 7M programinda biten (durum 4) ve adi kayitli maclar -> [{event_home_team, event_away_team, event_status, event_final_result}]
+    (results_checker icin NowGoal'a ek kaynak; yeni ad cekmez)"""
+    with _lock:
+        P = dict(_canli.get("program") or {})
+    if not P:
+        try:
+            P = program()
+        except Exception:
+            return []
+    ids = [i for i, m in P.items() if m["durum"] == 4]
+    if not ids:
+        return []
+    c = _db()
+    ad_ = {r[0]: (r[1], r[2]) for r in c.execute(f"SELECT id, ta, tb FROM ad WHERE id IN ({','.join(map(str, ids))})")}
+    c.close()
+    return [{"event_home_team": ad_[i][0], "event_away_team": ad_[i][1], "event_status": "Finished",
+             "event_final_result": f"{P[i]['ev']} - {P[i]['dep']}", "ko": P[i]["ko"]} for i in ids if i in ad_ and ad_[i][0]]

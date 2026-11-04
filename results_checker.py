@@ -2,12 +2,7 @@
 Bitmiş maçların skorunu çekip picks tablosunu günceller.
 25 Eki 2026'dan beri kaynak: SAHA'nın NowGoal veritabanı (AllSports deneme anahtarı bitti).
 
-Kullanım: ortam değişkeni ALLSPORTS_API_KEY set edilmeli.
-    export ALLSPORTS_API_KEY="senin_key'in"
-
-Not: Kullanıcının key'i 17 Ağustos 2026'da sona eriyor (deneme/trial key) —
-o tarihten sonra yeni bir key alınmadıkça sonuç kontrolü sessizce durur
-(hata vermez, sadece "pending" kalır).
+Kasım 2026: ek kaynak 7M (m7.bitenler: bugünün biten maçları, adı kayıtlı olanlar). AllSportsAPI anahtarı GEREKMEZ.
 """
 
 import os
@@ -71,6 +66,13 @@ def _fetch_fixtures_by_date(date_str: str) -> list:
             pass
         for h, a in names:
             out.append({"event_home_team": h, "event_away_team": a, "event_status": st, "event_final_result": res})
+    try:                                    # 7M: NowGoal'da olmayan/geciken sonuclar icin ek kaynak (bugunun biten maclari)
+        import m7
+        for x in m7.bitenler():
+            if x.get("ko") and day - timedelta(hours=6) <= x["ko"] < day + timedelta(hours=30):
+                out.append({k: v for k, v in x.items() if k != "ko"})
+    except Exception:
+        pass
     return out
 
 
