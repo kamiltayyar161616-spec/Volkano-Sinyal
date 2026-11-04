@@ -6,7 +6,17 @@
 <style>
   .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:9.5px; }
   .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); } .tt .l{ text-align:left; }
-  .muted{ color:var(--chalk-faint); font-size:9px; } .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .muted{ color:var(--chalk-faint); font-size:9px; }
+  .dk-ust{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .dk-ad{ min-width:0; flex:1; } .dk-sag{ text-align:right; white-space:nowrap; flex-shrink:0; }
+  .dk-sag .tag{ margin:0 0 4px; }
+  .dk-g{ display:grid; grid-template-columns:62px 1fr 1fr 58px; gap:3px; margin-top:9px; font-size:10.5px; }
+  .dk-g > div{ background:var(--navy-deep); border-radius:6px; padding:4px 3px; text-align:center; line-height:1.25; }
+  .dk-g > .h{ background:none; color:var(--chalk-faint); font-size:8.5px; padding:0 2px 1px; }
+  .dk-g > .l{ background:none; color:var(--chalk-dim); text-align:left; font-size:9.5px; display:flex; align-items:center; }
+  .dk-g small{ display:block; font-size:8.5px; color:var(--chalk-faint); white-space:nowrap; }
+  .dk-g .dk-h{ display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:700; }
+  .dk-alt{ margin-top:8px; font-size:10px; color:var(--chalk-dim); } .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
   .ng-dl{ display:flex; gap:8px; margin:12px 16px 0; }
   .ng-dl a{ flex:1; text-align:center; padding:10px 6px; text-decoration:none; border-radius:10px;
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:11.5px;
@@ -48,17 +58,49 @@
 
 {% block content %}
 {% set ds = d.desen %}
-<h2 class="section">📐 ÇİZGİ DESENİ (yeni, ileriye dönük takip)</h2>
-<div class="section-sub">NowGoal piyasa çizgisi + Asya handikabı. Orta favori (handikap 0.5–1.25) varken: çizgi <b>≤ 2.50 → ÜST</b>, çizgi <b>2.75–3.00 → ALT</b>. Geçmiş (1311 maç): ÜST %58.5 (241 maç), ALT %54.4 (262 maç); piyasa çizgisi doğruysa %50 olmalı. Çeyrek çizgide yarım kazanç/iade 0.5 sayılır. Takip başlangıcı: {{ ds.bas | localdatetime }}. <b>ROI</b>: maç başlayınca 7M'den Pinnacle'ın (yoksa Sbobet / Bet365) maç başı alt/üst çizgisi ve oranı alınır; her seçime 1 birim, Asya kuralı (yarım kazanç / iade / yarım kayıp) ile hesaplanır. 📼 = maç içi alt/üst ve handikap oran serisi kaydedildi (canlı bahis testi için, JSON indirmede).</div>
+<h2 class="section">📐 ÇİZGİ DESENİ (ileriye dönük takip)</h2>
+<div class="section-sub">NowGoal piyasa çizgisi + Asya handikabı. Orta favori (handikap 0.5–1.25) varken: çizgi <b>≤ 2.50 → ÜST</b>, çizgi <b>2.75–3.00 → ALT</b>. Geçmiş (1311 maç): ÜST %58.5, ALT %54.4; çizgi doğru olsaydı %50 olurdu. Takip başlangıcı: {{ ds.bas | localdatetime }}.</div>
 <table class="tt"><tr><th class="l">seçim</th><th>maç</th><th>tutan</th><th>ROI</th><th>1.5 üst</th><th>2.5 üst</th><th class="l">geçmiş</th></tr>
-{% for o in ds.oz %}<tr><td class="l"><b>{{ 'ÜST' if o.taraf == 'UST' else 'ALT' }}</b></td><td>{{ o.n }}</td><td>{% if o.n %}{{ o.puan }}/{{ o.n }} <b class="{{ 'pos' if o.yuzde > 50 else 'neg' }}">%{{ o.yuzde }}</b>{% else %}—{% endif %}</td>
-<td>{% if o.roi is not none %}<b class="{{ 'pos' if o.roi > 0 else 'neg' }}">{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}</b><br><span class="muted">{{ '+' if o.kar > 0 else '' }}{{ o.kar }} br · {{ o.n_oran }} maç</span>{% else %}—{% endif %}</td>
+{% for o in ds.oz %}<tr><td class="l"><b>{{ 'ÜST' if o.taraf == 'UST' else 'ALT' }}</b></td><td>{{ o.n }}</td><td>{% if o.n %}<b class="{{ 'pos' if o.yuzde > 50 else 'neg' }}">%{{ o.yuzde }}</b>{% else %}—{% endif %}</td>
+<td>{% if o.roi is not none %}<b class="{{ 'pos' if o.roi > 0 else 'neg' }}">{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}</b><br><span class="muted">{{ '+' if o.kar > 0 else '' }}{{ o.kar }} br</span>{% else %}—{% endif %}</td>
 <td>{% if o.n %}%{{ o.u15 }}{% else %}—{% endif %}</td><td>{% if o.n %}%{{ o.u25 }}{% else %}—{% endif %}</td><td class="l"><span class="muted">{{ o.gecmis.n }} maç, %{{ o.gecmis.yuzde }}</span></td></tr>{% endfor %}</table>
-<table class="tt"><tr><th class="l">maç</th><th>çizgi</th><th>handikap</th><th>seçim</th><th>sonuç</th></tr>
-{% for x in ds.bekleyen + ds.biten %}<tr><td class="l"><b>{{ x.mac }}</b><br><span class="muted">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %}</span></td>
-<td>{{ x.cizgi }}</td><td>{{ x.ah }}</td><td><b>{{ x.cizgi }} {{ 'ÜST' if x.taraf == 'UST' else 'ALT' }}</b>{% if x.oran7 %}<br><span class="muted">{{ {'pin':'Pinnacle','sbo':'Sbobet','b365':'Bet365'}[x.oran7.buro] }} {{ x.oran7.cizgi }}: Ü {{ x.oran7.ust }} / A {{ x.oran7.alt }}{% if x.canli_var %} · 📼{% endif %}</span>{% elif x.oran_durum %}<br><span class="muted">7M: {{ x.oran_durum }}</span>{% endif %}</td>
-<td>{% if x.skor %}<span class="tag" style="color:{{ 'var(--turf-bright)' if x.sonuc > 0.5 else 'var(--clay)' if x.sonuc < 0.5 else 'inherit' }}">{{ x.skor }} · {{ 'tuttu' if x.sonuc == 1 else 'yarım' if x.sonuc == 0.75 else 'iade' if x.sonuc == 0.5 else 'yarım kayıp' if x.sonuc == 0.25 else 'yattı' }}</span><br><span class="muted">1.5{{ 'Ü' if x.u15 else 'A' }} · 2.5{{ 'Ü' if x.u25 else 'A' }}{% if x.kar is defined and x.kar is not none %} · <b class="{{ 'pos' if x.kar > 0 else 'neg' if x.kar < 0 else '' }}">{{ '+' if x.kar > 0 else '' }}{{ x.kar }} br</b>{% endif %}</span>{% else %}<span class="muted">bekliyor</span>{% endif %}</td></tr>
-{% else %}<tr><td colspan="5" class="muted">Henüz desene uyan maç yok (önümüzdeki 12 saat taranıyor).</td></tr>{% endfor %}</table>
+<div class="section-sub"><b>💰 Para yönü</b> (7M, maç öncesi): Pinnacle'ın açılıştan maç başına gol beklentisi değişimi (çizgi + üst/alt oranından). ≥ +{{ ds.esik }} gol = <b>üste para</b>, ≤ −{{ ds.esik }} = <b>alta para</b>. Desenle aynı yöne para giriyorsa daha güçlü mü, burada görülecek.</div>
+<table class="tt"><tr><th class="l">desen + para</th><th>maç</th><th>tutan</th><th>ROI</th></tr>
+{% for g in ds.para %}<tr><td class="l">{{ g.ad }}</td><td>{{ g.n }}</td><td>{% if g.n %}<b class="{{ 'pos' if g.yuzde > 50 else 'neg' }}">%{{ g.yuzde }}</b>{% else %}—{% endif %}</td><td>{% if g.roi is not none %}<span class="{{ 'pos' if g.roi > 0 else 'neg' }}">{{ '+' if g.roi > 0 else '' }}%{{ g.roi }}</span>{% else %}—{% endif %}</td></tr>{% endfor %}</table>
+<div class="section-sub">Kartlar: <b>açılış → şimdi</b> (başlamış maçta: maç başı) her büronun ana alt/üst çizgisi, üst / alt oranı. Ok yönü = gol beklentisinin değişimi. Maç başlayana kadar 15 dakikada bir güncellenir. ROI: maç başı Pinnacle (yoksa Sbobet / Bet365) oranıyla 1 birim, Asya kuralı (yarım kazanç / iade). 📼 = maç içi oran serisi kaydedildi.</div>
+
+{% macro hk(v) %}{% if v is not none %}<span class="{{ 'pos' if v >= ds.esik else 'neg' if v <= -ds.esik else 'muted' }}">{{ '▲' if v >= ds.esik else '▼' if v <= -ds.esik else '•' }} {{ '+' if v > 0 else '' }}{{ '%.2f'|format(v) }}</span>{% else %}—{% endif %}{% endmacro %}
+{% macro dkart(x) %}
+<div class="ng-card dk{{ ' hot' if x.uyum else '' }}">
+  <div class="dk-ust">
+    <div class="dk-ad"><div class="ng-teams">{{ x.mac }}</div>
+      <div class="ng-meta">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %}</div>
+      <div class="ng-meta">NowGoal çizgi <b>{{ x.cizgi }}</b> · handikap {{ x.ah }}</div></div>
+    <div class="dk-sag"><span class="tag a">{{ x.cizgi }} {{ 'ÜST' if x.taraf == 'UST' else 'ALT' }}</span>
+      {% if x.skor %}<br><span class="tag {{ 'w' if x.sonuc > 0.5 else 'l' if x.sonuc < 0.5 else '' }}">{{ x.skor }} · {{ 'tuttu' if x.sonuc == 1 else 'yarım +' if x.sonuc == 0.75 else 'iade' if x.sonuc == 0.5 else 'yarım −' if x.sonuc == 0.25 else 'yattı' }}</span>
+      {% elif x.canli %}<br><span class="tag l">🔴 {{ x.canli.skor }} · {{ x.canli.dk }}'</span>{% endif %}</div>
+  </div>
+  {% if x.om %}
+  <div class="dk-g">
+    <div class="h"></div><div class="h">açılış</div><div class="h">{{ 'maç başı' if x.om.son else 'şimdi' }}</div><div class="h">gol bekl.</div>
+    {% for ad, v in x.om.satir %}
+    <div class="l">{{ ad }}</div>
+    <div><b>{{ v.ilk[0] }}</b><small>Ü {{ '%.2f'|format(v.ilk[1]) }} · A {{ '%.2f'|format(v.ilk[2]) }}</small></div>
+    <div><b>{{ v.son[0] }}</b><small>Ü {{ '%.2f'|format(v.son[1]) }} · A {{ '%.2f'|format(v.son[2]) }}</small></div>
+    <div class="dk-h">{{ hk(v.h) }}</div>
+    {% endfor %}
+    {% if x.om.ort %}<div class="l">{{ x.om.n_buro }} büro ort.</div><div><b>{{ x.om.ort.ilk }}</b><small>gol</small></div><div><b>{{ x.om.ort.son }}</b><small>gol</small></div><div class="dk-h">{{ hk(x.om.ort.h) }}</div>{% endif %}
+  </div>
+  {% if x.para %}<div class="dk-alt">💰 Para: <b class="{{ 'pos' if x.para == x.taraf else 'neg' if x.para != 'SABIT' else '' }}">{{ 'ÜSTE' if x.para == 'UST' else 'ALTA' if x.para == 'ALT' else 'sabit' }}</b> ({{ '+' if x.para_h > 0 else '' }}{{ x.para_h }} gol){% if x.uyum is not none %} · desenle {{ 'AYNI YÖN ✓' if x.uyum else 'TERS ✗' }}{% endif %}</div>{% endif %}
+  {% elif x.om_durum %}<div class="dk-alt muted">7M: {{ 'eşleşmedi' if x.om_durum == 'eslesmedi' else x.om_durum }}</div>
+  {% else %}<div class="dk-alt muted">7M alt/üst verisi birkaç dakika içinde gelecek</div>{% endif %}
+  {% if x.skor %}<div class="dk-alt">⚽ {{ x.gol }} gol · 1.5{{ 'Ü ✓' if x.u15 else 'A' }} · 2.5{{ 'Ü ✓' if x.u25 else 'A' }}{% if x.oyna %} · {{ x.oyna }} → <b class="{{ 'pos' if x.kar > 0 else 'neg' if x.kar < 0 else '' }}">{{ '+' if x.kar > 0 else '' }}{{ x.kar }} br</b>{% endif %}{% if x.canli_var %} · 📼{% endif %}</div>{% endif %}
+</div>
+{% endmacro %}
+<h2 class="section">⏳ BEKLEYEN / CANLI ({{ ds.bekleyen|length }})</h2>
+{% for x in ds.bekleyen %}{{ dkart(x) }}{% else %}<div class="section-sub">Önümüzdeki 12 saatte desene uyan maç yok.</div>{% endfor %}
+<h2 class="section">🧾 SONUÇLANAN ({{ ds.biten|length }})</h2>
+{% for x in ds.biten %}{{ dkart(x) }}{% else %}<div class="section-sub">Henüz sonuçlanan maç yok.</div>{% endfor %}
 <div class="section-sub">Aşağıdaki eski "değer" kuponu (Volkano vs adil oran) durduruldu: 105 maçta piyasanın beklediğinden az tuttu. Kayıtları kıyas için duruyor.</div>
 
 {% if not d.hazir %}

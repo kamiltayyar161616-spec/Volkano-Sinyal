@@ -11,6 +11,7 @@ import json
 import re
 import os
 import sqlite3
+import time
 from datetime import timedelta
 
 import nowgoal as ng
@@ -242,6 +243,115 @@ def desen_doldur():
     d.close()
 
 
+# ---- 7M MAC ONCESI ALT/UST (16 büro: acilis -> simdi / mac basi), desen maclari icin
+M7_KISA = {"Pinnacle Sports": "Pinnacle", "SBOBET": "Sbobet", "Bet365": "Bet365"}
+GOSTER = ("Pinnacle", "Sbobet", "Bet365")
+PARA_ESIK = 0.08          # gol beklentisi farki: >= +0.08 ust'e para, <= -0.08 alt'a para
+
+
+def _odb():
+    c = _ddb()
+    c.execute("""CREATE TABLE IF NOT EXISTS onmac (mid INTEGER PRIMARY KEY, at TEXT, id7m INTEGER, durum TEXT,
+                 son INTEGER DEFAULT 0, veri TEXT)""")
+    return c
+
+
+def gol_bekl(L, u, a):
+    """ana cizgi + ust/alt orani -> yaklasik gol beklentisi (0.25 cizgi ~ %7.5 ust olasiligi)"""
+    try:
+        pu = (1 / u) / ((1 / u) + (1 / a))
+    except (TypeError, ZeroDivisionError):
+        return None
+    return round(L + (pu - 0.5) * 3.33, 3)
+
+
+def m7_ou_tum(i):
+    """7M _ou.js -> {büro: [(t_utc, cizgi, ust, alt), ...]} eskiden yeniye"""
+    import kelly_tab as K
+    b = K._get7(K.M7_OU.format(id=i))
+    out = {}
+    for blk in re.split(r"p\['\d+'\]\s*=\s*", b)[1:]:
+        nm = re.search(r"'name':'([^']*)'", blk)
+        if not nm:
+            continue
+        ad = M7_KISA.get(nm.group(1), nm.group(1))
+        pts = []
+        for p1, p2, p3, dt in re.findall(r"'p1':'([^']*)','p2':'([^']*)','p3':'([^']*)','dt':'([^']*)'", blk):
+            t = K._t8(dt)
+            try:
+                pts.append((t, float(p3), float(p1), float(p2)))
+            except (ValueError, TypeError):
+                continue
+        pts = sorted([x for x in pts if x[0]], key=lambda x: x[0])
+        if pts:
+            out[ad] = pts
+    return out
+
+
+def onmac_ozet(seri, sinir):
+    """sinir (mac basi ya da simdi) oncesi noktalar -> {b: {buro: {ilk, son, n}}, ort: {ilk, son, n}, pin, ort_h}"""
+    B, ei, es = {}, [], []
+    for ad, pts in seri.items():
+        P = [x for x in pts if x[0] <= sinir]
+        if not P:
+            continue
+        ilk, son = P[0], P[-1]
+        g1, g2 = gol_bekl(*ilk[1:]), gol_bekl(*son[1:])
+        B[ad] = {"ilk": [ilk[1], ilk[2], ilk[3]], "son": [son[1], son[2], son[3]], "n": len(P) - 1,
+                 "g1": g1, "g2": g2, "h": round(g2 - g1, 3) if g1 is not None and g2 is not None else None}
+        if g1 is not None and g2 is not None:
+            ei.append(g1)
+            es.append(g2)
+    ort = {"ilk": round(sum(ei) / len(ei), 2), "son": round(sum(es) / len(es), 2), "n": len(ei),
+           "h": round(sum(es) / len(es) - sum(ei) / len(ei), 3)} if ei else None
+    pin = B.get("Pinnacle", {}).get("h")
+    return {"b": B, "ort": ort, "pin": pin, "hareket": pin if pin is not None else (ort["h"] if ort else None)}
+
+
+def desen_onmac_doldur(limit=30):
+    """desen maclari: mac basina kadar 15 dk'da bir 7M alt/ust (16 büro); mac basladiktan sonra bir kez 'mac basi' kaydi."""
+    import kelly_tab as K
+    from datetime import datetime
+    now = ng._now()
+    with ng._db_lock:
+        c = ng._conn()
+        rows = c.execute("""SELECT mid, home, away, kickoff_utc, ou_son, ah_son FROM ng_match
+                            WHERE kickoff_utc > ? AND kickoff_utc BETWEEN ? AND ? AND ou_son IS NOT NULL AND home IS NOT NULL""",
+                         (DESEN_BAS, ng._iso(now - timedelta(hours=6)), ng._iso(now + timedelta(hours=12)))).fetchall()
+        c.close()
+    d = _odb()
+    R = {r["mid"]: dict(r) for r in d.execute("SELECT mid, at, id7m, durum, son FROM onmac")}
+    n = 0
+    for r in sorted(rows, key=lambda x: x["kickoff_utc"]):
+        if n >= limit or not desen_secim(r["ou_son"], r["ah_son"]):
+            continue
+        ko = datetime.fromisoformat(r["kickoff_utc"])
+        e = R.get(r["mid"])
+        if e and (e["son"] or e["durum"] == "eslesmedi" and e["at"] > ng._iso(now - timedelta(hours=1))):
+            continue
+        basladi = now >= ko
+        if e and not basladi and e["at"] > ng._iso(now - timedelta(minutes=15)):
+            continue
+        n += 1
+        try:
+            i = e["id7m"] if e and e["id7m"] else None
+            if not i:
+                b = K.m7_bul(r["home"], r["away"], ko)
+                if not b:
+                    d.execute("INSERT OR REPLACE INTO onmac (mid, at, durum) VALUES (?,?,?)", (r["mid"], ng._iso(now), "eslesmedi"))
+                    d.commit()
+                    continue
+                i = b[1]
+            oz = onmac_ozet(m7_ou_tum(i), min(now, ko))
+            d.execute("INSERT OR REPLACE INTO onmac VALUES (?,?,?,?,?,?)",
+                      (r["mid"], ng._iso(now), i, "tamam" if oz["b"] else "veri yok", 1 if basladi else 0, json.dumps(oz)))
+            d.commit()
+            time.sleep(0.4)
+        except Exception:
+            continue
+    d.close()
+
+
 def _kar(s, o):
     """Asya alt/ust kazanci: s = 1 / 0.75 / 0.5 / 0.25 / 0 -> birim"""
     return (o - 1) * max(0.0, (s - 0.5) * 2) - max(0.0, (0.5 - s) * 2)
@@ -288,6 +398,34 @@ def desen():
             x["kar"] = round(_kar(_desen_sonuc(x["gol"], L, x["taraf"]), od), 2)
             x["oyna"] = f"{L} {'Ü' if x['taraf'] == 'UST' else 'A'} @ {od:.2f}"
         x["canli_var"] = bool(o and o.get("canli"))
+    try:
+        d = _odb()
+        OM = {r["mid"]: dict(r) for r in d.execute("SELECT * FROM onmac")}
+        d.close()
+    except Exception:
+        OM = {}
+    try:
+        import m7
+        CM = {m["id"]: m for m in m7.canli()}
+    except Exception:
+        CM = {}
+    for x in bek + bit:
+        e = OM.get(x["mid"])
+        x["om_durum"] = e["durum"] if e else None
+        x["om"] = None
+        x["para"] = None
+        if e and e["durum"] == "tamam" and e["veri"]:
+            v = json.loads(e["veri"])
+            satir = [(ad, v["b"][ad]) for ad in GOSTER if ad in v["b"]]
+            x["om"] = {"satir": satir, "ort": v.get("ort"), "son": bool(e["son"]), "at": e["at"], "n_buro": len(v["b"])}
+            h = v.get("hareket")
+            if h is not None:
+                x["para_h"] = round(h, 2)
+                x["para"] = "UST" if h >= PARA_ESIK else "ALT" if h <= -PARA_ESIK else "SABIT"
+                x["uyum"] = None if x["para"] == "SABIT" else x["para"] == x["taraf"]
+        i7 = (e or {}).get("id7m") or ((x.get("oran7") or {}).get("id7m"))
+        if i7 in CM and x["skor"] is None:
+            x["canli"] = {"skor": CM[i7]["skor"], "dk": CM[i7]["dk"]}
     bek.sort(key=lambda x: x["ko"])
     bit.sort(key=lambda x: x["ko"], reverse=True)
     oz = []
@@ -302,7 +440,19 @@ def desen():
                    "kar": round(sum(x["kar"] for x in B if x.get("kar") is not None), 2),
                    "roi": round(100 * sum(x["kar"] for x in B if x.get("kar") is not None) / max(1, sum(1 for x in B if x.get("kar") is not None)), 1)
                           if any(x.get("kar") is not None for x in B) else None})
-    return {"bekleyen": bek, "biten": bit[:100], "oz": oz, "bas": DESEN_BAS}
+    def grup(ad, B):
+        n = len(B)
+        k = [x["kar"] for x in B if x.get("kar") is not None]
+        return {"ad": ad, "n": n, "yuzde": round(100 * sum(x["sonuc"] for x in B) / n, 1) if n else None,
+                "roi": round(100 * sum(k) / len(k), 1) if k else None, "n_oran": len(k)}
+    P = [x for x in bit if x.get("para")]
+    para = [grup("ÜST + para üste", [x for x in P if x["taraf"] == "UST" and x["para"] == "UST"]),
+            grup("ÜST + para sabit", [x for x in P if x["taraf"] == "UST" and x["para"] == "SABIT"]),
+            grup("ÜST + para alta (ters)", [x for x in P if x["taraf"] == "UST" and x["para"] == "ALT"]),
+            grup("ALT + para alta", [x for x in P if x["taraf"] == "ALT" and x["para"] == "ALT"]),
+            grup("ALT + para sabit", [x for x in P if x["taraf"] == "ALT" and x["para"] == "SABIT"]),
+            grup("ALT + para üste (ters)", [x for x in P if x["taraf"] == "ALT" and x["para"] == "UST"])]
+    return {"bekleyen": bek, "biten": bit[:100], "oz": oz, "bas": DESEN_BAS, "para": para, "esik": PARA_ESIK}
 
 
 def get_page_data():

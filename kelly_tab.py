@@ -139,6 +139,7 @@ def run_cycle():
     try:
         import altust
         altust.desen_doldur()
+        altust.desen_onmac_doldur()
     except Exception as e:
         _last["desen"] = str(e)[:100]
     try:
