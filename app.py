@@ -39,6 +39,7 @@ import altust
 import htft_tab
 import iyv_tab
 import toto_tab
+import kelly_tab
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -403,6 +404,19 @@ def toto_kelly_indir():
     return send_file(p, mimetype="application/gzip", as_attachment=True, download_name="toto_kelly.json.gz")
 
 
+@app.route("/kelly")
+def kelly_page():
+    return render_template("kelly.html", d=kelly_tab.get_page_data(), active_page="kelly")
+
+
+@app.route("/kelly/indir")
+def kelly_indir():
+    import json as _json
+    from flask import Response
+    body = _json.dumps(kelly_tab.export_json(), ensure_ascii=False, default=str)
+    return Response(body, mimetype="application/json", headers={"Content-Disposition": "attachment; filename=kelly_veri.json"})
+
+
 @app.route("/toto/indir")
 def toto_indir():
     import json as _json
@@ -497,4 +511,5 @@ if __name__ == "__main__":
     nowgoal.start_background()
     sdoran.start_background()
     toto_tab.start_background()
+    kelly_tab.start_background()
     app.run(host="0.0.0.0", port=8080)

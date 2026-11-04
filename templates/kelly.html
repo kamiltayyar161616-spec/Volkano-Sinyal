@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}SAHA — KELLY{% endblock %}
+{% block page_tag %}KELLY{% endblock %}
+{% block subtitle %}Pinnacle + Sbobet Kelly sinyali (TOTO'dan bağımsız, deneme). Kural: maça {{ d.pencere[1] }}-{{ d.pencere[0] }} dakika kala <b>Pinnacle ve Sbobet aynı tarafa</b> en düşük Kelly'yi <b>≤ {{ d.esik }}</b> veriyor ve ikisi de başka bir tarafa <b>≥ {{ '%.2f'|format(d.karsi) }}</b> veriyor. Kelly = büronun oranı × bütün büroların ortalama olasılığı. Sistem 5 dakikada bir tarar, sinyali kaydeder, sonucu kendisi işler.{% endblock %}
+{% block extra_style %}
+<style>
+  .mc{ margin:0 16px 8px; padding:10px 12px; background:var(--navy); border:1px solid var(--navy-line); border-radius:10px; font-size:10.5px; }
+  .mc-ust{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .mc-ad{ min-width:0; flex:1; } .mc-sag{ text-align:right; white-space:nowrap; }
+  .ng-meta{ color:var(--chalk-faint); font-size:9.5px; margin-top:3px; }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .tag{ display:inline-block; font-size:9.5px; font-weight:700; padding:3px 6px; border-radius:5px; background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  .tag.w{ border-color:var(--turf); color:var(--turf-bright); } .tag.l{ border-color:var(--clay-dim); color:var(--clay); } .tag.a{ border-color:var(--amber-dim); color:var(--amber-bright); }
+  .og{ display:grid; grid-template-columns:52px repeat(3,1fr); gap:2px; margin-top:8px; font-size:10px; text-align:center; }
+  .og > div{ padding:4px 2px; background:var(--navy-deep); border-radius:4px; }
+  .og > .h{ background:none; color:var(--chalk-faint); font-weight:700; } .og > .l{ background:none; color:var(--chalk-faint); text-align:left; font-size:9px; }
+  .og > .s{ outline:1px solid var(--amber-dim); color:var(--amber-bright); font-weight:700; } .og > .gel{ background:rgba(40,160,90,.28); }
+  .oz{ display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin:0 16px 10px; text-align:center; }
+  .oz > div{ background:var(--navy); border:1px solid var(--navy-line); border-radius:8px; padding:8px 4px; }
+  .oz b{ display:block; font-size:16px; } .oz span{ font-size:9px; color:var(--chalk-faint); }
+</style>
+{% endblock %}
+{% macro kart(x) %}
+<div class="mc" style="border-color:{{ 'var(--turf)' if x.tuttu else 'var(--clay-dim)' if x.tuttu is not none else 'var(--amber-dim)' }}">
+  <div class="mc-ust">
+    <div class="mc-ad"><b>{{ x.mac }}</b>{% if x.skor %} <span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ x.skor }} · {{ x.sonuc }}</span>{% endif %}
+      <div class="ng-meta">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %}{% if x.dk %} · sinyal maça {{ x.dk|round|int }} dk kala{% endif %}</div></div>
+    <div class="mc-sag"><span class="tag {{ ('w' if x.tuttu else 'l') if x.tuttu is not none else 'a' }}">{{ x.taraf }} @ {{ '%.2f'|format(x.oran) }}</span><div class="ng-meta">{{ 'favori' if x.fav else 'favori değil' }} · bekl. %{{ x.bekl }}</div></div>
+  </div>
+  <div class="og">
+    <div class="l"></div>{% for i in range(3) %}<div class="h">{{ '1X2'[i] }}</div>{% endfor %}
+    <div class="l">Pinnacle</div>{% for i in range(3) %}<div class="{{ 's' if i == x.i else '' }} {{ 'gel' if x.sonuc and '1X2'.index(x.sonuc) == i else '' }}">{{ '%.2f'|format(x.pin[i]) }}</div>{% endfor %}
+    <div class="l">Kelly P</div>{% for i in range(3) %}<div class="{{ 's' if i == x.i else '' }}">{{ '%.2f'|format(x.kp[i]) }}</div>{% endfor %}
+    <div class="l">Kelly S</div>{% for i in range(3) %}<div class="{{ 's' if i == x.i else '' }}">{{ '%.2f'|format(x.ks[i]) }}</div>{% endfor %}
+    <div class="l">piyasa %</div>{% for i in range(3) %}<div>%{{ (100*x.pm[i])|round|int }}</div>{% endfor %}
+  </div>
+</div>{% endmacro %}
+{% block content %}
+<div style="margin:12px 16px 0"><a href="/kelly/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ KELLY verisini indir (JSON)</a></div>
+<h2 class="section">📊 CANLI TAKİP</h2>
+<div class="oz">
+  <div><b>{{ d.oz.n }}</b><span>sinyal</span></div>
+  <div><b>{% if d.oz.bitti %}{{ d.oz.tutan }}/{{ d.oz.bitti }}{% else %}—{% endif %}</b><span>tutan</span></div>
+  <div><b class="{{ 'pos' if d.oz.yuzde and d.oz.bekl and d.oz.yuzde > d.oz.bekl else '' }}">{% if d.oz.yuzde is not none %}%{{ d.oz.yuzde }}{% else %}—{% endif %}</b><span>beklenen %{{ d.oz.bekl if d.oz.bekl is not none else '—' }}</span></div>
+  <div><b class="{{ 'pos' if d.oz.roi and d.oz.roi > 0 else 'neg' if d.oz.roi else '' }}">{% if d.oz.roi is not none %}{{ '+' if d.oz.roi > 0 else '' }}%{{ d.oz.roi }}{% else %}—{% endif %}</b><span>ROI (Pinnacle oranı)</span></div>
+</div>
+<div class="section-sub">Geçmiş test (4000 maç): bu kurala {{ d.gecmis.n }} maç uydu, {{ d.gecmis.tutan }} tuttu (%{{ d.gecmis.yuzde }}, beklenen %{{ d.gecmis.bekl }}), ROI +%{{ d.gecmis.roi }}. Örnek az olduğu için canlı takip asıl testtir.</div>
+
+<h2 class="section">⏳ BEKLEYEN SİNYALLER</h2>
+{% for x in d.bekleyen %}{{ kart(x) }}{% else %}<div class="empty">Şu an bekleyen sinyal yok. Günde ortalama 1-2 sinyal bekleniyor.</div>{% endfor %}
+
+<h2 class="section">🧾 SONUÇLANAN SİNYALLER</h2>
+{% for x in d.biten %}{{ kart(x) }}{% else %}<div class="empty">Henüz sonuçlanan sinyal yok.</div>{% endfor %}
+
+<details style="margin:0 0 10px"><summary class="section-sub" style="cursor:pointer">Yakın olanlar (kurala tam uymayan: ikisi aynı tarafta Kelly ≤ 0.88) — {{ d.yakin|length }} maç{% if d.oy.bitti %}, biten {{ d.oy.bitti }}: tutan {{ d.oy.tutan }} (beklenen %{{ d.oy.bekl }}){% endif %}</summary>
+{% for x in d.yakin %}{{ kart(x) }}{% endfor %}
+</details>
+<div class="section-sub">Tarayıcı: {{ d.durum.at | localdatetime if d.durum.at else 'henüz çalışmadı' }} · {{ d.durum.log }}</div>
+{% endblock %}
