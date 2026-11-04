@@ -30,6 +30,14 @@ def main():
                         FROM ng_match WHERE ft_h IS NOT NULL AND COALESCE(ou_kapanis, ou_son) IS NOT NULL""").fetchall()
     c.close()
     print(f"{len(rows)} biten mac (kapanis cizgisi olan)")
+    tuhaf = [r for r in rows if r[3] < 1.5]
+    print(f"cizgisi 1.5'ten kucuk (supheli, analiz disi): {len(tuhaf)} mac; ornek lig: " +
+          ", ".join(sorted({str(r[6]) for r in tuhaf})[:12]))
+    print("  ornek (ev-dep gol, acilis/kapanis alt-ust, acilis/kapanis handikap):",
+          [(f"{r[0]}-{r[1]}", r[2], r[3], r[4], r[5]) for r in tuhaf[:8]])
+    rows = [r for r in rows if r[3] >= 1.5]
+    print(f"analize giren: {len(rows)} mac")
+    F = defaultdict(lambda: [0, 0.0, 0])
     A, B, Bi, C, D, E = (defaultdict(lambda: [0, 0.0, 0]) for _ in range(6))
 
     def add(R, k, g, L):
@@ -54,6 +62,7 @@ def main():
             f = abs(ak)
             fb = "0-0.25 (denk)" if f <= 0.25 else "0.5-0.75" if f <= 0.75 else "1-1.25" if f <= 1.25 else "1.5+ (cok favori)"
             add(C, f"handikap {fb}", g, ok)
+            add(F, f"{fb[:8]:8s} | cizgi {ok:.2f}", g, ok)
             if ai is not None:
                 am = round(abs(ak) - abs(ai), 2)
                 mb = "favori zayifladi" if am < 0 else "favori sabit" if am == 0 else "favori guclendi"
@@ -70,6 +79,7 @@ def main():
     yaz("Kapanis Asya handikabi (favori gucu)", C)
     yaz("Handikap hareketi", D)
     yaz("Kombinasyon", E, 20)
+    yaz("Favori gucu x kapanis cizgisi", F, 25)
 
 
 if __name__ == "__main__":
