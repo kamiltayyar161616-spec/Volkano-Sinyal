@@ -13,7 +13,7 @@ import sqlite3
 import sys
 import time
 import urllib.request
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "m7_arsiv.db")
@@ -362,6 +362,82 @@ def desen(buro="Pinnacle Sports"):
             print(f"  {k:42s} n={n:5d} tuttu %{100 * sp / n:5.1f} | ROI büro %{100 * kb / n:+5.1f} | en iyi %{100 * ke / n:+5.1f}")
 
 
+def _iy(goller, skor):
+    """gol listesinden ilk yari skoru: dakika <= 45 (45+x dahil). Skorla tutarsizsa None."""
+    try:
+        G = json.loads(goller) if goller else None
+    except Exception:
+        return None
+    if G is None:
+        return None
+    h = a = 0
+    son = (0, 0)
+    for dk, sk in G:
+        m = re.match(r"^(\d+)-(\d+)$", sk or "")
+        if not m:
+            continue
+        cur = (int(m.group(1)), int(m.group(2)))
+        d = re.match(r"^(\d+)", str(dk))
+        if d and int(d.group(1)) <= 45:
+            h, a = cur
+        son = cur
+    if skor and re.match(r"^\d+-\d+$", skor) and tuple(int(x) for x in skor.split("-")) != son and G:
+        return None
+    return h, a
+
+
+def iyms(buro="Pinnacle Sports"):
+    """0/favori ve ilk yari alt/ust: favori = büronun mac basi Asya handikabini veren taraf (L<0 ev veriyor)."""
+    c = db()
+    rows = c.execute("SELECT ou, ah, skor, goller, ko FROM mac").fetchall()
+    c.close()
+    G = defaultdict(Counter)
+    IY = defaultdict(lambda: [0, 0, 0, 0, 0])               # n, iy 0.5 ust, 1.5 ust, 2.5 ust, iy gol
+    for ou, ah, sk, gl, ko in rows:
+        skor = skor_al(sk, gl, _ko_tahmin(ko, ou))
+        if not skor:
+            continue
+        iy = (0, 0) if skor == "0-0" else _iy(gl, skor)
+        if iy is None:
+            continue
+        fh, fa = (int(x) for x in skor.split("-"))
+        A = json.loads(ah or "{}").get(buro)
+        O = json.loads(ou or "{}").get(buro)
+        if O:
+            L = O["kap"][1]
+            k = f"çizgi {L:.2f}" if 1.75 <= L <= 4.0 else None
+            for kk in (k, "HEPSI"):
+                if kk:
+                    x = IY[kk]; ig = iy[0] + iy[1]
+                    x[0] += 1; x[1] += ig > 0.5; x[2] += ig > 1.5; x[3] += ig > 2.5; x[4] += ig
+        if not A:
+            continue
+        L = A["kap"][1]
+        if L == 0:
+            continue
+        evfav = L < 0
+        f = abs(L)
+        b = "0.25-0.5" if f <= 0.5 else "0.75-1" if f <= 1.0 else "1.25-1.75" if f <= 1.75 else "2+"
+        sg = lambda h, a: "1" if h > a else "X" if h == a else "2"
+        i_, m_ = sg(*iy), sg(fh, fa)
+        fs, ds = ("1", "2") if evfav else ("2", "1")
+        tip = ("0/fav" if i_ == "X" and m_ == fs else "0/sürpriz" if i_ == "X" and m_ == ds else "0/0" if i_ == m_ == "X"
+               else "fav/fav" if i_ == m_ == fs else "diğer")
+        for kk in (f"{'ev' if evfav else 'dep'} favori | handikap {b}", f"TÜM | handikap {b}", "TÜM"):
+            G[kk][tip] += 1
+    print(f"İY/MS ({buro} handikabıyla favori)\n{'grup':32s} {'maç':>5s} {'0/favori':>12s} {'0/sürpriz':>11s} {'0/0':>10s} {'fav/fav':>8s}")
+    for k in sorted(G, key=lambda k: (k != "TÜM", k)):
+        cc = G[k]; n = sum(cc.values())
+        if n >= 50:
+            print(f"{k:32s} {n:5d} {cc['0/fav']:4d} (%{100 * cc['0/fav'] / n:4.1f}) {cc['0/sürpriz']:4d} (%{100 * cc['0/sürpriz'] / n:4.1f})"
+                  f" {cc['0/0']:4d} (%{100 * cc['0/0'] / n:4.1f}) %{100 * cc['fav/fav'] / n:5.1f}")
+    print(f"\nİLK YARI GOL (maç alt/üst çizgisine göre)\n{'grup':14s} {'maç':>6s} {'İY ort.gol':>10s} {'İY 0.5Ü':>8s} {'İY 1.5Ü':>8s} {'İY 2.5Ü':>8s}")
+    for k in sorted(IY, key=lambda k: (k != "HEPSI", k)):
+        n, a1, a2, a3, ig = IY[k]
+        if n >= 50:
+            print(f"{k:14s} {n:6d} {ig / n:10.2f} %{100 * a1 / n:6.1f} %{100 * a2 / n:6.1f} %{100 * a3 / n:6.1f}")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if not a or a[0] == "durum":
@@ -370,6 +446,8 @@ if __name__ == "__main__":
         topla(int(a[1]) if len(a) > 1 else 5183000, int(a[2]) if len(a) > 2 else 5138000)
     elif a[0] == "iy_doldur":
         iy_doldur()
+    elif a[0] == "iyms":
+        iyms(a[1] if len(a) > 1 else "Pinnacle Sports")
     elif a[0] == "desen":
         desen(a[1] if len(a) > 1 else "Pinnacle Sports")
     elif a[0] == "karsilastir":
