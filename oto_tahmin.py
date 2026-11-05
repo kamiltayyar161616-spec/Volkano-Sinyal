@@ -161,6 +161,67 @@ def vk_oranlar(mids):
         return {}
 
 
+_vkfx = {"t": 0, "v": None, "fx": None}
+VK_PZ = ("1", "18", "47", "60", "68")
+
+
+def vk_taze(mids):
+    """Volkano'dan ANLIK oran (iyv.db maci 15 dk kala kilitleyip guncellemeyi birakiyor): {mid: pazarlar}; cifte sans -> 'dc'"""
+    import sys
+    if "/root/defter" not in sys.path:
+        sys.path.insert(0, "/root/defter")
+    try:
+        import defter as D
+    except Exception:
+        return {}
+    c = _ng()
+    q = ",".join("?" * len(mids))
+    rows = c.execute(f"SELECT mid, kickoff_utc, volkano_json FROM ng_match WHERE volkano_json IS NOT NULL AND mid IN ({q})",
+                     [int(x) for x in mids]).fetchall()
+    c.close()
+    if not rows:
+        return {}
+    if time.time() - _vkfx["t"] > 240 or not _vkfx["fx"]:
+        _vkfx["v"], _vkfx["fx"] = D.vk_fikstur()
+        _vkfx["t"] = time.time()
+    v, fx = _vkfx["v"], _vkfx["fx"]
+    R = {}
+    for mid, ko, vj in rows:
+        try:
+            vj = json.loads(vj) or {}
+            m = D._fx_bul(fx, vj.get("home", ""), vj.get("away", ""), ko) if vj.get("home") else None
+            i = next((m[k] for k in ("id", "mac_id", "ai", "event_id") if k in m), None) if m else None
+            if i is None:
+                continue
+            d = v.get("Offer/GetEventMarkets", [("eventIds", i), ("dpId", v.DP_ID)])
+            ev = d[0] if isinstance(d, list) and d else d
+            out = {}
+            for p in (ev or {}).get("m", []):
+                pid = str(p.get("id"))
+                x = {}
+                for b in p.get("b", []):
+                    try:
+                        od = float(b.get("od"))
+                    except (TypeError, ValueError):
+                        continue
+                    n = str(b.get("n")).strip()
+                    if pid in ("18", "68"):
+                        if b.get("bl") not in (None, ""):
+                            x.setdefault(str(float(b.get("bl"))), {})[n.lower()] = od
+                    else:
+                        x[n.upper().replace(" ", "")] = od
+                if pid in VK_PZ:
+                    out[pid] = x
+                elif "dc" not in out and {"1X", "X2", "12"} <= set(x):
+                    out["dc"] = {k: x[k] for k in ("1X", "X2", "12")}
+            if out:
+                R[str(mid)] = out
+            time.sleep(0.3)
+        except Exception:
+            continue
+    return R
+
+
 def vk_uygula(T, vk):
     """tahmin setine Volkano'nun GERCEK oranini yaz (varsa): Kazanan, IY/MS, IY 0.5, IY 1.5, MS 2.5"""
     if not vk:
@@ -176,6 +237,8 @@ def vk_uygula(T, vk):
             if t == "MS 2.5":
                 return vk["18"]["2.5"]["over" if sec == "ÜST" else "under"]
             if t == "Favori kaybetmez":
+                if (vk.get("dc") or {}).get(sec):
+                    return vk["dc"][sec]
                 o = vk["1"]
                 a, b = (o["1"], o["X"]) if sec == "1X" else (o["X"], o["2"])
                 return None if not (a and b) else ("≈", round(1 / (1 / a + 1 / b), 2))
@@ -434,7 +497,13 @@ def son5_tara():
             R[m] = {"at": datetime.now(TR).isoformat()[11:16], "yok": True}
             continue
         Tn = tahmin_seti(Fn, O)
-        vk_uygula(Tn, vk_oranlar([m]).get(m))
+        try:
+            vkm = vk_taze([m]).get(m)
+        except Exception:
+            vkm = None
+        vk_uygula(Tn, vkm or vk_oranlar([m]).get(m))
+        if vkm:
+            Fn["vk_taze"] = True
         d, N = farklar(x["F"], Fn)
         deg = [t for t in Tn if t in x["T"] and Tn[t]["sec"] != x["T"][t]["sec"]]
         R[m] = {"at": datetime.now(TR).isoformat()[11:16], "F": Fn, "T": Tn, "d": d, "not": N, "degisen": deg}
