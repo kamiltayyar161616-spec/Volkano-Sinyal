@@ -96,8 +96,8 @@
 <div class="box"><table class="tb"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
 {% for o in d.ozet %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.s is not none %}<b>%{{ o.s }}</b> <span class="meta">({{ o.n }})</span>{% else %}<span class="meta">—</span>{% endif %}</td>
 <td>{% if o.s5 is not none %}<b class="{{ 'pos' if o.s is not none and o.s5 > o.s else '' }}">%{{ o.s5 }}</b> <span class="meta">({{ o.n5 }})</span>{% else %}<span class="meta">—</span>{% endif %}</td></tr>{% endfor %}</table></div>
-<div class="box"><table class="tb"><tr><th class="l">sürpriz</th><th>biten</th><th>favori kazanamadı</th><th>sürpriz kazandı</th></tr>
-{% for o in d.sz %}<tr><td class="l"><b>{{ '🔴 güçlü' if o.s == 'güçlü' else '🟠 aday' }}</b></td><td>{{ o.n }}</td><td>{{ ('%' ~ o.fk) if o.fk is not none else '—' }}</td><td>{{ ('%' ~ o.sk) if o.sk is not none else '—' }}</td></tr>{% endfor %}</table></div>
+<div class="box"><table class="tb"><tr><th class="l">sürpriz</th><th>biten</th><th>favori<br>kazanamadı</th><th>sürpriz<br>kazandı</th></tr>
+{% for o in d.sz %}<tr><td class="l" style="white-space:nowrap"><b>{{ '🔴 güçlü' if o.s == 'güçlü' else '🟠 aday' }}</b></td><td>{{ o.n }}</td><td>{{ ('%' ~ o.fk) if o.fk is not none else '—' }}</td><td>{{ ('%' ~ o.sk) if o.sk is not none else '—' }}</td></tr>{% endfor %}</table></div>
 
 <details class="bl"><summary>🧠 Öğrenme tablosu</summary>
 <div class="meta" style="margin-bottom:8px">Kullanılan yüzde = (tutan + {{ d.M }} × model) / (görülme + {{ d.M }}).</div>
