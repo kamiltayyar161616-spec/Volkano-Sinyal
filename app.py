@@ -44,6 +44,7 @@ import gunluk_kupon
 import m7
 import kalkan
 import gecpara
+import desen_tab
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -419,6 +420,11 @@ def toto_kelly_indir():
     return send_file(p, mimetype="application/gzip", as_attachment=True, download_name="toto_kelly.json.gz")
 
 
+@app.route("/desen")
+def desen_page():
+    return render_template("desen.html", d=desen_tab.get_page_data(), active_page="desen")
+
+
 @app.route("/kupon-gunluk")
 def kupon_gunluk_page():
     return render_template("kupon_gunluk.html", d=gunluk_kupon.get_page_data(yenile=bool(request.args.get("yenile"))), active_page="kupongunluk")
@@ -539,4 +545,5 @@ if __name__ == "__main__":
     kelly_tab.start_background()
     m7.start_background()
     gecpara.start_background()
+    desen_tab.start_background()
     app.run(host="0.0.0.0", port=8080)

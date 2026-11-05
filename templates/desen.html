@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}SAHA — DESEN{% endblock %}
+{% block page_tag %}🎯 DESEN{% endblock %}
+{% block subtitle %}Önceliğimiz tutma yüzdesi. 7M arşivinde (12 bin maç) oran davranışına göre çok yüksek tutan desenler: gol çizgisinin açılıştan maç başına hareketi, handikap hareketi, favori gücü, Asya ve Avrupa bürolarının farkı. Her desen arşivin iki yarısında da ayrı ayrı tuttu. Maça {{ d.pencere[1] }}-{{ d.pencere[0] }} dakika kala 16 büronun oranı okunur, uyan seçimler listelenir; maç başına kadar güncellenir. Günlük kupon: her maçtan en yüksek tutan seçim, günün en iyi 20'si.{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:10px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); vertical-align:top; } .tt .l{ text-align:left; }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); } .meta{ color:var(--chalk-faint); font-size:9px; }
+  tr.ok td{ background:rgba(40,160,90,.16); } tr.ko td{ background:rgba(200,70,60,.10); }
+  .tik{ display:inline-block; min-width:20px; padding:2px 5px; border-radius:6px; font-size:11px; font-weight:800; color:#fff; } .tik.w{ background:var(--turf); } .tik.l{ background:var(--clay-dim); }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:12px; background:var(--navy); border:1px solid var(--navy-line); }
+  .kc h3{ margin:0 0 6px; font-family:'Space Grotesk',sans-serif; font-size:13.5px; display:flex; justify-content:space-between; }
+  .sec{ display:inline-block; margin:1px 2px; padding:2px 5px; border-radius:5px; background:var(--navy-deep); border:1px solid var(--navy-line); font-size:9.5px; }
+  .sec.w{ border-color:var(--turf); color:var(--turf-bright); } .sec.l{ border-color:var(--clay-dim); color:var(--clay); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="section-sub">Son tarama: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~2 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
+
+<h2 class="section">📊 GERÇEK TUTMA (sonuç türüne göre)</h2>
+{% if d.ozet %}<table class="tt"><tr><th class="l">sonuç</th><th>biten seçim</th><th>tuttu</th><th>arşiv</th></tr>
+{% for o in d.ozet %}<tr><td class="l"><b>{{ o.s }}</b></td><td>{{ o.n }}</td><td><b class="{{ 'pos' if o.t >= o.a - 3 else 'neg' }}">%{{ o.t }}</b></td><td>%{{ o.a }}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten seçim yok.</div>{% endif %}
+
+{% for k in d.kup %}{% if k.L %}
+<div class="kc"><h3><span>🎫 {{ k.gun }} · günün en iyi {{ k.L|length }} seçimi</span><span class="{{ 'pos' if k.bit and k.tut >= k.bit - 1 else '' }}">{% if k.bit %}{{ k.tut }}/{{ k.bit }} tuttu{% else %}beklenen {{ k.bek }} tutan{% endif %}</span></h3>
+<table class="tt" style="width:100%;margin:0">{% for x in k.L %}{% set s = x.en[0] %}{% set v = x.sonuc.get(s) %}
+<tr class="{{ 'ok' if v else 'ko' if v is not none else '' }}"><td class="l" style="width:36px">{{ ((x.ko ~ '+00:00') | localdatetime)[-5:] }}</td>
+<td class="l"><b>{{ x.ev }} – {{ x.dep }}</b><br><span class="meta">{{ x.lig }}{% if x.skor %} · {{ x.skor }}{% if x.iy %} (İY {{ x.iy }}){% endif %}{% endif %}</span></td>
+<td><b>{{ d.etiket(s, x) }}</b><br><span class="meta">arşiv %{{ x.en[1][0] }}</span></td>
+<td>{% if v is not none %}<span class="tik {{ 'w' if v else 'l' }}">{{ '✓' if v else '✗' }}</span>{% endif %}</td></tr>{% endfor %}</table></div>
+{% endif %}{% endfor %}
+
+<h2 class="section">⏳ BEKLEYEN ({{ d.bekleyen|length }})</h2>
+{% if d.bekleyen %}<table class="tt"><tr><th class="l">saat</th><th class="l">maç</th><th class="l">seçimler (arşiv %)</th></tr>
+{% for x in d.bekleyen %}<tr><td class="l">{{ ((x.ko ~ '+00:00') | localdatetime)[-5:] }}</td><td class="l"><b>{{ x.ev }} – {{ x.dep }}</b><br><span class="meta">{{ x.lig }}</span></td>
+<td class="l">{% for s, v in x.secim.items()|sort(attribute='1.0', reverse=True) %}<span class="sec" title="{{ v[2] }}">{{ d.etiket(s, x) }} %{{ v[0] }}</span>{% endfor %}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Şu an desene uyan yaklaşan maç yok.</div>{% endif %}
+
+<h2 class="section">✅ BİTEN</h2>
+{% if d.biten %}<table class="tt"><tr><th class="l">maç</th><th>skor</th><th class="l">seçimler</th></tr>
+{% for x in d.biten %}<tr><td class="l"><b>{{ x.ev }} – {{ x.dep }}</b><br><span class="meta">{{ (x.ko ~ '+00:00') | localdatetime }} · {{ x.lig }}</span></td><td><b>{{ x.skor }}</b>{% if x.iy %}<br><span class="meta">İY {{ x.iy }}</span>{% endif %}</td>
+<td class="l">{% for s, v in x.secim.items()|sort(attribute='1.0', reverse=True) %}{% set r = x.sonuc.get(s) %}<span class="sec {{ 'w' if r else 'l' if r is not none else '' }}">{{ '✓' if r else '✗' if r is not none else '' }} {{ d.etiket(s, x) }} %{{ v[0] }}</span>{% endfor %}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten maç yok.</div>{% endif %}
+
+<h2 class="section">📚 DESENLER (arşiv)</h2>
+<table class="tt"><tr><th class="l">sonuç</th><th class="l">oran davranışı</th><th>tuttu</th><th>maç</th></tr>
+{% for s, kos, p, n in d.desenler %}<tr><td class="l"><b>{{ s }}</b></td><td class="l meta">{% for k, v in kos.items() %}{{ k }}: {{ v }}{% if not loop.last %} + {% endif %}{% endfor %}</td><td>%{{ p }}</td><td>{{ n }}</td></tr>{% endfor %}</table>
+{% endblock %}
