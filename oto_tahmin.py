@@ -28,7 +28,7 @@ TURLER = ("Kazanan", "Favori kaybetmez", "İY/MS", "İY 0.5", "İY 1.5", "MS 2.5
 REF_IY = {1.5: (33.7, 6.0), 1.75: (53.3, 20.4), 2.0: (57.6, 22.7), 2.25: (60.5, 28.7), 2.5: (63.3, 29.4), 2.75: (68.1, 34.1),
           3.0: (66.8, 34.9), 3.25: (71.6, 41.1), 3.5: (75.4, 48.8), 3.75: (72.5, 50.8), 4.0: (76.0, 51.7), 4.25: (73.9, 48.6),
           4.5: (69.7, 54.7)}
-_last = {"at": None, "log": "", "son5": "", "hata": None}
+_last = {"at": None, "log": "", "son5": "", "lig": "", "hata": None}
 _started = False
 _cache = {"t": 0, "ogren": None}
 _kilit = threading.Lock()
@@ -164,7 +164,7 @@ def kur(gun=None, kaydet=True):
         for m, x in eski["maclar"].items():
             if m not in maclar and datetime.fromisoformat(x["ko"]) <= datetime.now(timezone.utc) + timedelta(minutes=5):
                 maclar[m] = x
-    lig_doldur(maclar)
+    lig_doldur(maclar, O=O)
     kup = {}
     for tur in TURLER:
         A = sorted(((m, x) for m, x in maclar.items() if tur in x["T"] and x["T"][tur]["n"] >= MIN_OGREN), key=lambda t: -t[1]["T"][tur]["p"])
@@ -188,52 +188,105 @@ def kur(gun=None, kaydet=True):
 LIG_DOSYA = os.path.join(KLASOR, "lig.json")
 
 
-def lig_doldur(maclar, sure=240):
-    """lig adi eksik maclar: 1) bahis siteleri (Volkano, Admiral, Sansa, SBBet, Premier, Soccerbet, Maxbet; takim adi + saat)
-    2) 7M (ayni baslama saati + takim adi benzerligi, d_mn). Bulunan ligler data/oto_tahmin/lig.json'da saklanir."""
+def _cache_oku():
     try:
         C = json.load(open(LIG_DOSYA, encoding="utf-8"))
     except (OSError, ValueError):
         C = {}
-    eksik = [m for m, x in maclar.items() if not x.get("lig")]
-    for m in eksik:
-        if C.get(m):
-            maclar[m]["lig"] = C[m]
-    eksik = [m for m in eksik if not maclar[m].get("lig")]
-    if not eksik:
+    if "lig" not in C:                                  # eski duz bicim
+        C = {"lig": {k: v for k, v in C.items() if isinstance(v, str)}, "id": {}}
+    C.setdefault("id", {})
+    return C
+
+
+def m7_ou_cizgi(i):
+    """7M alt/ust dosyasi -> (acilis medyan cizgi, su anki medyan cizgi) tum bürolardan"""
+    import m7_arsiv as A
+    from statistics import median
+    s, b = A.get(f"https://px-odds.7mdt.com/DataByLive2/{i}_ou.js")
+    if s != 200 or "'name'" not in b:
+        return None
+    ou, _ = A.seri(b, "ou")
+    ilk = [v["ilk"][1] for v in ou.values() if v.get("ilk")]
+    kap = [v["kap"][1] for v in ou.values() if v.get("kap")]
+    if not kap:
+        return None
+    r = lambda x: round(median(x) * 4) / 4
+    return r(ilk), r(kap)
+
+
+def cizgi_ekle(F, ou_ilk, ou_son):
+    if not ou_son or ou_son < 1.5:
         return
+    F["L"] = ou_son
+    F["Lb"] = "≤2.25" if ou_son <= 2.25 else "2.5" if ou_son <= 2.5 else "2.75" if ou_son <= 2.75 else "3.0" if ou_son <= 3.0 else "3.25+"
+    dl = (ou_son - ou_ilk) if ou_ilk else 0
+    F["Lhar"] = "çizgi ↑" if dl >= 0.25 else "çizgi ↓" if dl <= -0.25 else "sabit"
+
+
+def lig_doldur(maclar, sure=300, O=None):
+    """Eksik LIG ve eksik GOL CIZGISI tamamlama:
+    lig: 1) bahis siteleri (Volkano, Admiral, Sansa, SBBet, Premier, Soccerbet, Maxbet; takim adi + saat) 2) 7M (d_mn)
+    gol cizgisi: 7M alt/ust dosyasi (16 büro medyani; acilis + su an) -> IY 0.5 / IY 1.5 / MS 2.5 tahminleri de olusur.
+    7M mac numarasi ayni baslama saati + takim adi benzerligiyle bulunur; sonuclar data/oto_tahmin/lig.json'da."""
+    C = _cache_oku()
+    for m, x in maclar.items():
+        if not x.get("lig") and C["lig"].get(m):
+            x["lig"] = C["lig"][m]
     t0 = time.time()
-    try:
-        import nowgoal as ng
-        evs = ng._load_markets()
-    except Exception:
-        evs = {}
-    for m in eksik:
-        x = maclar[m]
-        ko = datetime.fromisoformat(x["ko"])
-        for src, L in evs.items():
-            try:
-                e = ng._find(L, x["ev"], x["dep"], ko)
-            except Exception:
-                e = None
-            if e and e.get("league") and e["league"] != "Bilinmeyen Lig":
-                x["lig"] = C[m] = f"{e['league']}"
-                break
-    eksik = [m for m in eksik if not maclar[m].get("lig")]
+    eksik = [m for m, x in maclar.items() if not x.get("lig")]
     if eksik:
         try:
+            import nowgoal as ng
+            evs = ng._load_markets()
+        except Exception:
+            evs = {}
+        for m in eksik:
+            x = maclar[m]
+            for src, L in evs.items():
+                try:
+                    e = ng._find(L, x["ev"], x["dep"], datetime.fromisoformat(x["ko"]))
+                except Exception:
+                    e = None
+                if e and e.get("league") and e["league"] != "Bilinmeyen Lig":
+                    x["lig"] = C["lig"][m] = e["league"]
+                    break
+    n_lig = n_ciz = n_esl = 0
+    hedef = [m for m, x in maclar.items() if (not x.get("lig") or "L" not in x["F"])
+             and datetime.fromisoformat(x["ko"]) > datetime.now(timezone.utc) - timedelta(hours=3)]
+    if hedef:
+        try:
             import kelly_tab as K
-            for m in eksik:
+            for m in hedef:
                 if time.time() - t0 > sure:
                     break
                 x = maclar[m]
-                b = K.m7_bul(x["ev"], x["dep"], datetime.fromisoformat(x["ko"]))
-                if b:
-                    mn = K._m7_ad(b[1])[2]
+                i = C["id"].get(m)
+                if i is None:
+                    b = K.m7_bul(x["ev"], x["dep"], datetime.fromisoformat(x["ko"]))
+                    i = b[1] if b else 0
+                    if i:
+                        C["id"][m] = i
+                if not i:
+                    continue
+                n_esl += 1
+                if not x.get("lig"):
+                    mn = K._m7_ad(i)[2]
                     if mn:
-                        x["lig"] = C[m] = mn
+                        x["lig"] = C["lig"][m] = mn
+                        n_lig += 1
+                if "L" not in x["F"]:
+                    oc = m7_ou_cizgi(i)
+                    time.sleep(0.3)
+                    if oc:
+                        cizgi_ekle(x["F"], oc[0], oc[1])
+                        x["F"]["L_kay"] = "7M"
+                        if O is not None:
+                            x["T"] = tahmin_seti(x["F"], O)
+                        n_ciz += 1
         except Exception as e:
-            _last["hata"] = f"lig 7M: {str(e)[:60]}"
+            _last["hata"] = f"7M tamamlama: {str(e)[:80]}"
+    _last["lig"] = f"tamamlama: {len(hedef)} maç → 7M eşleşen {n_esl}, lig +{n_lig}, gol çizgisi +{n_ciz}"
     os.makedirs(KLASOR, exist_ok=True)
     with _kilit:
         json.dump(C, open(LIG_DOSYA, "w", encoding="utf-8"), ensure_ascii=False)
@@ -289,6 +342,15 @@ def son5_tara():
         time.sleep(1.0)
         r = c.execute("SELECT ou_ilk, ou_son, ah_son FROM ng_match WHERE mid=?", (int(m),)).fetchone() or (None, None, None)
         Fn = ozellik(of, r[0], r[1], r[2]) if of else None
+        if Fn and "L" not in Fn:
+            i7 = _cache_oku()["id"].get(m)
+            if i7:
+                try:
+                    oc = m7_ou_cizgi(i7)
+                    if oc:
+                        cizgi_ekle(Fn, oc[0], oc[1])
+                except Exception:
+                    pass
         if not Fn:
             R[m] = {"at": datetime.now(TR).isoformat()[11:16], "yok": True}
             continue
@@ -316,8 +378,8 @@ def _loop():
             if time.time() - _cache.get("lig_t", 0) > 3600:
                 _cache["lig_t"] = time.time()
                 v = _oku(gun)
-                if v and any(not x.get("lig") for x in v["maclar"].values()):
-                    lig_doldur(v["maclar"])
+                if v and any(not x.get("lig") or "L" not in x["F"] for x in v["maclar"].values()):
+                    lig_doldur(v["maclar"], O=ogren())
                     with _kilit:
                         json.dump(v, open(os.path.join(KLASOR, f"{gun}.json"), "w", encoding="utf-8"), ensure_ascii=False)
             _last["at"] = datetime.now(timezone.utc).isoformat()[:19]
@@ -445,10 +507,7 @@ def get_page_data(gun=None, yenile=False):
             for m, lg in c.execute(f"SELECT mid, COALESCE(NULLIF(league_ng, ''), league_vk) FROM ng_match WHERE mid IN ({q})", [int(x) for x in eksik]):
                 v["maclar"][str(m)]["lig"] = lg
             c.close()
-            try:
-                C = json.load(open(LIG_DOSYA, encoding="utf-8"))
-            except (OSError, ValueError):
-                C = {}
+            C = _cache_oku()["lig"]
             for m in eksik:
                 if not v["maclar"][m].get("lig") and C.get(m):
                     v["maclar"][m]["lig"] = C[m]

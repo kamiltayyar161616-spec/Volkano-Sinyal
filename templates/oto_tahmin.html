@@ -51,7 +51,7 @@
 {% block content %}<div class="wrap">{% set kp = mod == 'kupon' %}{% set yol = '/oto-tahmin/kupon' if kp else '/oto-tahmin' %}
 <div class="sek"><a class="{{ '' if kp else 'on' }}" href="/oto-tahmin{{ ('?gun=' ~ d.gun.gun) if d.gun else '' }}">📋 Tahminler</a><a class="{{ 'on' if kp else '' }}" href="/oto-tahmin/kupon{{ ('?gun=' ~ d.gun.gun) if d.gun else '' }}">🎫 Kuponlar</a></div>
 <div class="tk">{% for g in d.G %}<a class="{{ 'on' if d.gun and g == d.gun.gun else '' }}" href="{{ yol }}?gun={{ g }}">📅 {{ g[8:10] }}.{{ g[5:7] }}{% if g == d.bugun %} · bugün{% endif %}</a>{% endfor %}</div>
-<div class="meta" style="margin-top:6px">Arka plan: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'başlıyor' }} · {{ d.last.log }} {{ d.last.son5 }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
+<div class="meta" style="margin-top:6px">Arka plan: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'başlıyor' }} · {{ d.last.log }} {{ d.last.son5 }} {{ d.last.lig }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
 
 {% if d.gun %}{% set G = d.gun %}
 {% if not kp %}<div class="h2">📅 {{ G.gun[8:10] }}.{{ G.gun[5:7] }} GÜNÜN SONUCU <span class="s">sabah {{ G.at[11:16] }} · {{ G.L|length }} maç · son 5 dk {{ G.n5 }}</span></div>
@@ -81,7 +81,7 @@
 <div class="mk {{ 'deg' if deg else '' }}">
   <div class="ust"><div style="min-width:0"><div class="ad"><span class="saat">{{ (x.ko | localdatetime)[-5:] }}</span>{{ x.mac }}</div>
     <div class="lig">🏆 {{ x.lig or 'lig bilgisi yok' }}</div>
-    <div class="meta" style="margin-top:3px">1X2 %{{ (100*x.F.p[0])|round|int }} / %{{ (100*x.F.p[1])|round|int }} / %{{ (100*x.F.p[2])|round|int }}{% if x.F.L %} · gol {{ x.F.L }}{% endif %}{% if x.F.ah is not none %} · AH {{ '%+g'|format(x.F.ah) }}{% endif %}</div>
+    <div class="meta" style="margin-top:3px">1X2 %{{ (100*x.F.p[0])|round|int }} / %{{ (100*x.F.p[1])|round|int }} / %{{ (100*x.F.p[2])|round|int }}{% if x.F.L %} · gol {{ x.F.L }}{% if x.F.L_kay %} (7M){% endif %}{% endif %}{% if x.F.ah is not none %} · AH {{ '%+g'|format(x.F.ah) }}{% endif %}</div>
     {% if x.sur %}<span class="rz {{ 'g' if x.sur.seviye == 'güçlü' else '' }}">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} Sürpriz adayı: {{ x.sur.taraf }}</span>{% endif %}</div>
   <div class="skor">{% if x.skor %}{{ x.skor }}{% if x.iy %}<div class="meta" style="font-weight:500">İY {{ x.iy }}</div>{% endif %}{% endif %}</div></div>
   <div class="chips">{% for t in d.turler %}{% set z = x.T.get(t) %}{% if z %}{% set o = x.ok.get(t) %}{% set z5 = s5.T.get(t) if var else none %}{% set o5 = s5.ok.get(t) if var else none %}{% set okk = o5 if z5 else o %}
