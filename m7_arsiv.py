@@ -181,6 +181,16 @@ def durum():
     c.close()
 
 
+def _ko_tahmin(ko, ou):
+    """mac ici verisi olmayan maclarda baslama saati yok: büroların son mac oncesi oran saatini kullan"""
+    if ko:
+        return ko
+    try:
+        return max(v["kap"][0] for v in json.loads(ou or "{}").values())
+    except Exception:
+        return None
+
+
 def skor_al(skor, goller, ko):
     """kayitli skor; yoksa: gol listesi bos ([]) ve mac en az 3 saat once basladiysa 0-0 (golsuz maclar goaldata'da skor vermez)"""
     if skor and re.match(r"^\d+-\d+$", skor):
@@ -204,7 +214,7 @@ def kar(s, o):
 
 def analiz(buro="SBOBET"):
     c = db()
-    rows = [(i, lig, ko, skor_al(sk, gl, ko), ou, ah, ta, tb) for i, lig, ko, sk, ou, ah, ta, tb, gl in
+    rows = [(i, lig, ko, skor_al(sk, gl, _ko_tahmin(ko, ou)), ou, ah, ta, tb) for i, lig, ko, sk, ou, ah, ta, tb, gl in
             c.execute("SELECT id, lig, ko, skor, ou, ah, ta, tb, goller FROM mac").fetchall()]
     c.close()
     A = defaultdict(lambda: [0, 0.0, 0.0, 0.0, 0])           # n, ust puan, ust kar, alt kar, gol
@@ -247,7 +257,7 @@ def karsilastir(min_n=200):
     """Tüm bürolar: mac basi alt/ust cizgisinin dogrulugu + düz ROI; ayrica strateji adaylari:
     (1) en iyi oran (bürolar arasi en yüksek ust / alt orani), (2) büronun cizgisi piyasa ortancasindan farkliysa ters tarafi oyna."""
     c = db()
-    rows = [(ou, ah, skor_al(sk, gl, ko), lig, ta, tb) for ou, ah, sk, lig, ta, tb, gl, ko in
+    rows = [(ou, ah, skor_al(sk, gl, _ko_tahmin(ko, ou)), lig, ta, tb) for ou, ah, sk, lig, ta, tb, gl, ko in
             c.execute("SELECT ou, ah, skor, lig, ta, tb, goller, ko FROM mac").fetchall()]
     n00 = sum(1 for r in rows if r[2] == "0-0")
     print(f"skorlu {sum(1 for r in rows if r[2])} mac, bunlarin {n00}'i 0-0 (%{100 * n00 / max(1, sum(1 for r in rows if r[2])):.1f}); skorsuz {sum(1 for r in rows if not r[2])}\n")
