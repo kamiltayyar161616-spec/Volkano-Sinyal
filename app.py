@@ -45,6 +45,7 @@ import m7
 import kalkan
 import gecpara
 import desen_tab
+import oto_tahmin
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -420,6 +421,11 @@ def toto_kelly_indir():
     return send_file(p, mimetype="application/gzip", as_attachment=True, download_name="toto_kelly.json.gz")
 
 
+@app.route("/oto-tahmin")
+def oto_tahmin_page():
+    return render_template("oto_tahmin.html", d=oto_tahmin.get_page_data(request.args.get("yenile") == "1"), active_page="oto")
+
+
 @app.route("/desen")
 def desen_page():
     return render_template("desen.html", d=desen_tab.get_page_data(), active_page="desen")
@@ -546,4 +552,5 @@ if __name__ == "__main__":
     m7.start_background()
     gecpara.start_background()
     desen_tab.start_background()
+    oto_tahmin.start_background()
     app.run(host="0.0.0.0", port=8080)

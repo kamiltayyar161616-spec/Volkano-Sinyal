@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}SAHA — OTO TAHMİN{% endblock %}
+{% block page_tag %}🤖 OTO TAHMİN{% endblock %}
+{% block subtitle %}Tamamen otomatik: SAHA'nın NowGoal'dan topladığı verilerle (1X2 açılış ve son oran, keskin bürolar, gol çizgisi) her gün {{ d.saat }}:00'de önümüzdeki 24 saatin tahminleri ve kuponları kurulur, sonuçlar kendiliğinden işlenir. <b>Öğrenme modu:</b> her tahmin bir duruma bağlanır (favori olasılığı bandı, oranın açılıştan beri favoriye mi favoriden mi kaydığı, keskin büroların tarafı, gol çizgisi ve hareketi). Geçmişte aynı durum kaç tuttuysa yüzde ona göre düzeltilir; veri arttıkça sistem daha çok kendi gördüğüne güvenir. Kuponlara sadece en az {{ d.min_ogren }} kez görülmüş durumlar girer. Şu an öğrenilen biten maç: {{ d.n_ogren }}.{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:10px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); vertical-align:top; } .tt .l{ text-align:left; }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); } .meta{ color:var(--chalk-faint); font-size:9px; }
+  tr.ok td{ background:rgba(40,160,90,.16); } tr.ko td{ background:rgba(200,70,60,.10); }
+  .tik{ display:inline-block; min-width:20px; padding:2px 5px; border-radius:6px; font-size:11px; font-weight:800; color:#fff; } .tik.w{ background:var(--turf); } .tik.l{ background:var(--clay-dim); }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:12px; background:var(--navy); border:1px solid var(--navy-line); }
+  .kc h3{ margin:0 0 6px; font-family:'Space Grotesk',sans-serif; font-size:13.5px; display:flex; justify-content:space-between; gap:8px; }
+  .gb{ display:flex; gap:8px; margin:10px 16px; } .gb a{ flex:1; text-align:center; padding:9px; border-radius:10px; text-decoration:none; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); font-size:11px; font-weight:700; }
+  details{ margin:0 16px 10px; } summary{ cursor:pointer; font-size:11px; font-weight:700; color:var(--chalk); padding:6px 0; }
+</style>
+{% endblock %}
+{% macro kupon(k) %}{% if k.L %}
+<div class="kc"><h3><span>{{ k.ad }} <span class="meta">{{ k.L|length }} maç</span></span><span class="{{ 'pos' if k.bit and k.tut >= k.bit * 0.85 else '' }}">{% if k.bit %}{{ k.tut }}/{{ k.bit }} tuttu{% else %}beklenen {{ k.bek }} tutan{% endif %}</span></h3>
+<table class="tt" style="width:100%;margin:0">{% for z in k.L %}<tr class="{{ 'ok' if z.ok else 'ko' if z.ok is not none and z.ok is defined else '' }}">
+<td class="l" style="width:36px">{{ (z.ko | localdatetime)[-5:] }}</td><td class="l"><b>{{ z.mac }}</b><br><span class="meta">{{ z.lig or '' }}{% if z.skor %} · {{ z.skor }}{% if z.iy %} (İY {{ z.iy }}){% endif %}{% endif %}</span></td>
+<td style="white-space:nowrap">{% if k.ad.startswith('MIX') %}<span class="meta">{{ z.tur }}</span><br>{% endif %}<b>{{ z.sec }}</b></td>
+<td><b>%{{ z.p }}</b><br><span class="meta">{{ z.n }} kez görüldü{% if z.gercek is not none %}: %{{ z.gercek }}{% endif %}</span></td>
+<td>{% if z.ok is defined and z.ok is not none %}<span class="tik {{ 'w' if z.ok else 'l' }}">{{ '✓' if z.ok else '✗' }}</span>{% endif %}</td></tr>{% endfor %}</table></div>
+{% endif %}{% endmacro %}
+{% block content %}
+<div class="gb"><a href="/oto-tahmin?yenile=1">🔄 Bugünün kuponlarını şimdi yeniden kur ve kaydet</a></div>
+<div class="section-sub">Arka plan: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'başlıyor' }} {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
+
+<h2 class="section">📊 GERÇEK TUTMA (son 10 gün, tüm tahminler)</h2>
+{% if d.oz %}<table class="tt"><tr><th class="l">tür</th><th>biten</th><th>tuttu</th><th>sistemin dediği</th></tr>
+{% for o in d.oz %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{{ o.n }}</td><td><b class="{{ 'pos' if o.t >= o.b - 2 else 'neg' }}">%{{ o.t }}</b></td><td>%{{ o.b }}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten kayıtlı tahmin yok.</div>{% endif %}
+
+{% if d.onizleme %}<h2 class="section">👀 ÖN İZLEME — bugün henüz kaydedilmedi ({{ d.saat }}:00'de kendiliğinden) · {{ d.onizleme.n_mac }} maç</h2>
+{% for ad, L in d.onizleme.kup.items() %}{{ kupon({'ad': ad, 'L': L, 'tut': 0, 'bit': 0, 'bek': ((L|sum(attribute='p'))/100)|round(1)}) }}{% endfor %}{% endif %}
+
+{% for g in d.gunler %}
+<h2 class="section">🎫 {{ g.gun }} <span class="meta">kuruldu {{ g.at[11:16] }} · {{ g.n_mac }} maç</span></h2>
+{% for k in g.K %}{{ kupon(k) }}{% endfor %}
+{% endfor %}
+
+<h2 class="section">🧠 ÖĞRENME TABLOSU (durum → gerçek tutma)</h2>
+<div class="section-sub">Kullanılan yüzde = (tutan + {{ d.M }} × model) / (görülme + {{ d.M }}). Görülme arttıkça gerçek tutma ağır basar.</div>
+{% for tur, L in d.tablo.items() %}<details {% if loop.first %}open{% endif %}><summary>{{ tur }} ({{ L|length }} durum)</summary>
+<table class="tt" style="width:100%;margin:0"><tr><th class="l">durum</th><th>görüldü</th><th>gerçek</th><th>model</th></tr>
+{% for r in L %}<tr><td class="l">{{ r.durum }}</td><td>{{ r.n }}</td><td><b class="{{ 'pos' if r.gercek > r.model + 2 else 'neg' if r.gercek < r.model - 2 else '' }}">%{{ r.gercek }}</b></td><td>%{{ r.model }}</td></tr>{% endfor %}</table></details>{% endfor %}
+{% endblock %}
