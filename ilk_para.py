@@ -11,7 +11,7 @@ import os
 import sqlite3
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 KOK = os.path.dirname(os.path.abspath(__file__))
 NG = os.path.join(KOK, "data", "nowgoal.db")
@@ -91,7 +91,7 @@ def rapor(baslik, kayit):
 
 def hafta(gun):
     c = sqlite3.connect(f"file:{NG}?mode=ro", uri=True, timeout=30)
-    bas = (datetime.utcnow() - timedelta(days=gun)).isoformat()
+    bas = (datetime.now(timezone.utc) - timedelta(days=gun)).isoformat()
     rows = c.execute("""SELECT l.data_json, l.fetched_at, l.kickoff_utc, m.ft_h, m.ft_a, m.home, m.away FROM ng_late l
                         JOIN ng_match m ON m.mid = l.mid WHERE l.ok = 1 AND m.status = 'finished' AND m.ft_h IS NOT NULL
                         AND l.kickoff_utc >= ?""", (bas,)).fetchall()
@@ -126,11 +126,48 @@ def hafta(gun):
                     if dl[i] >= D:
                         out.append((i, f"{w + 1}) {PEN[w]}"))
                 return out
-            kitap[ad].append({"har": har, "c": cl, "r": r, "fav": fav, "mac": f"{ev} - {dep}"})
+            pin = (d.get("books") or {}).get("Pinnacle")
+            kitap[ad].append({"har": har, "c": cl, "r": r, "fav": fav, "mac": f"{ev} - {dep}", "ko": ko,
+                              "oran": b["c"], "cons": d.get("cons_close"), "pin": nv(pin["c"]) if pin else None})
     print(f"Canlı kaydedilmiş biten maç: {n_canli} (toplam {len(rows)}) | {min(tarih)[:10] if tarih else '-'} .. {max(tarih)[:10] if tarih else '-'}")
+    if "kontrol" in sys.argv:
+        kontrol(kitap, sorted(tarih)[len(tarih) // 2])
+        return
     for ad in ("Pinnacle", "Betfair Exchange", "Sbobet", "Crown"):
         if kitap.get(ad):
             rapor(f"{ad} — {len(kitap[ad])} maç", kitap[ad])
+
+
+def kontrol(kitap, orta):
+    """Beklenen %'yi büronun KENDI kapanisi yerine piyasa ortalamasi ve Pinnacle kapanisiyla da olc; o büronun kapanis oraniyla ROI;
+    haftanin iki yarisi ayri (tesaduf mu?)."""
+    print(f"\nKONTROL | yarılar: ..{orta[:10]} / {orta[:10]}..")
+    print(f"{'büro / eşik / grup':34s} {'n':>4s} {'tuttu':>6s} {'b.kendi':>7s} {'b.piyasa':>8s} {'b.pin':>6s} {'ort.oran':>8s} {'ROI':>6s} {'1.yarı':>12s} {'2.yarı':>12s}")
+    for ad in ("Sbobet", "Crown", "Betfair Exchange", "Pinnacle"):
+        for D in (0.03, 0.05):
+            for grup in ("hepsi", "favori", "favori dışı"):
+                L = []
+                for m in kitap.get(ad, []):
+                    h = m["har"](D)
+                    if not h:
+                        continue
+                    i = h[0][0]
+                    g = "favori" if i == m["fav"] else "favori dışı" if i != 1 else "x"
+                    if grup != "hepsi" and g != grup:
+                        continue
+                    L.append((i == m["r"], m["c"][i], m["cons"][i] if m["cons"] else m["c"][i],
+                              m["pin"][i] if m["pin"] else m["c"][i], m["oran"][i], m["ko"] < orta))
+                if len(L) < 5:
+                    continue
+                n = len(L)
+                w = sum(x[0] for x in L)
+                kar = sum((x[4] - 1) if x[0] else -1 for x in L)
+                y1 = [x for x in L if x[5]]
+                y2 = [x for x in L if not x[5]]
+                yz = lambda Y: f"{sum(x[0] for x in Y)}/{len(Y)} %{100 * sum(x[0] for x in Y) / len(Y):.0f}" if Y else "-"
+                print(f"{ad[:16] + ' ' + str(int(D * 100)) + 'p ' + grup:34s} {n:4d} %{100 * w / n:5.1f} %{100 * sum(x[1] for x in L) / n:6.1f}"
+                      f" %{100 * sum(x[2] for x in L) / n:7.1f} %{100 * sum(x[3] for x in L) / n:5.1f} {sum(x[4] for x in L) / n:8.2f}"
+                      f" %{100 * kar / n:+5.1f} {yz(y1):>12s} {yz(y2):>12s}")
 
 
 def seri():
@@ -180,6 +217,6 @@ def seri():
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else "hafta"
     if mod == "hafta":
-        hafta(int(sys.argv[2]) if len(sys.argv) > 2 else 7)
+        hafta(int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 7)
     else:
         seri()
