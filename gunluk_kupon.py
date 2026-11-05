@@ -18,7 +18,43 @@ IYV = "/root/defter/iyv.db"
 KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "kupon_gunluk")
 TR = timezone(timedelta(hours=3))
 # 7M arsivi: favori gucu x .5 cizgi -> UST tutma % (n >= 100 olan hucreler)
-OU = {"denk": {2.5: 46.7, 3.5: 50.0}, "orta": {2.5: 46.7, 3.5: 42.7}, "güçlü": {3.5: 46.8}}
+OU = {"denk": {1.75: 49.2, 2.0: 50.6, 2.25: 50.1, 2.5: 46.7, 2.75: 51.6, 3.0: 49.7, 3.25: 44.3, 3.5: 50.0},
+      "orta": {2.0: 48.1, 2.25: 51.8, 2.5: 46.7, 2.75: 49.2, 3.0: 51.4, 3.25: 54.2, 3.5: 42.7, 3.75: 48.3},
+      "güçlü": {2.75: 54.1, 3.0: 47.1, 3.25: 54.1, 3.5: 46.8, 3.75: 50.9, 4.0: 50.6, 4.25: 45.0}}
+
+
+def _pois(lam, k):
+    return math.exp(-lam) * lam ** k / math.factorial(k)
+
+
+def _lam(L, u, a):
+    """Volkano .5 cizgisinin marjsiz ust olasiligindan Poisson gol beklentisi (ikiye bolme)"""
+    pu = (1 / u) / ((1 / u) + (1 / a))
+    lo, hi = 0.2, 7.0
+    for _ in range(50):
+        m = (lo + hi) / 2
+        p_ust = 1 - sum(_pois(m, k) for k in range(int(L) + 1))
+        lo, hi = (m, hi) if p_ust < pu else (lo, m)
+    return (lo + hi) / 2
+
+
+def _asya_oran(lam, A, taraf, marj):
+    """Asya cizgisi A (ceyrek/tam dahil) icin Poisson'dan adil oran, Volkano marjiyla -> tahmini oran"""
+    def s_(g):
+        def tek(d):
+            return 1.0 if d > 1e-9 else 0.5 if abs(d) < 1e-9 else 0.0
+        d = (g - A) if taraf == "ÜST" else (A - g)
+        return (tek(d - 0.25) + tek(d + 0.25)) / 2 if abs(A * 2 - round(A * 2)) > 1e-6 else tek(d)
+    W = Lw = 0.0
+    for g in range(15):
+        p = _pois(lam, g)
+        s = s_(g)
+        W += p * max(0.0, (s - 0.5) * 2)
+        Lw += p * max(0.0, (0.5 - s) * 2)
+    if W <= 0:
+        return None
+    adil = 1 + Lw / W
+    return round(adil / (1 + marj), 2)
 REF = {1.5: (33.7, 6.0), 1.75: (53.3, 20.4), 2.0: (57.6, 22.7), 2.25: (60.5, 28.7), 2.5: (63.3, 29.4), 2.75: (68.1, 34.1),
        3.0: (66.8, 34.9), 3.25: (71.6, 41.1), 3.5: (75.4, 48.8), 3.75: (72.5, 50.8), 4.0: (76.0, 51.7), 4.25: (73.9, 48.6), 4.5: (69.7, 54.7)}
 FAVFAV = ((0.45, 23.5), (0.60, 36.9), (0.72, 44.9), (1.01, 64.5))   # favori olasiligi ust siniri -> fav/fav %
@@ -36,7 +72,7 @@ def _maclar(saat=16):
     return [(m, ko, h, a, l, json.loads(v)) for m, ko, h, a, l, v in rows]
 
 
-def _secimler(vk):
+def _secimler(vk, asya=None):
     S = []
     o = vk.get("1") or {}
     try:
@@ -63,12 +99,22 @@ def _secimler(vk):
         u, a = ou[L]
         pu = (1 / u) / ((1 / u) + (1 / a))
         gb = L + (pu - 0.5) * 3.33
-        up = OU.get(band, {}).get(L)
+        marj = 1 / u + 1 / a - 1
+        lam = _lam(L, u, a)
+        A = asya if asya and 1.5 <= asya <= 4.5 else L
+        up = OU.get(band, {}).get(A)
         if up is not None:
             t, pr = ("ÜST", up) if up >= 50 else ("ALT", 100 - up)
         else:
             t, pr = ("ÜST", 50.0) if u < a else ("ALT", 50.0)
-        S.append(("Alt/Üst", f"{L:g} {t}", pr, u if t == "ÜST" else a))
+        if A == L:
+            S.append(("Alt/Üst", f"{A:g} {t}", pr, u if t == "ÜST" else a))
+        else:
+            o_ = (vk.get("18") or {}).get(str(float(A)))
+            if o_ and o_.get("over") and o_.get("under"):
+                S.append(("Alt/Üst", f"{A:g} {t}", pr, o_["over"] if t == "ÜST" else o_["under"]))
+            else:
+                S.append(("Alt/Üst", f"{A:g} {t}", pr, _asya_oran(lam, A, t, marj), True))
     ht = vk.get("68") or {}
     if gb is not None:
         b = min(4.5, max(1.5, round(gb * 4) / 4))
@@ -89,11 +135,19 @@ def olustur(yenile=False):
     if os.path.exists(yol) and not yenile:
         return json.load(open(yol))
     T = []
-    for mid, ko, h, a, lig, vk in _maclar():
-        S, gb = _secimler(vk)
+    M = _maclar()
+    asya = {}
+    if M:
+        with ng._db_lock:
+            c = ng._conn()
+            asya = {r[0]: r[1] for r in c.execute(
+                f"SELECT mid, ou_son FROM ng_match WHERE ou_son >= 1.5 AND mid IN ({','.join(str(m[0]) for m in M)})")}
+            c.close()
+    for mid, ko, h, a, lig, vk in M:
+        S, gb = _secimler(vk, asya.get(mid))
         if S:
             T.append({"mid": mid, "ko": ko, "mac": f"{h} - {a}", "lig": lig, "gb": gb,
-                      "secim": [{"tur": t, "sec": s, "p": p, "oran": o} for t, s, p, o in S]})
+                      "secim": [{"tur": x[0], "sec": x[1], "p": x[2], "oran": x[3], "tahmini": len(x) > 4} for x in S]})
     K = {}
     for tur in TURLER:
         L = [dict(mid=x["mid"], ko=x["ko"], mac=x["mac"], lig=x["lig"], **s) for x in T for s in x["secim"] if s["tur"] == tur]
@@ -169,9 +223,10 @@ def get_page_data(yenile=False):
             ps = [z["p"] / 100 for z in L]
             dg = _dag(ps)
             od = [z["oran"] for z in L if z.get("oran")]
+            n_tah = sum(1 for z in L if z.get("tahmini"))
             biten = [z for z in L if z["sonuc"] is not None]
             kup.append({"ad": ad, "L": L, "bek": round(sum(ps), 1), "p15": round(100 * sum(dg[15:]), 1), "p20": round(100 * dg[-1], 3),
-                        "toplam_oran": round(math.prod(od), 2) if od else None, "n_oran": len(od),
+                        "toplam_oran": round(math.prod(od), 2) if od else None, "n_oran": len(od), "n_tah": n_tah,
                         "biten": len(biten), "tutan": sum(1 for z in biten if z["sonuc"])})
         for x in d["maclar"]:
             r = res.get(x["mid"])
