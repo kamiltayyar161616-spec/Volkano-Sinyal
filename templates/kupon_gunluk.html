@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Günlük Kupon{% endblock %}
+{% block page_tag %}GÜNLÜK KUPON{% endblock %}
+{% block subtitle %}Sadece Volkano'da olan maçlar, Volkano oranlarıyla. Her gün ilk açılışta önümüzdeki 16 saatin maçlarından 20'lik kuponlar kurulur ve saklanır; sonuçlar kendiliğinden işlenir. Yüzdeler beklenen tutma oranı: kazanan = Volkano 1X2 marjsız olasılığı, alt/üst ve İY = 7M arşivi (12 bin maç), İY/MS = favori gücüne göre arşivdeki en sık sonuç.{% endblock %}
+{% block extra_style %}
+<style>
+  .kt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:10px; }
+  .kt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .kt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); vertical-align:top; } .kt .l{ text-align:left; }
+  .kc{ margin:0 16px 12px; padding:11px 12px; border-radius:12px; background:var(--navy); border:1px solid var(--navy-line); }
+  .kc h3{ margin:0 0 6px; font-family:'Space Grotesk',sans-serif; font-size:13.5px; display:flex; justify-content:space-between; gap:8px; }
+  .ki{ display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-bottom:6px; text-align:center; }
+  .ki div{ background:var(--navy-deep); border-radius:7px; padding:5px 2px; } .ki b{ display:block; font-size:13px; } .ki span{ font-size:8.5px; color:var(--chalk-faint); }
+  .meta{ color:var(--chalk-faint); font-size:9px; }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .yes{ color:var(--turf-bright); font-weight:700; } .no{ color:var(--clay); font-weight:700; }
+  .gb{ display:flex; gap:8px; margin:10px 16px; } .gb a{ flex:1; text-align:center; padding:9px; border-radius:10px; text-decoration:none; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); font-size:11px; font-weight:700; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="gb"><a href="/kupon-gunluk?yenile=1">🔄 Bugünün kuponlarını yeniden kur ve kaydet</a></div>
+{% if d.onizleme %}<div class="section-sub">⚠️ Ön izleme: Volkano verisi 12 saat ileriyi kapsadığı için bugünün kuponları 12:00'de (akşam maçları dahil) otomatik kaydedilir. Şimdi kaydetmek istersen yukarıdaki düğme.</div>{% endif %}
+<h2 class="section">📊 TÜR BAZINDA GERÇEK BAŞARI (tüm maçlar, son 10 gün)</h2>
+<table class="kt"><tr><th class="l">tür</th><th>biten seçim</th><th>tutan</th><th>gerçek %</th><th>beklenen %</th></tr>
+{% for o in d.oz %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{{ o.n }}</td><td>{{ o.tutan }}</td>
+<td>{% if o.yuzde is not none %}<b class="{{ 'pos' if o.yuzde >= o.bekl else 'neg' }}">%{{ o.yuzde }}</b>{% else %}—{% endif %}</td><td>{% if o.bekl is not none %}%{{ o.bekl }}{% else %}—{% endif %}</td></tr>{% endfor %}</table>
+{% for g in d.gunler %}
+<h2 class="section">🎫 {{ g.gun }} {% if g.gun == d.bugun %}(bugün · {{ g.n_mac }} Volkano maçı){% endif %}</h2>
+{% for k in g.kup %}{% if k.L %}
+<div class="kc"><h3><span>{{ k.ad }} <span class="meta">{{ k.L|length }} maç</span></span>{% if k.biten %}<span class="{{ 'pos' if k.tutan >= k.bek * k.biten / k.L|length else 'neg' }}">{{ k.tutan }}/{{ k.biten }} tuttu</span>{% endif %}</h3>
+<div class="ki"><div><b>{{ k.bek }}</b><span>beklenen tutan</span></div><div><b>%{{ k.p15 }}</b><span>15+ tutma</span></div><div><b>{{ '{:,.2f}'.format(k.toplam_oran) if k.toplam_oran else '—' }}</b><span>toplam oran ({{ k.n_oran }}/{{ k.L|length }})</span></div><div><b>%{{ k.p20 }}</b><span>hepsi tutar</span></div></div>
+<table class="kt" style="width:100%;margin:0">{% for z in k.L %}<tr><td class="l" style="width:38px">{{ (z.ko | localdatetime)[-5:] }}</td><td class="l"><b>{{ z.mac }}</b><br><span class="meta">{{ z.lig or '' }}{% if z.skor %} · {{ z.skor }}{% endif %}</span></td>
+<td style="white-space:nowrap">{% if k.ad.startswith('MIX') %}<span class="meta">{{ z.tur }}</span><br>{% endif %}<b>{{ z.sec }}</b>{% if z.oran %} @{{ '%.2f'|format(z.oran) }}{% endif %}</td><td>%{{ z.p|round|int }}</td>
+<td>{% if z.sonuc is not none %}<span class="{{ 'yes' if z.sonuc else 'no' }}">{{ '✓' if z.sonuc else '✗' }}</span>{% endif %}</td></tr>{% endfor %}</table></div>
+{% endif %}{% endfor %}
+{% else %}<div class="section-sub">Henüz kupon yok (iyv.db boş olabilir).</div>{% endfor %}
+{% endblock %}

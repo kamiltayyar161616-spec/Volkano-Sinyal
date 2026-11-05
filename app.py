@@ -40,6 +40,7 @@ import htft_tab
 import iyv_tab
 import toto_tab
 import kelly_tab
+import gunluk_kupon
 import m7
 
 app = Flask(__name__)
@@ -403,6 +404,11 @@ def toto_kelly_indir():
     if not _os.path.exists(p):
         abort(404)
     return send_file(p, mimetype="application/gzip", as_attachment=True, download_name="toto_kelly.json.gz")
+
+
+@app.route("/kupon-gunluk")
+def kupon_gunluk_page():
+    return render_template("kupon_gunluk.html", d=gunluk_kupon.get_page_data(yenile=bool(request.args.get("yenile"))), active_page="kupongunluk")
 
 
 @app.route("/kelly")

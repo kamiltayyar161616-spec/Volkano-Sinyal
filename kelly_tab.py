@@ -145,6 +145,9 @@ def run_cycle():
     try:
         import htft_tab
         htft_tab.oto_kaydet()
+        import gunluk_kupon
+        if datetime.now(TR).hour >= 12:
+            gunluk_kupon.olustur()
     except Exception as e:
         _last["desen"] = str(e)[:100]
     try:
