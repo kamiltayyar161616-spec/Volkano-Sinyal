@@ -159,6 +159,7 @@ def kur(gun=None, kaydet=True):
         if not F:
             continue
         maclar[str(mid)] = {"mac": f"{ev} - {dep}", "ev": ev, "dep": dep, "lig": lig, "ko": ko, "F": F, "T": tahmin_seti(F, O)}
+    lig_doldur(maclar)
     kup = {}
     for tur in TURLER:
         A = sorted(((m, x) for m, x in maclar.items() if tur in x["T"] and x["T"][tur]["n"] >= MIN_OGREN), key=lambda t: -t[1]["T"][tur]["p"])
@@ -177,6 +178,60 @@ def kur(gun=None, kaydet=True):
         with _kilit:
             json.dump(veri, open(os.path.join(KLASOR, f"{gun}.json"), "w", encoding="utf-8"), ensure_ascii=False)
     return veri
+
+
+LIG_DOSYA = os.path.join(KLASOR, "lig.json")
+
+
+def lig_doldur(maclar, sure=240):
+    """lig adi eksik maclar: 1) bahis siteleri (Volkano, Admiral, Sansa, SBBet, Premier, Soccerbet, Maxbet; takim adi + saat)
+    2) 7M (ayni baslama saati + takim adi benzerligi, d_mn). Bulunan ligler data/oto_tahmin/lig.json'da saklanir."""
+    try:
+        C = json.load(open(LIG_DOSYA, encoding="utf-8"))
+    except (OSError, ValueError):
+        C = {}
+    eksik = [m for m, x in maclar.items() if not x.get("lig")]
+    for m in eksik:
+        if C.get(m):
+            maclar[m]["lig"] = C[m]
+    eksik = [m for m in eksik if not maclar[m].get("lig")]
+    if not eksik:
+        return
+    t0 = time.time()
+    try:
+        import nowgoal as ng
+        evs = ng._load_markets()
+    except Exception:
+        evs = {}
+    for m in eksik:
+        x = maclar[m]
+        ko = datetime.fromisoformat(x["ko"])
+        for src, L in evs.items():
+            try:
+                e = ng._find(L, x["ev"], x["dep"], ko)
+            except Exception:
+                e = None
+            if e and e.get("league") and e["league"] != "Bilinmeyen Lig":
+                x["lig"] = C[m] = f"{e['league']}"
+                break
+    eksik = [m for m in eksik if not maclar[m].get("lig")]
+    if eksik:
+        try:
+            import kelly_tab as K
+            for m in eksik:
+                if time.time() - t0 > sure:
+                    break
+                x = maclar[m]
+                b = K.m7_bul(x["ev"], x["dep"], datetime.fromisoformat(x["ko"]))
+                if b:
+                    mn = K._m7_ad(b[1])[2]
+                    if mn:
+                        x["lig"] = C[m] = mn
+        except Exception as e:
+            _last["hata"] = f"lig 7M: {str(e)[:60]}"
+    os.makedirs(KLASOR, exist_ok=True)
+    with _kilit:
+        json.dump(C, open(LIG_DOSYA, "w", encoding="utf-8"), ensure_ascii=False)
 
 
 def _son5_dosya(gun):
@@ -253,6 +308,13 @@ def _loop():
                 v = kur(gun, True)
                 _last["log"] = f"{gun} sabah tahmini kuruldu: {len(v['maclar'])} maç"
             son5_tara()
+            if time.time() - _cache.get("lig_t", 0) > 3600:
+                _cache["lig_t"] = time.time()
+                v = _oku(gun)
+                if v and any(not x.get("lig") for x in v["maclar"].values()):
+                    lig_doldur(v["maclar"])
+                    with _kilit:
+                        json.dump(v, open(os.path.join(KLASOR, f"{gun}.json"), "w", encoding="utf-8"), ensure_ascii=False)
             _last["at"] = datetime.now(timezone.utc).isoformat()[:19]
         except Exception as e:
             _last["hata"] = str(e)[:150]
@@ -289,7 +351,7 @@ def _oku(g):
 def gunler():
     if not os.path.isdir(KLASOR):
         return []
-    return sorted((f[:-5] for f in os.listdir(KLASOR) if f.endswith(".json") and "_son5" not in f and _oku(f[:-5])), reverse=True)
+    return sorted((f[:-5] for f in os.listdir(KLASOR) if f.endswith(".json") and "_son5" not in f and f != "lig.json" and _oku(f[:-5])), reverse=True)
 
 
 def surpriz(x, s5):
@@ -378,6 +440,13 @@ def get_page_data(gun=None, yenile=False):
             for m, lg in c.execute(f"SELECT mid, COALESCE(NULLIF(league_ng, ''), league_vk) FROM ng_match WHERE mid IN ({q})", [int(x) for x in eksik]):
                 v["maclar"][str(m)]["lig"] = lg
             c.close()
+            try:
+                C = json.load(open(LIG_DOSYA, encoding="utf-8"))
+            except (OSError, ValueError):
+                C = {}
+            for m in eksik:
+                if not v["maclar"][m].get("lig") and C.get(m):
+                    v["maclar"][m]["lig"] = C[m]
         L = []
         for m, x in sorted(v["maclar"].items(), key=lambda t: t[1]["ko"]):
             r = S.get(m) or (None,) * 4
