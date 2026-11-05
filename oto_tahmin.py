@@ -314,6 +314,18 @@ def _son5_dosya(gun):
     return os.path.join(KLASOR, f"{gun}_son5.json")
 
 
+def _son5_oku(gun):
+    p = _son5_dosya(gun)
+    try:
+        R = json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
+    except (OSError, ValueError):
+        R = {}
+    for y in R.values():
+        if y.get("F"):
+            _oran_doldur(y["F"], y.get("T"))
+    return R
+
+
 def farklar(Fs, Fn):
     """sabah -> son 5 dk: para akisi / cizgi degisimleri ve tutarsizlik notlari"""
     N = []
@@ -425,12 +437,23 @@ def _sonuclar(mids):
     return R
 
 
+def _oran_doldur(F, T):
+    """oran alani olmayan (eski) kayitlara oran ekle: model olasiligi + marj (Kazanan icin varsa gercek büro orani)"""
+    for t, z in (T or {}).items():
+        if not z.get("oran") and z.get("model") is not None:
+            z["oran"], z["oran_g"] = oran(t, z["model"] / 100, F)
+
+
 def _oku(g):
     try:
         v = json.load(open(os.path.join(KLASOR, f"{g}.json"), encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return v if "maclar" in v else None                 # eski bicim dosyalar yok sayilir
+    if "maclar" not in v:
+        return None                                    # eski bicim dosyalar yok sayilir
+    for x in v["maclar"].values():
+        _oran_doldur(x.get("F", {}), x.get("T"))
+    return v
 
 
 def gunler():
@@ -496,7 +519,7 @@ def get_page_data(gun=None, yenile=False):
     sz = {"aday": [0, 0, 0], "güçlü": [0, 0, 0]}          # n, favori kazanamadi, surpriz kazandi
     for g in G[:14]:                                   # 14 gunluk tutma: sabah vs son 5 dk
         v = _oku(g)
-        R5 = json.load(open(_son5_dosya(g), encoding="utf-8")) if os.path.exists(_son5_dosya(g)) else {}
+        R5 = _son5_oku(g)
         S = _sonuclar(v["maclar"].keys())
         for m, x in v["maclar"].items():
             r = S.get(m)
@@ -525,7 +548,7 @@ def get_page_data(gun=None, yenile=False):
     gv = None
     if gun:
         v = _oku(gun)
-        R5 = json.load(open(_son5_dosya(gun), encoding="utf-8")) if os.path.exists(_son5_dosya(gun)) else {}
+        R5 = _son5_oku(gun)
         S = _sonuclar(v["maclar"].keys())
         eksik = [m for m, x in v["maclar"].items() if not x.get("lig")]
         if eksik:
