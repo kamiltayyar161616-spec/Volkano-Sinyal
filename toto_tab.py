@@ -321,7 +321,7 @@ def _benzer(a, b):
     if not A or not B:
         return 0
     bs = " ".join(B)
-    s = sum(1 for w in A if len(w) >= 4 and (w in B or w in bs or any(x in w for x in B if len(x) >= 5)))
+    s = sum(1 for w in A if (len(w) >= 4 and (w in B or w in bs or any(x in w for x in B if len(x) >= 5))) or (len(w) == 3 and w in B))
     return s / len(A)
 
 
