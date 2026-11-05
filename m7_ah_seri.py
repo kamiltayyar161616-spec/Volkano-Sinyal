@@ -1,6 +1,7 @@
 """7M arsivindeki maclarin Asya handikap SERISI (her büronun mac oncesi tüm cizgi/su degisiklikleri) -> ilk buyuk para testi.
   topla : python3 m7_ah_seri.py topla [isci=4]     (m7_arsiv.db'deki skorlu maclar; kaldigi yerden devam)
   durum : python3 m7_ah_seri.py durum
+  iyms  : python3 m7_ah_seri.py iyms   (gec para -> favori maclarda IY/MS dagilimi vs kontrol)
   analiz: python3 m7_ah_seri.py analiz [min_mac=300] [büro ...]   (bosluklu ad: Pinnacle_Sports)
 Para gücü (ev lehine, gol cinsinden) = -cizgi + (ev marjsiz su olasiligi - 0.5) * 4   (0.25 cizgi ~ 6 puan olasilik).
 Buyuk para = 30 dk icinde bu degerin >= D gol degismesi. ILK = ilk gorulen, SON = en son.
@@ -207,6 +208,99 @@ def analiz(min_n=300, burolar=None, ozet=None):
                 print(f"   {ad:34s} {R[ad].s()}")
 
 
+def _hareketler(L, D):
+    """seri -> [(taraf 0=ev/2=dep, pencere, dk), ...] buyuk para anlari (analiz ile ayni tanim)"""
+    G = [(x[0], guc(x[1], x[2], x[3])) for x in L]
+    har, son_an = [], -1e9
+    for t, g in G:
+        ref = G[0][1]
+        for tt, gg in G:
+            if tt > t - 30:
+                break
+            ref = gg
+        dl = g - ref
+        if abs(dl) >= D and t - son_an > 30:
+            kal = -t
+            w = "1) >6 saat" if kal > 360 else "2) 6-2 saat" if kal > 120 else "3) 2s-30dk" if kal > 30 else "4) son 30 dk"
+            har.append((0 if dl > 0 else 2, w, t))
+            son_an = t
+    return har
+
+
+IYMS_SIRA = ("fav/fav", "X/fav", "dış/fav", "fav/X", "X/X", "dış/X", "fav/dış", "X/dış", "dış/dış")
+
+
+def iyms_analiz(burolar=("Pinnacle Sports", "SBOBET", "Bet365")):
+    """Gec para (ilk buyuk hareket son 30 dk / 2s-30dk, favoriye) olan maclarda IY/MS dagilimi vs ayni kapanis
+    cizgisindeki TUM maclar (kontrol). Sonuclar favori acisindan: fav/fav, X/fav (0/favori), dış/fav (geri donus)..."""
+    a = A.db()
+    M = {}
+    for i, ko, ou, sk, gl in a.execute("SELECT id, ko, ou, skor, goller FROM mac"):
+        s_ = A.skor_al(sk, gl, A._ko_tahmin(ko, ou))
+        iy = A._iy(gl, s_) if s_ else None
+        if s_ and iy:
+            M[i] = (tuple(int(x) for x in s_.split("-")), iy)
+    a.close()
+    c = db()
+    rows = c.execute("SELECT id, d FROM s WHERE d IS NOT NULL").fetchall()
+    c.close()
+    sg = lambda h, a_: 0 if h > a_ else 1 if h == a_ else 2
+
+    def bant(L):
+        x = abs(L)
+        return "0-0.25" if x <= 0.25 else "0.5-0.75" if x <= 0.75 else "1-1.25" if x <= 1.25 else "1.5+"
+    KON = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))      # büro -> bant -> sonuc -> n
+    SIN = defaultdict(list)                                               # (büro, grup) -> [(bant, sonuc)]
+    for i, d in rows:
+        if i not in M:
+            continue
+        (fh, fa), (hh, ha) = M[i]
+        S = json.loads(d)
+        hepsi = {}
+        for k in burolar:
+            L = S.get(k)
+            if not L or len(L) < 2 or L[0][0] is None:
+                continue
+            Lc, oh, oa = L[-1][1], L[-1][2], L[-1][3]
+            fav = 0 if Lc < 0 else 2 if Lc > 0 else (0 if oh <= oa else 2)
+            ad = lambda r: "fav" if r == fav else "X" if r == 1 else "dış"
+            son = f"{ad(sg(hh, ha))}/{ad(sg(fh, fa))}"
+            b = bant(Lc)
+            KON[k][b][son] += 1
+            for D in (0.25, 0.4):
+                h = _hareketler(L, D)
+                if h and h[0][0] == fav and h[0][1] in ("3) 2s-30dk", "4) son 30 dk"):
+                    g = f"{D} gol, {h[0][1][3:]}"
+                    SIN[(k, g)].append((b, son))
+                    hepsi.setdefault(g, (b, son))
+        for g, v in hepsi.items():
+            SIN[("HERHANGİ (3 büro)", g)].append(v)
+    KON["HERHANGİ (3 büro)"] = KON["Pinnacle Sports"]
+    print(f"İY skoru olan {len(M)} maç. Kontrol = aynı büro + aynı kapanış çizgisi bandındaki tüm maçlar (sinyalin bant karışımına göre ağırlıklı).")
+    print("Hücre: sinyal % (kontrol %) → oran. Oran > 1.15 olursa Volkano İY/MS marjını (~%15) aşabilir.\n")
+    for (k, g), L in sorted(SIN.items(), key=lambda t: (t[0][0] != "HERHANGİ (3 büro)", t[0])):
+        n = len(L)
+        if n < 40:
+            continue
+        bmix = defaultdict(int)
+        cnt = defaultdict(int)
+        for b, s_ in L:
+            bmix[b] += 1
+            cnt[s_] += 1
+        print(f"== {k} | {g} | n={n} | bant: " + ", ".join(f"{b} {v}" for b, v in sorted(bmix.items())))
+        hs = []
+        for s_ in IYMS_SIRA:
+            bek = 0.0
+            for b, v in bmix.items():
+                T = sum(KON[k][b].values())
+                bek += v / n * (KON[k][b][s_] / T if T else 0)
+            p = cnt[s_] / n
+            hs.append(f"{s_} %{100 * p:4.1f} (%{100 * bek:4.1f}) {p / bek if bek else 0:4.2f}")
+        for j in range(0, 9, 3):
+            print("   " + " | ".join(hs[j:j + 3]))
+        print()
+
+
 def ozet_bas(min_n=300):
     Z = {}
     analiz(min_n, None, Z)
@@ -225,6 +319,8 @@ if __name__ == "__main__":
     a = sys.argv[1:] or ["durum"]
     if a[0] == "topla":
         topla(int(a[1]) if len(a) > 1 else 4)
+    elif a[0] == "iyms":
+        iyms_analiz()
     elif a[0] == "ozet":
         ozet_bas(int(a[1]) if len(a) > 1 else 300)
     elif a[0] == "analiz":
