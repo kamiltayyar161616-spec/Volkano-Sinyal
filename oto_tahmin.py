@@ -600,6 +600,13 @@ def get_page_data(gun=None, yenile=False):
         v = _oku(gun)
         R5 = _son5_oku(gun)
         S = _sonuclar(v["maclar"].keys())
+        now_ = datetime.now(timezone.utc)
+        bek = [m for m, x in v["maclar"].items() if datetime.fromisoformat(x["ko"]) > now_
+               and not any(z.get("oran_k") for z in x["T"].values())]
+        if bek:                                         # eski kayit, baslamamis mac: Volkano'nun guncel oranini goster
+            V = vk_oranlar(bek)
+            for m in bek:
+                vk_uygula(v["maclar"][m]["T"], V.get(m))
         eksik = [m for m, x in v["maclar"].items() if not x.get("lig")]
         if eksik:
             c = _ng()
