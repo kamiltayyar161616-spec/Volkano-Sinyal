@@ -318,6 +318,50 @@ def karsilastir(min_n=200):
             print(f"{k:18s} n={n:6d} favori ROI %{100 * fk / n:+6.1f} | sürpriz ROI %{100 * sk / n:+6.1f}")
 
 
+def desen(buro="Pinnacle Sports"):
+    """Alt/Ust cizgi deseni (orta favori: handikap 0.5-1.25; cizgi <= 2.5 -> UST, 2.75-3.0 -> ALT) arsivde, gercek oranla.
+    Cizgi/handikap/oran: secilen büronun mac basi degerleri; ayrica bürolar arasi en iyi oranla."""
+    c = db()
+    rows = [(ou, ah, skor_al(sk, gl, _ko_tahmin(ko, ou))) for ou, ah, sk, gl, ko in
+            c.execute("SELECT ou, ah, skor, goller, ko FROM mac").fetchall()]
+    c.close()
+    R = defaultdict(lambda: [0, 0.0, 0.0, 0.0])            # n, puan, kar (büro orani), kar (en iyi oran)
+    for ou, ah, skor in rows:
+        m = re.match(r"^(\d+)-(\d+)$", skor or "")
+        if not m:
+            continue
+        g = int(m.group(1)) + int(m.group(2))
+        O = json.loads(ou or "{}")
+        A = json.loads(ah or "{}")
+        if buro not in O or buro not in A:
+            continue
+        t, L, u, a = O[buro]["kap"]
+        h = abs(A[buro]["kap"][1])
+        if L < 0.5 or u <= 1 or a <= 1:
+            continue
+        ayni = [v["kap"] for v in O.values() if v["kap"][1] == L and v["kap"][2] > 1 and v["kap"][3] > 1]
+        bu, ba = max(x[2] for x in ayni), max(x[3] for x in ayni)
+        fb = "denk (0-0.25)" if h <= 0.25 else "orta (0.5-1.25)" if h <= 1.25 else "güçlü (1.5+)"
+        sp = asya(g - L)
+        for taraf, od, eo, ss in (("ÜST", u, bu, sp), ("ALT", a, ba, 1 - sp)):
+            for k in (f"{fb} | çizgi {L:.2f} | {taraf}",
+                      f"{fb} | çizgi ≤2.50 | {taraf}" if L <= 2.5 else f"{fb} | çizgi 2.75-3.00 | {taraf}" if L <= 3.0 else None):
+                if k:
+                    x = R[k]
+                    x[0] += 1; x[1] += ss; x[2] += kar(ss, od); x[3] += kar(ss, eo)
+    print(f"Çizgi deseni arşiv testi ({buro} maç başı çizgi, handikap ve oran)\n")
+    print("DESEN: orta favori + çizgi ≤2.50 → ÜST, çizgi 2.75-3.00 → ALT")
+    for k in ("orta (0.5-1.25) | çizgi ≤2.50 | ÜST", "orta (0.5-1.25) | çizgi 2.75-3.00 | ALT"):
+        n, sp, kb, ke = R.get(k, [0, 0, 0, 0])
+        if n:
+            print(f"  {k:42s} n={n:5d} tuttu %{100 * sp / n:5.1f} | ROI büro %{100 * kb / n:+5.1f} | en iyi oran %{100 * ke / n:+5.1f}")
+    print("\nTüm hücreler (n >= 100):")
+    for k in sorted(R):
+        n, sp, kb, ke = R[k]
+        if n >= 100 and "≤2.50" not in k and "2.75-3.00" not in k:
+            print(f"  {k:42s} n={n:5d} tuttu %{100 * sp / n:5.1f} | ROI büro %{100 * kb / n:+5.1f} | en iyi %{100 * ke / n:+5.1f}")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if not a or a[0] == "durum":
@@ -326,6 +370,8 @@ if __name__ == "__main__":
         topla(int(a[1]) if len(a) > 1 else 5183000, int(a[2]) if len(a) > 2 else 5138000)
     elif a[0] == "iy_doldur":
         iy_doldur()
+    elif a[0] == "desen":
+        desen(a[1] if len(a) > 1 else "Pinnacle Sports")
     elif a[0] == "karsilastir":
         karsilastir(int(a[1]) if len(a) > 1 else 200)
     elif a[0] == "analiz":
