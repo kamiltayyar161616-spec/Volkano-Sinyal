@@ -13,6 +13,9 @@
   .meta{ color:var(--chalk-faint); font-size:9px; }
   .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
   .yes{ color:var(--turf-bright); font-weight:700; } .no{ color:var(--clay); font-weight:700; }
+  tr.ok td{ background:rgba(40,160,90,.16); } tr.ko td{ background:rgba(200,70,60,.10); }
+  .tik{ display:inline-block; min-width:22px; padding:2px 5px; border-radius:6px; font-size:12px; font-weight:800; }
+  .tik.w{ background:var(--turf); color:#fff; } .tik.l{ background:var(--clay-dim); color:#fff; }
   .gb{ display:flex; gap:8px; margin:10px 16px; } .gb a{ flex:1; text-align:center; padding:9px; border-radius:10px; text-decoration:none; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); font-size:11px; font-weight:700; }
 </style>
 {% endblock %}
@@ -28,9 +31,9 @@
 {% for k in g.kup %}{% if k.L %}
 <div class="kc"><h3><span>{{ k.ad }} <span class="meta">{{ k.L|length }} maç</span></span>{% if k.biten %}<span class="{{ 'pos' if k.tutan >= k.bek * k.biten / k.L|length else 'neg' }}">{{ k.tutan }}/{{ k.biten }} tuttu</span>{% endif %}</h3>
 <div class="ki"><div><b>{{ k.bek }}</b><span>beklenen tutan</span></div><div><b>%{{ k.p15 }}</b><span>15+ tutma</span></div><div><b>{{ '{:,.2f}'.format(k.toplam_oran) if k.toplam_oran else '—' }}</b><span>toplam oran ({{ k.n_oran }}/{{ k.L|length }}{% if k.n_tah %}, {{ k.n_tah }} ≈{% endif %})</span></div><div><b>%{{ k.p20 }}</b><span>hepsi tutar</span></div></div>
-<table class="kt" style="width:100%;margin:0">{% for z in k.L %}<tr><td class="l" style="width:38px">{{ (z.ko | localdatetime)[-5:] }}</td><td class="l"><b>{{ z.mac }}</b><br><span class="meta">{{ z.lig or '' }}{% if z.skor %} · {{ z.skor }}{% endif %}</span></td>
+<table class="kt" style="width:100%;margin:0">{% for z in k.L %}<tr class="{{ 'ok' if z.sonuc else 'ko' if z.sonuc is not none else '' }}"><td class="l" style="width:38px">{{ (z.ko | localdatetime)[-5:] }}</td><td class="l"><b>{{ z.mac }}</b><br><span class="meta">{{ z.lig or '' }}{% if z.skor %} · {{ z.skor }}{% endif %}</span></td>
 <td style="white-space:nowrap">{% if k.ad.startswith('MIX') %}<span class="meta">{{ z.tur }}</span><br>{% endif %}<b>{{ z.sec }}</b>{% if z.oran %} @{{ '≈' if z.tahmini else '' }}{{ '%.2f'|format(z.oran) }}{% endif %}</td><td>%{{ z.p|round|int }}</td>
-<td>{% if z.sonuc is not none %}<span class="{{ 'yes' if z.sonuc else 'no' }}">{{ '✓' if z.sonuc else '✗' }}</span>{% endif %}</td></tr>{% endfor %}</table></div>
+<td>{% if z.sonuc is not none %}<span class="tik {{ 'w' if z.sonuc else 'l' }}">{{ '✓' if z.sonuc else '✗' }}</span>{% endif %}</td></tr>{% endfor %}</table></div>
 {% endif %}{% endfor %}
 {% else %}<div class="section-sub">Henüz kupon yok (iyv.db boş olabilir).</div>{% endfor %}
 {% endblock %}
