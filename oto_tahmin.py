@@ -159,6 +159,11 @@ def kur(gun=None, kaydet=True):
         if not F:
             continue
         maclar[str(mid)] = {"mac": f"{ev} - {dep}", "ev": ev, "dep": dep, "lig": lig, "ko": ko, "F": F, "T": tahmin_seti(F, O)}
+    eski = _oku(gun) if kaydet else None              # yeniden kurulumda baslamis maclar silinmesin
+    if eski:
+        for m, x in eski["maclar"].items():
+            if m not in maclar and datetime.fromisoformat(x["ko"]) <= datetime.now(timezone.utc) + timedelta(minutes=5):
+                maclar[m] = x
     lig_doldur(maclar)
     kup = {}
     for tur in TURLER:
