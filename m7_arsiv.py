@@ -173,10 +173,21 @@ def durum():
     n, b = c.execute("SELECT COUNT(*) FROM mac").fetchone()[0], c.execute("SELECT COUNT(*) FROM bos").fetchone()[0]
     r = c.execute("SELECT MIN(id), MAX(id), MIN(ko), MAX(ko) FROM mac").fetchone()
     sk = c.execute("SELECT COUNT(*) FROM mac WHERE skor IS NOT NULL").fetchone()[0]
+    gl = dict(c.execute("SELECT CASE WHEN goller IS NULL THEN 'yok' WHEN goller='[]' THEN 'bos liste' ELSE 'gol var' END, COUNT(*) FROM mac WHERE skor IS NULL GROUP BY 1"))
+    print("skorsuz maclarin gol listesi:", gl)
     print(f"kayitli mac {n} (skorlu {sk}), bos numara {b} | id {r[0]}..{r[1]} | tarih {r[2]} .. {r[3]}")
     for ad, k in c.execute("""SELECT key, COUNT(*) FROM mac, json_each(mac.ou) GROUP BY key ORDER BY 2 DESC LIMIT 16"""):
         print(f"   {ad:20s} {k}")
     c.close()
+
+
+def skor_al(skor, goller, ko):
+    """kayitli skor; yoksa: gol listesi bos ([]) ve mac en az 3 saat once basladiysa 0-0 (golsuz maclar goaldata'da skor vermez)"""
+    if skor and re.match(r"^\d+-\d+$", skor):
+        return skor
+    if goller == "[]" and ko and ko < (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()[:16]:
+        return "0-0"
+    return None
 
 
 def asya(d):
@@ -193,7 +204,8 @@ def kar(s, o):
 
 def analiz(buro="SBOBET"):
     c = db()
-    rows = c.execute("SELECT id, lig, ko, skor, ou, ah, ta, tb FROM mac WHERE skor IS NOT NULL").fetchall()
+    rows = [(i, lig, ko, skor_al(sk, gl, ko), ou, ah, ta, tb) for i, lig, ko, sk, ou, ah, ta, tb, gl in
+            c.execute("SELECT id, lig, ko, skor, ou, ah, ta, tb, goller FROM mac").fetchall()]
     c.close()
     A = defaultdict(lambda: [0, 0.0, 0.0, 0.0, 0])           # n, ust puan, ust kar, alt kar, gol
     gen = re.compile(r"u1\d|u2\d|women|reserve|youth|\(w\)", re.I)
@@ -235,7 +247,10 @@ def karsilastir(min_n=200):
     """Tüm bürolar: mac basi alt/ust cizgisinin dogrulugu + düz ROI; ayrica strateji adaylari:
     (1) en iyi oran (bürolar arasi en yüksek ust / alt orani), (2) büronun cizgisi piyasa ortancasindan farkliysa ters tarafi oyna."""
     c = db()
-    rows = c.execute("SELECT ou, ah, skor, lig, ta, tb FROM mac WHERE skor IS NOT NULL").fetchall()
+    rows = [(ou, ah, skor_al(sk, gl, ko), lig, ta, tb) for ou, ah, sk, lig, ta, tb, gl, ko in
+            c.execute("SELECT ou, ah, skor, lig, ta, tb, goller, ko FROM mac").fetchall()]
+    n00 = sum(1 for r in rows if r[2] == "0-0")
+    print(f"skorlu {sum(1 for r in rows if r[2])} mac, bunlarin {n00}'i 0-0 (%{100 * n00 / max(1, sum(1 for r in rows if r[2])):.1f}); skorsuz {sum(1 for r in rows if not r[2])}\n")
     c.close()
     B = defaultdict(lambda: [0, 0.0, 0.0, 0.0, 0.0, 0.0])        # n, ust puan, ust kar, alt kar, marj, (gol-cizgi)
     S = defaultdict(lambda: [0, 0.0, 0.0])                         # strateji: n, kar, puan
