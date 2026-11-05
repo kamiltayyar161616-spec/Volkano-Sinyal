@@ -43,6 +43,7 @@
   {% if x.gol is not none %}<div class="ng-meta" style="margin-top:6px">⚽ {{ x.gol }} gol{% if x.ou_kap is not none %} · çizgi {{ x.ou_kap }} ({{ 'üst' if x.gol > x.ou_kap else 'alt' if x.gol < x.ou_kap else 'iade' }}){% endif %} · {% for c in d.cizgiler %}<span class="{{ 'pos' if x.ust[c] else 'neg' }}">{{ c }}Ü {{ '✓' if x.ust[c] else '✗' }}</span>{{ ' ' if not loop.last }}{% endfor %}</div>{% endif %}
 </div>{% endmacro %}
 {% block content %}
+<div style="display:flex;gap:8px;margin:10px 16px 0"><a href="/kelly" style="flex:1;text-align:center;padding:8px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--amber-dim);color:var(--amber-bright);font-size:11px;font-weight:700">📐 Kelly sinyali</a><a href="/kelly/gec-para" style="flex:1;text-align:center;padding:8px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk);font-size:11px;font-weight:700">⏰ Geç para</a></div>
 <div style="margin:12px 16px 0"><a href="/kelly/indir" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;background:var(--navy);border:1px solid var(--navy-line);color:var(--chalk)">⬇ KELLY verisini indir (JSON)</a></div>
 <h2 class="section">📊 CANLI TAKİP</h2>
 <div class="oz">

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}SAHA — GEÇ PARA{% endblock %}
+{% block page_tag %}KELLY · GEÇ PARA{% endblock %}
+{% block subtitle %}Maça son 30 dakikada <b>ilk büyük para</b> hareketi gelir ve <b>favori yönündeyse</b> favorinin Asya handikabı. Büyük para = Pinnacle, Sbobet ya da Bet365 handikabında 30 dakikada çizgi + su gücü ≥ <b>0.4 gol (A)</b> ya da <b>0.25 gol (B)</b> (≈ 0.25 çizgi = 1 çeyrek). Daha önce büyük hareket olduysa sinyal yok. 7M arşivi 12 bin maç: altı büronun altısında artı; 6-2 saat kala gelen para ise her yerde eksi. 5 dakikada bir, maça {{ d.pencere[1] }}-{{ d.pencere[0] }} dk kalan maçlar taranır; sonuç kendiliğinden işlenir. Handikap sonucu sinyal anındaki çizgi ve suyla (ROI), ayrıca maç başı çizgisiyle (ROI kapanış).{% endblock %}
+{% block extra_style %}
+<style>
+  .gb{ display:flex; gap:8px; margin:10px 16px; } .gb a{ flex:1; text-align:center; padding:8px; border-radius:10px; text-decoration:none; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); font-size:11px; font-weight:700; } .gb a.on{ border-color:var(--amber-dim); color:var(--amber-bright); }
+  .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:10px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); vertical-align:top; } .tt .l{ text-align:left; }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); } .meta{ color:var(--chalk-faint); font-size:9px; }
+  tr.ok td{ background:rgba(40,160,90,.16); } tr.ko td{ background:rgba(200,70,60,.10); } tr.ya td{ background:rgba(200,160,40,.10); }
+  .tik{ display:inline-block; min-width:22px; padding:2px 5px; border-radius:6px; font-size:11px; font-weight:800; color:#fff; }
+  .tik.w{ background:var(--turf); } .tik.l{ background:var(--clay-dim); } .tik.y{ background:var(--amber-dim); }
+  .sev{ display:inline-block; font-size:9.5px; font-weight:800; padding:2px 6px; border-radius:5px; border:1px solid var(--navy-line); }
+  .sev.A{ border-color:var(--turf); color:var(--turf-bright); } .sev.B{ border-color:var(--amber-dim); color:var(--amber-bright); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="gb"><a href="/kelly">📐 Kelly sinyali</a><a class="on" href="/kelly/gec-para">⏰ Geç para</a></div>
+<div class="section-sub">Son tarama: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~2 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
+
+<h2 class="section">📊 GERÇEK SONUÇ</h2>
+<table class="tt"><tr><th class="l">seviye</th><th>biten</th><th>handikap tuttu</th><th>beklenen</th><th>ROI</th><th>ROI kapanış</th><th>maçı kazandı</th></tr>
+{% for o in d.oz %}<tr><td class="l"><b>{{ o.sev }}</b></td><td>{{ o.n }}</td>
+<td>{% if o.tuttu is not none %}<b class="{{ 'pos' if o.tuttu >= o.bekl else 'neg' }}">%{{ o.tuttu }}</b>{% else %}—{% endif %}</td>
+<td>{{ ('%' ~ o.bekl) if o.bekl is not none else '—' }}</td>
+<td>{% if o.roi is not none %}<span class="{{ 'pos' if o.roi >= 0 else 'neg' }}">%{{ '%+.1f'|format(o.roi) }}</span>{% else %}—{% endif %}</td>
+<td>{% if o.roi_kap is not none %}<span class="{{ 'pos' if o.roi_kap >= 0 else 'neg' }}">%{{ '%+.1f'|format(o.roi_kap) }}</span>{% else %}—{% endif %}</td>
+<td>{{ ('%' ~ o.kazandi) if o.kazandi is not none else '—' }}</td></tr>{% endfor %}</table>
+<div class="section-sub">Arşiv beklentisi (son 30 dk ilk para → favori, handikap kapanış çizgisiyle):
+{% for s, B in d.arsiv.items() %}<br><b>{{ s }}</b>: {% for b, t in B.items() %}{{ b }} {{ t }}{% if not loop.last %} · {% endif %}{% endfor %}{% endfor %}</div>
+
+<h2 class="section">🎯 İY/MS (favori açısından, biten {{ d.n_iyms }})</h2>
+<table class="tt"><tr>{% for s, n, p in d.iyms %}<th>{{ s }}</th>{% endfor %}</tr>
+<tr>{% for s, n, p in d.iyms %}<td><b>{{ n }}</b>{% if p is not none %}<br><span class="meta">%{{ p }}</span>{% endif %}</td>{% endfor %}</tr></table>
+<div class="section-sub">fav/fav = favori ilk yarı ve maç önde · X/fav = ilk yarı berabere, favori kazandı (0/favori) · dış/fav = geri dönüş. Arşivle karşılaştırma: m7_ah_seri.py iyms.</div>
+
+<h2 class="section">⏳ BEKLEYEN ({{ d.bekleyen|length }})</h2>
+{% if d.bekleyen %}<table class="tt"><tr><th class="l">saat</th><th class="l">maç</th><th>seçim</th><th>su</th><th>büro</th></tr>
+{% for x in d.bekleyen %}<tr><td class="l">{{ (x.ko ~ '+00:00') | localdatetime }}</td><td class="l"><b>{{ x.ev }} – {{ x.dep }}</b><br><span class="meta">{{ x.lig }} · sinyal maça {{ x.dk|round|int }} dk kala</span></td>
+<td><span class="sev {{ x.seviye }}">{{ x.seviye }}</span><br><b>{{ x.taraf }} {{ '%+g'|format(x.hc) }}</b></td><td>{{ '%.2f'|format(x.su) }}<br><span class="meta">%{{ (100*x.p)|round|int }}</span></td>
+<td class="meta">{% for b, v in x.burolar.items() %}{{ b }} {{ v.sev }} ({{ '%+g'|format(v.cizgi) }}){% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Şu an bekleyen sinyal yok.</div>{% endif %}
+
+<h2 class="section">✅ BİTEN</h2>
+{% if d.biten %}<table class="tt"><tr><th class="l">saat</th><th class="l">maç</th><th>seçim @ su</th><th>skor (İY)</th><th>sonuç</th></tr>
+{% for x in d.biten %}<tr class="{{ 'ok' if x.ss > 0.5 else 'ko' if x.ss < 0.5 else 'ya' }}"><td class="l">{{ (x.ko ~ '+00:00') | localdatetime }}</td>
+<td class="l"><b>{{ x.ev }} – {{ x.dep }}</b><br><span class="meta">{{ x.lig }} · {{ x.buro }}{% if x.kap_hc is not none %} · kapanış {{ '%+g'|format(x.kap_hc) }} @ {{ x.kap_su }}{% endif %}</span></td>
+<td><span class="sev {{ x.seviye }}">{{ x.seviye }}</span> <b>{{ x.taraf }} {{ '%+g'|format(x.hc) }}</b><br>@ {{ '%.2f'|format(x.su) }}</td>
+<td><b>{{ x.skor }}</b>{% if x.iy %}<br><span class="meta">İY {{ x.iy }} · {{ x.iyms }}</span>{% endif %}</td>
+<td><span class="tik {{ 'w' if x.ss > 0.5 else 'l' if x.ss < 0.5 else 'y' }}">{{ '✓' if x.ss == 1 else '½✓' if x.ss > 0.5 else '½✗' if 0 < x.ss < 0.5 else '✗' if x.ss == 0 else '=' }}</span><br><span class="meta {{ 'pos' if x.kar > 0 else 'neg' if x.kar < 0 else '' }}">{{ '%+.2f'|format(x.kar) }}</span></td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten sinyal yok.</div>{% endif %}
+{% endblock %}

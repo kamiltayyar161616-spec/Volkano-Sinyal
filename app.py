@@ -43,6 +43,7 @@ import kelly_tab
 import gunluk_kupon
 import m7
 import kalkan
+import gecpara
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -428,6 +429,11 @@ def kelly_page():
     return render_template("kelly.html", d=kelly_tab.get_page_data(), active_page="kelly")
 
 
+@app.route("/kelly/gec-para")
+def kelly_gec_page():
+    return render_template("kelly_gec.html", d=gecpara.get_page_data(), active_page="kelly")
+
+
 @app.route("/kelly/indir")
 def kelly_indir():
     import json as _json
@@ -532,4 +538,5 @@ if __name__ == "__main__":
     toto_tab.start_background()
     kelly_tab.start_background()
     m7.start_background()
+    gecpara.start_background()
     app.run(host="0.0.0.0", port=8080)
