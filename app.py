@@ -423,7 +423,7 @@ def toto_kelly_indir():
 
 @app.route("/oto-tahmin")
 def oto_tahmin_page():
-    return render_template("oto_tahmin.html", d=oto_tahmin.get_page_data(request.args.get("yenile") == "1"), active_page="oto")
+    return render_template("oto_tahmin.html", d=oto_tahmin.get_page_data(request.args.get("gun"), request.args.get("yenile") == "1"), active_page="oto")
 
 
 @app.route("/desen")
