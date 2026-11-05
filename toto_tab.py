@@ -480,6 +480,9 @@ def toto_hafta(hafta=None):
         if m.get("mid") in ft:
             r["ft_h"], r["ft_a"] = ft[m["mid"]]
             r["sonuc"] = _sonuc(*ft[m["mid"]])
+        elif re.fullmatch(r"\d+-\d+", str(m.get("skor") or "")):          # elle girilen skor
+            r["ft_h"], r["ft_a"] = (int(v) for v in m["skor"].split("-"))
+            r["sonuc"] = _sonuc(r["ft_h"], r["ft_a"])
         x = {"no": m["no"], "ad": f"{m['ev']} - {m['dep']}", "ng": m.get("ng"), "ko": m.get("ko"),
              "skor": f"{r['ft_h']}-{r['ft_a']}" if r.get("sonuc") is not None else None,
              "sonuc": "1X2"[r["sonuc"]] if r.get("sonuc") is not None else None}
@@ -1020,3 +1023,36 @@ def export_json():
                         "sonuc": "1X2"[r["sonuc"]] if r["sonuc"] is not None else None,
                         "mac_oncesi": secim(r["on"], "on"), "kapanis": secim(r["son"], "kap"),
                         "toto_kapanis": secim(r["son"], "toto"), "ham": r["son"]} for r in rows]}
+
+
+def skor_elle(ad, skor, hafta=None):
+    """python3 toto_tab.py skor <takim> <ev-dep skor> : bultendeki maca skoru elle yaz + neden otomatik gelmedigini goster"""
+    H = _haftalar()
+    h = next((x for x in H if x.get("hafta") == hafta), H[0] if H else None) if H else None
+    if not h:
+        print("Toto listesi yok")
+        return
+    f = _fold(ad)
+    L = [m for m in h["maclar"] if f in _fold(m["ev"] + " " + m["dep"])]
+    if len(L) != 1:
+        print(f"{len(L)} maç bulundu:", [f"{m['no']}. {m['ev']} - {m['dep']}" for m in L])
+        return
+    m = L[0]
+    print(f"Hafta {h['hafta']} · {m['no']}. {m['ev']} - {m['dep']} | NowGoal eşleşme: {m.get('ng')} mid={m.get('mid')} ko={m.get('ko')}")
+    if m.get("mid"):
+        with ng._db_lock:
+            c = ng._conn()
+            r = c.execute("SELECT status, ft_h, ft_a, kickoff_utc, home, away FROM ng_match WHERE mid=?", (m["mid"],)).fetchone()
+            c.close()
+        print("ng_match:", dict(r) if r else "KAYIT YOK")
+    else:
+        print("NowGoal'da eşleşmemiş (mid yok) -> sonuç bu yüzden otomatik gelmedi")
+    m["skor"] = skor
+    json.dump({"haftalar": H}, open(LISTELER_FILE, "w"), ensure_ascii=False)
+    print(f"Skor yazıldı: {skor}")
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:2] == ["skor"] and len(sys.argv) >= 4:
+        skor_elle(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
