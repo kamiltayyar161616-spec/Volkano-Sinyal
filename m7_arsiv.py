@@ -7,6 +7,7 @@
 Kaynaklar (izinli yollar): px-odds.7mdt.com/DataByLive2/<id>_ou.js / _ah.js, data.7mdt.com/goaldata/en/<id>.js
 Mac numaralari mac eklenince verilir (tarih sirali degil); bos numaralar 'bos' tablosuna yazilir, tekrar denenmez."""
 import json
+import math
 import os
 import re
 import sqlite3
@@ -474,6 +475,89 @@ def iy_referans(buro="Pinnacle Sports"):
         print(f"{b:>9s} {v['n']:6d} %{100 * v['0.5']:6.1f} %{100 * v['1.5']:6.1f} %{100 * v['2.5']:6.1f}")
 
 
+def _dk(x):
+    """'45+2' -> (45, 1. yari) ; '90+3' -> 90 ; '67' -> 67"""
+    m = re.match(r"^(\d+)", str(x))
+    return int(m.group(1)) if m else None
+
+
+def gol_dakikalari(goller, skor):
+    """gol listesi -> [dakika, ...] (sadece skoru degisen olaylar); mac sonu skoruyla tutarsizsa None"""
+    try:
+        G = json.loads(goller) if goller else None
+    except Exception:
+        return None
+    if G is None:
+        return None
+    dks, onceki = [], (0, 0)
+    for dk, sk in G:
+        m = re.match(r"^(\d+)-(\d+)$", sk or "")
+        if not m:
+            continue
+        cur = (int(m.group(1)), int(m.group(2)))
+        fark = (cur[0] + cur[1]) - (onceki[0] + onceki[1])
+        d = _dk(dk)
+        if d is None or fark <= 0:
+            onceki = cur
+            continue
+        dks += [d] * fark
+        onceki = cur
+    if skor and re.match(r"^\d+-\d+$", skor) and sum(int(x) for x in skor.split("-")) != len(dks):
+        return None
+    return dks
+
+
+def canli_ust(dk=70, cizgi=2.5, buro="Pinnacle Sports", marj=0.07):
+    """Mac oncesi cizgisi ~cizgi olan maclarda 'dk' dakikadaki gol sayisina gore, o anda UST cizgi oynansa:
+    tutma orani, basabas orani, Poisson tahmini canli oran (mac oncesi gol beklentisi x kalan sure, + marj) ve o oranla ROI."""
+    c = db()
+    rows = c.execute("SELECT ou, skor, goller, ko, lig, ta, tb FROM mac").fetchall()
+    c.close()
+    gen = re.compile(r"u1\d|u2\d|women|reserve|youth|\(w\)", re.I)
+    R = defaultdict(lambda: [0, 0, 0.0, 0.0])        # n, tuttu, model olasilik toplami, kar (tahmini oranla)
+    zaman = Counter()
+    n_gol = 0
+    kalan = max(1, 94 - dk) / 94 * 1.12              # ikinci yari ve sonu daha gollu (arsiv ort.) -> kaba katsayi
+    for ou, sk, gl, ko, lig, ta, tb in rows:
+        skor = skor_al(sk, gl, _ko_tahmin(ko, ou))
+        if not skor:
+            continue
+        dks = [] if skor == "0-0" else gol_dakikalari(gl, skor)
+        if dks is None:
+            continue
+        O = json.loads(ou or "{}").get(buro)
+        if not O:
+            continue
+        t, L, u, a = O["kap"]
+        if abs(L - cizgi) > 0.26 or u <= 1 or a <= 1:
+            continue
+        for d in dks:
+            n_gol += 1
+            zaman["0-45" if d <= 45 else "46-60" if d <= 60 else "61-70" if d <= 70 else "71-80" if d <= 80 else "81-90+"] += 1
+        g_dk = sum(1 for d in dks if d <= dk)
+        gerek = math.floor(cizgi) + 1 - g_dk
+        if gerek <= 0:
+            continue
+        lam = gol_bekl(L, u, a) * kalan
+        p_model = 1 - sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(gerek))
+        tah = (1 / p_model) / (1 + marj)
+        ok = len(dks) - g_dk >= gerek
+        kat = "genç/kadın/yedek" if gen.search(f"{lig} {ta} {tb}") else "büyükler"
+        for k in (f"{dk}'de {g_dk} gol (kalan {gerek} gol lazım) | çizgi {L:.2f}", f"{dk}'de {g_dk} gol (kalan {gerek} gol lazım) | TÜMÜ",
+                  f"{dk}'de {g_dk} gol | {kat}"):
+            x = R[k]
+            x[0] += 1; x[1] += ok; x[2] += p_model; x[3] += (tah - 1) if ok else -1
+    print(f"Maç öncesi çizgi {cizgi} (±0.25, {buro} maç başı), {dk}. dakikada {cizgi} ÜST oynansa:\n")
+    print(f"{'durum':52s} {'maç':>5s} {'tuttu':>7s} {'başabaş':>8s} {'model %':>8s} {'tah.oran':>8s} {'ROI':>7s}")
+    for k in sorted(R, key=lambda k: (k.split("|")[0], "TÜMÜ" not in k, k)):
+        n, w, pm, kr = R[k]
+        if n >= 30:
+            print(f"{k:52s} {n:5d} %{100 * w / n:5.1f} {n / max(w, 1):8.2f} %{100 * pm / n:6.1f} {(n / pm) / (1 + marj):8.2f} %{100 * kr / n:+6.1f}")
+    print(f"\nGol zamanlaması ({n_gol} gol):", " | ".join(f"{k}: %{100 * v / n_gol:.1f}" for k, v in sorted(zaman.items())))
+    print("\nbaşabaş = kâra geçmek için gereken en düşük canlı oran (1 / tutma). tah.oran = maç öncesi gol beklentisi x kalan süre ile Poisson"
+          f" adil oranı, %{100 * marj:.0f} marjla (bürodan beklenen canlı oran). ROI bu tahmini oranla.")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if not a or a[0] == "durum":
@@ -482,6 +566,8 @@ if __name__ == "__main__":
         topla(int(a[1]) if len(a) > 1 else 5183000, int(a[2]) if len(a) > 2 else 5138000)
     elif a[0] == "iy_doldur":
         iy_doldur()
+    elif a[0] == "canli_ust":
+        canli_ust(int(a[1]) if len(a) > 1 else 70, float(a[2]) if len(a) > 2 else 2.5)
     elif a[0] == "iy_referans":
         iy_referans(a[1] if len(a) > 1 else "Pinnacle Sports")
     elif a[0] == "iyms":
