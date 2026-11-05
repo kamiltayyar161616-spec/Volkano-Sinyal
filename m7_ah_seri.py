@@ -1,7 +1,7 @@
 """7M arsivindeki maclarin Asya handikap SERISI (her büronun mac oncesi tüm cizgi/su degisiklikleri) -> ilk buyuk para testi.
   topla : python3 m7_ah_seri.py topla [isci=4]     (m7_arsiv.db'deki skorlu maclar; kaldigi yerden devam)
   durum : python3 m7_ah_seri.py durum
-  analiz: python3 m7_ah_seri.py analiz [min_mac=300]
+  analiz: python3 m7_ah_seri.py analiz [min_mac=300] [büro ...]   (bosluklu ad: Pinnacle_Sports)
 Para gücü (ev lehine, gol cinsinden) = -cizgi + (ev marjsiz su olasiligi - 0.5) * 4   (0.25 cizgi ~ 6 puan olasilik).
 Buyuk para = 30 dk icinde bu degerin >= D gol degismesi. ILK = ilk gorulen, SON = en son.
 Sonuc: o tarafin kapanis cizgisinde handikap tutma degeri (yarim kazan/kaybet dahil) vs kapanis marjsiz olasiligi (beklenen),
@@ -126,7 +126,7 @@ class Say:
                 f" | ROI %{100 * self.k / n:+5.1f} | maçı kazandı %{100 * self.w / n:4.1f}")
 
 
-def analiz(min_n=300):
+def analiz(min_n=300, burolar=None):
     a = A.db()
     skor = {i: A.skor_al(sk, gl, A._ko_tahmin(ko, ou)) for i, ko, ou, sk, gl in a.execute("SELECT id, ko, ou, skor, goller FROM mac")}
     a.close()
@@ -147,7 +147,7 @@ def analiz(min_n=300):
             B[k].append((L, gh, ga, ko < orta))
     print(f"{len(rows)} maç serisi | yarı sınırı {orta[:10]}")
     for k in sorted(B, key=lambda k: -len(B[k])):
-        if len(B[k]) < min_n:
+        if len(B[k]) < min_n or (burolar and k.lower() not in burolar):
             continue
         print(f"\n=== {k} — {len(B[k])} maç ===")
         for D in ESIKLER:
@@ -201,6 +201,6 @@ if __name__ == "__main__":
     if a[0] == "topla":
         topla(int(a[1]) if len(a) > 1 else 4)
     elif a[0] == "analiz":
-        analiz(int(a[1]) if len(a) > 1 else 300)
+        analiz(int(a[1]) if len(a) > 1 else 300, {x.lower().replace("_", " ") for x in a[2:]} or None)
     else:
         durum()
