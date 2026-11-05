@@ -302,6 +302,72 @@ def iyms_analiz(burolar=("Pinnacle Sports", "SBOBET", "Bet365")):
         print()
 
 
+BANT_1X2 = {"0-0.25": "≈ favori oranı 2.00-2.70", "0.5-0.75": "≈ 1.65-2.00", "1-1.25": "≈ 1.40-1.65", "1.5+": "≈ 1.40 altı"}
+
+
+def bant_analiz(burolar=("Pinnacle Sports", "SBOBET", "Bet365")):
+    """Gec para -> favori sinyalleri favori gücüne (kapanis handikap cizgisi) gore: handikap tuttu, maci kazandi, fav/fav.
+    Ayrica: sinyalden sonra yon donen (mac basina kadar >= esik ters hareket) maclar ayri."""
+    a = A.db()
+    M = {}
+    for i, ko, ou, sk, gl in a.execute("SELECT id, ko, ou, skor, goller FROM mac"):
+        s_ = A.skor_al(sk, gl, A._ko_tahmin(ko, ou))
+        if s_:
+            M[i] = (tuple(int(x) for x in s_.split("-")), A._iy(gl, s_))
+    a.close()
+    c = db()
+    rows = c.execute("SELECT id, d FROM s WHERE d IS NOT NULL").fetchall()
+    c.close()
+
+    def bant(L):
+        x = abs(L)
+        return "0-0.25" if x <= 0.25 else "0.5-0.75" if x <= 0.75 else "1-1.25" if x <= 1.25 else "1.5+"
+    R = defaultdict(lambda: [0, 0.0, 0.0, 0, 0, 0])       # n, tuttu, bekl, kazandi, favfav, iy_n
+    for i, d in rows:
+        if i not in M:
+            continue
+        (fh, fa), iy = M[i]
+        S_ = json.loads(d)
+        for k in burolar:
+            L = S_.get(k)
+            if not L or len(L) < 2 or L[0][0] is None:
+                continue
+            Lc, oh, oa = L[-1][1], L[-1][2], L[-1][3]
+            fav = 0 if Lc < 0 else 2 if Lc > 0 else (0 if oh <= oa else 2)
+            for D in (0.25, 0.4):
+                h = _hareketler(L, D)
+                if not h or h[0][0] != fav or h[0][1] not in ("3) 2s-30dk", "4) son 30 dk"):
+                    continue
+                pen = "son 30 dk" if h[0][1] == "4) son 30 dk" else "2s-30dk"
+                don = any(x[0] != fav for x in h[1:])
+                sp = A.asya((fh - fa) + Lc)
+                ph = (1 / oh) / (1 / oh + 1 / oa)
+                ss, p = (sp, ph) if fav == 0 else (1 - sp, 1 - ph)
+                kaz = (fh > fa) if fav == 0 else (fa > fh)
+                ff = None
+                if iy:
+                    hd = (iy[0] - iy[1]) if fav == 0 else (iy[1] - iy[0])
+                    ff = hd > 0 and kaz
+                for key in ((k, D, pen, bant(Lc)), (k, D, pen, "HEPSİ"), (k, D, pen, "yön döndü" if don else "dönmedi")):
+                    x = R[key]
+                    x[0] += 1; x[1] += ss; x[2] += p; x[3] += kaz
+                    if ff is not None:
+                        x[4] += ff; x[5] += 1
+    print("Geç para → favori: favori gücüne göre. tuttu = handikap (kapanış çizgisi), bekl = kapanış su olasılığı.\n")
+    for k in burolar:
+        for D in (0.25, 0.4):
+            for pen in ("2s-30dk", "son 30 dk"):
+                print(f"== {k} | {D} gol | {pen}")
+                for b in ("HEPSİ", "0-0.25", "0.5-0.75", "1-1.25", "1.5+", "dönmedi", "yön döndü"):
+                    x = R.get((k, D, pen, b))
+                    if not x or not x[0]:
+                        continue
+                    n = x[0]
+                    print(f"   {b:10s} {BANT_1X2.get(b, ''):24s} n={n:4d} | handikap %{100 * x[1] / n:5.1f} (bekl %{100 * x[2] / n:4.1f})"
+                          f" | maçı kazandı %{100 * x[3] / n:5.1f} | fav/fav %{100 * x[4] / x[5] if x[5] else 0:5.1f}")
+                print()
+
+
 def ozet_bas(min_n=300):
     Z = {}
     analiz(min_n, None, Z)
@@ -320,6 +386,8 @@ if __name__ == "__main__":
     a = sys.argv[1:] or ["durum"]
     if a[0] == "topla":
         topla(int(a[1]) if len(a) > 1 else 4)
+    elif a[0] == "bant":
+        bant_analiz()
     elif a[0] == "iyms":
         iyms_analiz()
     elif a[0] == "ozet":
