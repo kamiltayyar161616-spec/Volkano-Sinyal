@@ -102,15 +102,17 @@ def get_performance(days=None):
 # %60+: 66 mac %30.3 tuttu ROI +%33 | %45-60: 99 mac %24.2 ROI +%19 (Volkano orani, vergisiz). Ileriye donuk takip X1_BAS'tan sonra.
 X1_BAS = "2026-11-04T22:10:00+00:00"
 X1_ESIK = 0.45
+X1_UST = 0.75     # 5 Kasim arsiv testi (8011 mac): cok guclu favoride (handikap 2+) 0/favori %19.7, kar yok -> disarida
 VERGI = 0.12
 # ev favori -> X/1, deplasman favori -> X/2 (5 Kasim: dep %45-60 43 mac %27.9; dep %60+ 20 mac %15.0)
-X1_GECMIS = {"ev %60+": {"n": 66, "yuzde": 30.3, "oran": 4.44, "roi": 33}, "ev %45-60": {"n": 99, "yuzde": 24.2, "oran": 5.02, "roi": 19},
-             "dep %60+": {"n": 20, "yuzde": 15.0, "oran": 4.53, "roi": -37}, "dep %45-60": {"n": 43, "yuzde": 27.9, "oran": 5.18, "roi": 45},
-             "toplam": {"n": 228, "yuzde": 25.9, "oran": 4.84, "roi": 23}}
+# 7M arsivi (8011 mac, Pinnacle handikabi): handikap 0.75-1 -> 0/fav %22.7 (ev %23.7, dep %20.7); 1.25-1.75 -> %24.9 (ev %25.5, dep %23.7)
+X1_GECMIS = {"ev %60-75": {"n": 820, "yuzde": 25.5, "oran": 4.44, "roi": 13}, "ev %45-60": {"n": 1348, "yuzde": 23.7, "oran": 5.02, "roi": 19},
+             "dep %60-75": {"n": 455, "yuzde": 23.7, "oran": 4.53, "roi": 7}, "dep %45-60": {"n": 706, "yuzde": 20.7, "oran": 5.18, "roi": 7},
+             "toplam": {"n": 3329, "yuzde": 23.6, "oran": 4.8, "roi": 13}}
 
 
 def _x1_bant(p, f=0):
-    return ("ev " if f == 0 else "dep ") + ("%60+" if p >= 0.6 else "%45-60")
+    return ("ev " if f == 0 else "dep ") + ("%60-75" if p >= 0.6 else "%45-60")
 
 
 def _fav(P):
@@ -118,7 +120,7 @@ def _fav(P):
     if not P:
         return None
     f = 0 if P[0] >= P[2] else 2
-    return (f, P[f], "X/1" if f == 0 else "X/2") if P[f] >= X1_ESIK else None
+    return (f, P[f], "X/1" if f == 0 else "X/2") if X1_ESIK <= P[f] < X1_UST else None
 
 
 def x1_takip():
@@ -159,7 +161,7 @@ def x1_takip():
     kilitli = {x["mid"] for x in bit}
     bek = [x for x in bek if x["mid"] not in kilitli]
     oz = []
-    for ad in ("ev %60+", "ev %45-60", "dep %60+", "dep %45-60", "toplam"):
+    for ad in ("ev %60-75", "ev %45-60", "dep %60-75", "dep %45-60", "toplam"):
         B = [x for x in bit if x["tuttu"] is not None and (ad == "toplam" or x["bant"] == ad)]
         n = len(B)
         oo = sum(x["oran"] for x in B) / n if n else None
@@ -174,7 +176,8 @@ def x1_takip():
                    "t_roi_v": round(100 * (tt * (1 + (oo - 1) * (1 - VERGI)) - 1), 1) if n else None,
                    "gecmis": X1_GECMIS.get(ad)})
     return {"bekleyen": bek, "biten": [x for x in bit if x["tuttu"] is not None][:80],
-            "oynaniyor": [x for x in bit if x["tuttu"] is None], "oz": oz, "bas": X1_BAS, "esik": int(100 * X1_ESIK)}
+            "oynaniyor": [x for x in bit if x["tuttu"] is None], "oz": oz, "bas": X1_BAS, "esik": int(100 * X1_ESIK),
+            "ust": int(100 * X1_UST)}
 
 
 # ------------------------------------------------------------------ TERS YONTEM: Volkano IY/MS -> MS 1X2 ve IY 1X2 olmasi gereken
