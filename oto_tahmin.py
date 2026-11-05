@@ -143,6 +143,52 @@ def oran(tur, p, F):
     return max(1.01, round(1 / (max(p, 0.01) * MARJ.get(tur, 1.06)), 2)), False
 
 
+IYV = "/root/defter/iyv.db"
+
+
+def vk_oranlar(mids):
+    """Volkano'nun guncel oranlari (iyv.db, 5 dk'da bir guncellenir): {mid: vk pazarlari}"""
+    if not mids or not os.path.exists(IYV):
+        return {}
+    try:
+        c = sqlite3.connect(f"file:{IYV}?mode=ro", uri=True, timeout=10)
+        q = ",".join("?" * len(mids))
+        R = {str(m): json.loads(v) for m, v in c.execute(f"SELECT mid, vk FROM iyv_aday WHERE vk IS NOT NULL AND mid IN ({q})",
+                                                          [int(x) for x in mids])}
+        c.close()
+        return R
+    except Exception:
+        return {}
+
+
+def vk_uygula(T, vk):
+    """tahmin setine Volkano'nun GERCEK oranini yaz (varsa): Kazanan, IY/MS, IY 0.5, IY 1.5, MS 2.5"""
+    if not vk:
+        return
+    def al(t, sec):
+        try:
+            if t == "Kazanan":
+                return vk["1"][sec]
+            if t == "İY/MS":
+                return vk["47"][sec]
+            if t in ("İY 0.5", "İY 1.5"):
+                return vk["68"][t[-3:]]["over" if sec == "ÜST" else "under"]
+            if t == "MS 2.5":
+                return vk["18"]["2.5"]["over" if sec == "ÜST" else "under"]
+            if t == "Favori kaybetmez":
+                o = vk["1"]
+                a, b = (o["1"], o["X"]) if sec == "1X" else (o["X"], o["2"])
+                return None if not (a and b) else ("≈", round(1 / (1 / a + 1 / b), 2))
+        except (KeyError, TypeError, ZeroDivisionError):
+            return None
+    for t, z in T.items():
+        v = al(t, z["sec"])
+        if isinstance(v, tuple):
+            z["oran"], z["oran_g"], z["oran_k"] = v[1], False, "Volkano"
+        elif v and v > 1:
+            z["oran"], z["oran_g"], z["oran_k"] = round(float(v), 2), True, "Volkano"
+
+
 def tahmin_seti(F, O):
     out = {}
     for tur, (sec, p, k) in tahminler(F).items():
@@ -177,6 +223,9 @@ def kur(gun=None, kaydet=True):
         if not F:
             continue
         maclar[str(mid)] = {"mac": f"{ev} - {dep}", "ev": ev, "dep": dep, "lig": lig, "ko": ko, "F": F, "T": tahmin_seti(F, O)}
+    V = vk_oranlar(list(maclar))
+    for m, x in maclar.items():
+        vk_uygula(x["T"], V.get(m))
     eski = _oku(gun) if kaydet else None              # yeniden kurulumda baslamis maclar silinmesin
     if eski:
         for m, x in eski["maclar"].items():
@@ -385,6 +434,7 @@ def son5_tara():
             R[m] = {"at": datetime.now(TR).isoformat()[11:16], "yok": True}
             continue
         Tn = tahmin_seti(Fn, O)
+        vk_uygula(Tn, vk_oranlar([m]).get(m))
         d, N = farklar(x["F"], Fn)
         deg = [t for t in Tn if t in x["T"] and Tn[t]["sec"] != x["T"][t]["sec"]]
         R[m] = {"at": datetime.now(TR).isoformat()[11:16], "F": Fn, "T": Tn, "d": d, "not": N, "degisen": deg}
