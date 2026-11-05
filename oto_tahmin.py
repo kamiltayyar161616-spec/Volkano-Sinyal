@@ -438,6 +438,52 @@ def _son5_oku(gun):
     return R
 
 
+PARA_K = [(-99, -0.03, "≤-3p"), (-0.03, 0.03, "sabit ±3p"), (0.03, 0.05, "+3..+5p"), (0.05, 0.08, "+5..+8p"), (0.08, 99, "≥+8p")]
+PARA_B = [(0, 0.45, "fav <%45"), (0.45, 0.55, "fav %45-55"), (0.55, 0.65, "fav %55-65"), (0.65, 1.01, "fav ≥%65")]
+_ptab = {"t": 0, "S": None}
+
+
+def para_tablo():
+    """arsiv: (favori bandi, para kaymasi) -> [fav kazandi, berabere, kaybetti] sayilari; 6 saat cache"""
+    if _ptab["S"] is not None and time.time() - _ptab["t"] < 21600:
+        return _ptab["S"]
+    c = _ng()
+    rows = c.execute("SELECT odds_json, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND odds_json IS NOT NULL AND odds_final = 1").fetchall()
+    c.close()
+    S = defaultdict(lambda: [0, 0, 0])
+    for oj, fh, fa in rows:
+        try:
+            o = json.loads(oj)
+        except ValueError:
+            continue
+        op, cu = o.get("cons_open"), o.get("cons_cur")
+        if not op or not cu:
+            continue
+        fav = 0 if op[0] >= op[2] else 2
+        ff = (fh - fa) if fav == 0 else (fa - fh)
+        k = para_kova(op[fav], cu[fav] - op[fav])
+        if k:
+            S[k][0 if ff > 0 else 1 if ff == 0 else 2] += 1
+    _ptab.update(t=time.time(), S=dict(S))
+    return _ptab["S"]
+
+
+def para_kova(pf, d):
+    b = next((kb for lo, hi, kb in PARA_B if lo <= pf < hi), None)
+    k = next((kk for a, z, kk in PARA_K if a <= d < z), None)
+    return (b, k) if b and k else None
+
+
+def para_arsiv(pf, d):
+    """sabah favori olasiligi + son 5 dk kayma -> arsivde favori kazandi/berabere/kaybetti %, n (n<30 ise None)"""
+    k = para_kova(pf, d)
+    w = para_tablo().get(k) if k else None
+    if not w or sum(w) < 30:
+        return None
+    n = sum(w)
+    return {"kova": f"{k[0]} · {k[1]}", "n": n, "w": round(100 * w[0] / n, 1), "x": round(100 * w[1] / n, 1), "l": round(100 * w[2] / n, 1)}
+
+
 def farklar(Fs, Fn):
     """sabah -> son 5 dk: para akisi / cizgi degisimleri ve tutarsizlik notlari"""
     N = []
@@ -448,7 +494,11 @@ def farklar(Fs, Fn):
     if d[fi] >= 3:
         N.append(f"favoriye para +{d[fi]}p")
     elif d[fi] <= -3:
-        N.append(f"favoriden para {d[fi]}p")
+        dah = ((Fn["ah"] - Fs["ah"]) * (1 if fi == 0 else -1)) if Fs.get("ah") is not None and Fn.get("ah") is not None else 0
+        if Fs["pf"] >= 0.65:
+            N.append(f"🔴 GÜÇLÜ FAVORİDEN KAÇIŞ {d[fi]}p" + (" + handikap geriledi" if dah <= -0.25 else "") + " — Milan/Leverkusen tipi, sürpriz adayı")
+        else:
+            N.append(f"favoriden para {d[fi]}p")
     if abs(d[1]) >= 3:
         N.append(f"beraberlik {d[1]:+}p")
     if Fs.get("ah") is not None and Fn.get("ah") is not None and abs(Fn["ah"] - Fs["ah"]) >= 0.25:
@@ -505,6 +555,18 @@ def son5_tara():
         if vkm:
             Fn["vk_taze"] = True
         d, N = farklar(x["F"], Fn)
+        try:
+            pa = para_arsiv(x["F"]["pf"], d[x["F"]["fav"]] / 100) if Fn["fav"] == x["F"]["fav"] else None
+        except Exception:
+            pa = None
+        if pa:
+            Fn["para_arsiv"] = pa
+            if abs(d[x["F"]["fav"]]) >= 3:
+                if "Kazanan" in Tn:
+                    Tn["Kazanan"]["p"], Tn["Kazanan"]["arsiv"] = pa["w"], True
+                if "Favori kaybetmez" in Tn:
+                    Tn["Favori kaybetmez"]["p"], Tn["Favori kaybetmez"]["arsiv"] = round(pa["w"] + pa["x"], 1), True
+                N.append(f"arşiv ({pa['kova']}, {pa['n']} maç): favori %{pa['w']:g} kazandı · %{pa['x']:g} berabere · %{pa['l']:g} kaybetti")
         deg = [t for t in Tn if t in x["T"] and Tn[t]["sec"] != x["T"][t]["sec"]]
         R[m] = {"at": datetime.now(TR).isoformat()[11:16], "F": Fn, "T": Tn, "d": d, "not": N, "degisen": deg}
         n += 1
@@ -596,6 +658,9 @@ def surpriz(x, s5):
         if s5["F"]["fav"] != fi:
             N.append("son 5 dk: FAVORİ DEĞİŞTİ")
             puan += 2
+        elif d[fi] <= -3 and F.get("pf", 0) >= 0.65:
+            N.append(f"son 5 dk: GÜÇLÜ favoriden {d[fi]}p kaçış (Milan/Leverkusen tipi)")
+            puan += 3
         elif d[fi] <= -4:
             N.append(f"son 5 dk: favoriden {d[fi]}p para")
             puan += 2
@@ -738,38 +803,14 @@ def get_page_data(gun=None, yenile=False):
 
 
 def para_analiz():
-    """acilis -> kapanis favori (acilistaki favori) olasilik kaymasi kovalari: favori kazanma/berabere/kaybetme %"""
-    c = _ng()
-    rows = c.execute("SELECT odds_json, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND odds_json IS NOT NULL AND odds_final = 1").fetchall()
-    c.close()
-    K = [(-99, -0.05, "≤-5p"), (-0.05, -0.03, "-5..-3p"), (-0.03, 0.03, "sabit ±3p"), (0.03, 0.05, "+3..+5p"), (0.05, 0.08, "+5..+8p"), (0.08, 99, "≥+8p")]
-    B = [(0, 0.45, "fav <%45"), (0.45, 0.55, "fav %45-55"), (0.55, 0.65, "fav %55-65"), (0.65, 1.01, "fav ≥%65"), (0, 1.01, "HEPSİ")]
-    S = defaultdict(lambda: [0, 0, 0])
-    for oj, fh, fa in rows:
-        try:
-            o = json.loads(oj)
-        except ValueError:
-            continue
-        op, cu = o.get("cons_open"), o.get("cons_cur")
-        if not op or not cu:
-            continue
-        fav = 0 if op[0] >= op[2] else 2
-        d = cu[fav] - op[fav]
-        ff = (fh - fa) if fav == 0 else (fa - fh)
-        r = 0 if ff > 0 else 1 if ff == 0 else 2
-        for lo, hi, kb in B:
-            if lo <= op[fav] < hi:
-                for a, b, kk in K:
-                    if a <= d < b:
-                        S[(kb, kk)][r] += 1
-    for _, _, kb in B:
+    S = para_tablo()
+    for _, _, kb in PARA_B:
         print(f"== {kb} (açılış olasılığı)")
-        for _, _, kk in K:
-            w, x, l = S[(kb, kk)]
+        for _, _, kk in PARA_K:
+            w, x, l = S.get((kb, kk), [0, 0, 0])
             n = w + x + l
             if n:
                 print(f"  {kk:10s} n={n:5d}  fav kazandı %{100*w/n:4.1f}  berabere %{100*x/n:4.1f}  kaybetti %{100*l/n:4.1f}")
-
 
 if __name__ == "__main__":
     import sys
