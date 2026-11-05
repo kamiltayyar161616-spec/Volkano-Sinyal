@@ -126,7 +126,12 @@ class Say:
                 f" | ROI %{100 * self.k / n:+5.1f} | maçı kazandı %{100 * self.w / n:4.1f}")
 
 
-def analiz(min_n=300, burolar=None):
+OZET_SAT = ("İLK büyük para tarafı", "ilk → favori", "ilk → favori | 1.yarı", "ilk → favori | 2.yarı", "ilk → favori, 1) >6 saat",
+            "ilk → favori, 4) son 30 dk", "ilk → favori dışı", "YÖN DÖNDÜ: ilk taraf", "YÖN DÖNDÜ: son taraf")
+OZET_KISA = ("İLK", "→fav", "fav 1.y", "fav 2.y", "fav >6s", "fav s30", "→dış", "dön:ilk", "dön:son")
+
+
+def analiz(min_n=300, burolar=None, ozet=None):
     a = A.db()
     skor = {i: A.skor_al(sk, gl, A._ko_tahmin(ko, ou)) for i, ko, ou, sk, gl in a.execute("SELECT id, ko, ou, skor, goller FROM mac")}
     a.close()
@@ -146,10 +151,13 @@ def analiz(min_n=300, burolar=None):
                 continue
             B[k].append((L, gh, ga, ko < orta))
     print(f"{len(rows)} maç serisi | yarı sınırı {orta[:10]}")
+    if ozet is None:
+        print()
     for k in sorted(B, key=lambda k: -len(B[k])):
         if len(B[k]) < min_n or (burolar and k.lower() not in burolar):
             continue
-        print(f"\n=== {k} — {len(B[k])} maç ===")
+        if ozet is None:
+            print(f"\n=== {k} — {len(B[k])} maç ===")
         for D in ESIKLER:
             R = defaultdict(Say)
             n_h = 0
@@ -191,15 +199,34 @@ def analiz(min_n=300, burolar=None):
                 R[f"ilk hareket {w0}"].ekle(*deger(i0))
                 if i0 == fav:
                     R[f"ilk → favori, {w0}"].ekle(*deger(i0))
+            if ozet is not None:
+                ozet.setdefault(D, []).append((k, len(B[k]), n_h, R))
+                continue
             print(f"\n eşik {D} gol | büyük hareketli maç {n_h}/{len(B[k])}")
             for ad in sorted(R, key=lambda a: (not a.startswith("İLK"), not a.startswith("SON"), not a.startswith("YÖN"), a)):
                 print(f"   {ad:34s} {R[ad].s()}")
+
+
+def ozet_bas(min_n=300):
+    Z = {}
+    analiz(min_n, None, Z)
+    for D in ESIKLER:
+        print(f"\n##### EŞİK {D} gol — hücre: n · fark (tuttu - beklenen, puan) · ROI")
+        print(f"{'büro':16s} {'hareketli':>9s} " + " ".join(f"{k:>15s}" for k in OZET_KISA))
+        for k, n, nh, R in sorted(Z[D], key=lambda t: -t[1]):
+            h = []
+            for ad in OZET_SAT:
+                x = R.get(ad)
+                h.append(f"{x.n:4d} {100 * (x.t - x.b) / x.n:+5.1f} {100 * x.k / x.n:+5.1f}" if x and x.n else f"{'—':>15s}")
+            print(f"{k[:16]:16s} {nh:4d}/{n:<5d}" + " ".join(f"{c:>15s}" for c in h))
 
 
 if __name__ == "__main__":
     a = sys.argv[1:] or ["durum"]
     if a[0] == "topla":
         topla(int(a[1]) if len(a) > 1 else 4)
+    elif a[0] == "ozet":
+        ozet_bas(int(a[1]) if len(a) > 1 else 300)
     elif a[0] == "analiz":
         analiz(int(a[1]) if len(a) > 1 else 300, {x.lower().replace("_", " ") for x in a[2:]} or None)
     else:
