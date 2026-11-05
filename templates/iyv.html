@@ -49,7 +49,7 @@
 {% if x1.biten %}<h2 class="section">🧾 0/FAVORİ SONUÇLANAN ({{ x1.biten|length }})</h2>
 {% for x in x1.biten %}{{ x1k(x, 'bitti') }}{% endfor %}{% endif %}
 {% endif %}
-{% set iy = d.iy %}
+{% set iy = d.iy %}{% if iy %}
 <h2 class="section">⏱ İLK YARI ALT/ÜST (Volkano vs 7M arşivi)</h2>
 {% if not iy or not iy.hazir %}<div class="section-sub">Referans tablosu henüz yok (sunucuda: <b>python3 m7_arsiv.py iy_referans</b>).</div>{% else %}
 <div class="section-sub">Maçın gol beklentisi Volkano'nun kendi maç alt/üst oranından; o gol beklentisindeki maçlarda ilk yarı 0.5 / 1.5 / 2.5 üstün gerçek yüzdesi 7M arşivinden (binlerce maç). Volkano İY oranı gerçek olasılığa göre <b>≥ %{{ iy.deger }}</b> fazla ödüyorsa seçim. 1 birim; "vergili" = %12 kesinti sonrası. <b>İleriye dönük</b> takip {{ iy.bas | localdatetime }}'dan sonra; <b>geçmiş</b> = 1 Kasım'dan beri kaydedilmiş gerçek Volkano oranlarıyla geriye dönük.</div>
@@ -65,7 +65,7 @@
 {% if iy.biten %}<h2 class="section">🧾 İY ALT/ÜST SONUÇLANAN ({{ iy.biten|length }})</h2>
 {% for x in iy.biten %}<div class="row"><span><b>{{ x.mac }}</b><br><span class="ng-meta">{{ x.ko | localdatetime }} · İY {{ x.iy }}</span></span>
 <span style="text-align:right;white-space:nowrap"><span class="tag a">İY {{ x.cizgi }} {{ 'ÜST' if x.taraf == 'UST' else 'ALT' }} @ {{ '%.2f'|format(x.oran) }}</span><br><span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ 'tuttu +' ~ ('%.2f'|format(x.oran - 1)) if x.tuttu else 'yattı −1' }}</span></span></div>{% endfor %}{% endif %}
-{% endif %}
+{% endif %}{% endif %}
 <h2 class="section">📊 PERFORMANS (kilitli oranla, 1 birim)</h2>
 <div class="section-sub">Sonucu belli {{ perf.mac }} maç (toplam kilitli {{ d.kilit_mac }}). "model" = modelin ortalama olasılığı. Az maçta tek bir yüksek oran (2/1, 1/2) ROI'yi tek başına taşır; n≥300 olmadan karar yok.</div>
 {% if perf.esik %}<div class="section-sub">Artı eşikler (Volkano olması gerekenden yüksek)</div>{{ ptab(perf.esik) }}

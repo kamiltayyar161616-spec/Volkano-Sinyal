@@ -380,7 +380,7 @@ def get_page_data():
         c.close()
     secim = sorted([(a, k, x) for a in aday for k, x in a["sec"]], key=lambda t: -t[2]["sapma"])
     return {"aday": aday, "secim": secim, "son": son, "son_eksi": son_eksi, "bias": bias, "son_liste": SON, "hazir": c is not None,
-            "kilit_mac": len({r["mid"] for r in kil}), "x1": x1_takip(), "iy": iy_takip()}
+            "kilit_mac": len({r["mid"] for r in kil}), "x1": x1_takip(), "iy": None}   # IY alt/ust secimleri kapali (5 Kasim: gecmis test -%16/-%20)
 
 
 def export_json():
@@ -413,4 +413,4 @@ def export_json():
         c.close()
     L = sorted(M.values(), key=lambda m: m["ko"], reverse=True)
     return {"exported_at": ng._iso(ng._now()), "mac_sayisi": len(L), "sonuclu": sum(1 for m in L if m["skor"]),
-            "performans": get_performance(), "ters_performans": ters_perf(), "x1_takip": x1_takip(), "iy_takip": iy_takip(), "maclar": L}
+            "performans": get_performance(), "ters_performans": ters_perf(), "x1_takip": x1_takip(), "maclar": L}
