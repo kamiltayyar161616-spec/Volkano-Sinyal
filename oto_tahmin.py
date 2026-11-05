@@ -396,7 +396,12 @@ def get_page_data(gun=None, yenile=False):
             b = [s for s in satir if s["ok"] is not None]
             K.append({"ad": ad, "L": satir, "tut": sum(s["ok"] for s in b), "bit": len(b),
                       "bek": round(sum(s["z"]["p"] for s in satir) / 100, 1)})
-        gv = {"gun": gun, "at": v["at"], "L": L, "K": K, "SUR": sorted((x for x in L if x["sur"]), key=lambda x: (-x["sur"]["puan"], x["ko"])), "n5": sum(1 for x in L if x["s5"]),
+        GO = []
+        for t in TURLER:
+            a = [x["ok"].get(t) for x in L if x["ok"].get(t) is not None]
+            b = [x["s5"]["ok"].get(t) for x in L if x["s5"] and x["s5"].get("ok") and x["s5"]["ok"].get(t) is not None]
+            GO.append({"tur": t, "n": len(a), "w": sum(a), "n5": len(b), "w5": sum(b)})
+        gv = {"gun": gun, "at": v["at"], "L": L, "K": K, "GO": GO, "SUR": sorted((x for x in L if x["sur"]), key=lambda x: (-x["sur"]["puan"], x["ko"])), "n5": sum(1 for x in L if x["s5"]),
               "n_deg": sum(1 for x in L if x["s5"] and (x["s5"].get("degisen") or x["s5"].get("not")))}
     O = ogren()
     tablo = defaultdict(list)

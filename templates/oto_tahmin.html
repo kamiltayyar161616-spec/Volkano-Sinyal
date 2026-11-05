@@ -43,6 +43,9 @@
 {% for x in G.SUR %}<tr class="{{ 'ok' if x.sur.sonuc and '✓' in x.sur.sonuc else 'ko' if x.sur.sonuc else '' }}"><td class="l">{{ (x.ko | localdatetime)[-5:] }} <b>{{ x.mac }}</b><br><span class="meta">{{ x.lig or '' }}</span></td>
 <td class="l">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} <b>{{ x.sur.taraf }}</b><br><span class="meta">kazanma %{{ x.sur.p_s }} · X %{{ x.sur.p_x }}</span></td>
 <td class="l meta">{{ x.sur.neden|join('<br>')|safe }}</td><td>{% if x.skor %}<b>{{ x.skor }}</b><br><span class="meta">{{ x.sur.sonuc }}</span>{% else %}<span class="meta">bekliyor</span>{% endif %}</td></tr>{% endfor %}</table>{% endif %}
+<h2 class="section">📅 {{ G.gun }} GÜNÜN SONUCU</h2>
+<table class="tt"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
+{% for o in G.GO %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.n %}{{ o.w }}/{{ o.n }} <b>%{{ (100*o.w/o.n)|round(1) }}</b>{% else %}—{% endif %}</td><td>{% if o.n5 %}{{ o.w5 }}/{{ o.n5 }} <b>%{{ (100*o.w5/o.n5)|round(1) }}</b>{% else %}—{% endif %}</td></tr>{% endfor %}</table>
 <h2 class="section">🎫 {{ G.gun }} KUPONLARI (sabah {{ G.at[11:16] }})</h2>
 {% for k in G.K %}{% if k.L %}
 <details {% if loop.first %}open{% endif %}><summary>{{ k.ad }} — {% if k.bit %}{{ k.tut }}/{{ k.bit }} tuttu ({{ k.L|length }} maç){% else %}beklenen {{ k.bek }} / {{ k.L|length }}{% endif %}</summary>

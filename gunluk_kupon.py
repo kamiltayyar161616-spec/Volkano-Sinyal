@@ -197,7 +197,7 @@ def _dag(ps):
     return d
 
 
-def get_page_data(yenile=False):
+def get_page_data(yenile=False, sec=None):
     bugun = olustur(yenile)
     gunler = sorted([f[:-5] for f in os.listdir(KLASOR) if f.endswith(".json")], reverse=True)[:10]
     D = [json.load(open(os.path.join(KLASOR, f"{g}.json"))) for g in gunler]
@@ -240,4 +240,6 @@ def get_page_data(yenile=False):
         out.append({"gun": d["gun"], "kup": kup, "n_mac": len(d["maclar"])})
     oz = [{"tur": t, "n": n, "tutan": w, "yuzde": round(100 * w / n, 1) if n else None, "bekl": round(100 * e / n, 1) if n else None}
           for t, (n, w, e) in tur_oz.items()]
-    return {"gunler": out, "oz": oz, "bugun": bugun["gun"], "olusturma": bugun["olusturma"], "onizleme": bool(bugun.get("onizleme"))}
+    takvim = [g["gun"] for g in out]
+    sec = sec if sec in takvim else (takvim[0] if takvim else None)
+    return {"gunler": [g for g in out if g["gun"] == sec], "takvim": takvim, "sec": sec, "oz": oz, "bugun": bugun["gun"], "olusturma": bugun["olusturma"], "onizleme": bool(bugun.get("onizleme"))}

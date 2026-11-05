@@ -16,11 +16,13 @@
   tr.ok td{ background:rgba(40,160,90,.16); } tr.ko td{ background:rgba(200,70,60,.10); }
   .tik{ display:inline-block; min-width:22px; padding:2px 5px; border-radius:6px; font-size:12px; font-weight:800; }
   .tik.w{ background:var(--turf); color:#fff; } .tik.l{ background:var(--clay-dim); color:#fff; }
+  .tk{ display:flex; gap:5px; overflow-x:auto; margin:8px 16px; padding-bottom:4px; } .tk a{ flex:0 0 auto; padding:6px 9px; border-radius:8px; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:10.5px; font-weight:700; } .tk a.on{ border-color:var(--amber-dim); color:var(--amber-bright); }
   .gb{ display:flex; gap:8px; margin:10px 16px; } .gb a{ flex:1; text-align:center; padding:9px; border-radius:10px; text-decoration:none; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); font-size:11px; font-weight:700; }
 </style>
 {% endblock %}
 {% block content %}
 <div class="gb"><a href="/kupon-gunluk?yenile=1">🔄 Bugünün kuponlarını yeniden kur ve kaydet</a></div>
+<div class="tk">{% for g in d.takvim %}<a class="{{ 'on' if g == d.sec else '' }}" href="/kupon-gunluk?gun={{ g }}">📅 {{ g[8:10] }}.{{ g[5:7] }}{% if g == d.bugun %} bugün{% endif %}</a>{% endfor %}</div>
 {% if d.onizleme %}<div class="section-sub">⚠️ Ön izleme: Volkano verisi 12 saat ileriyi kapsadığı için bugünün kuponları 12:00'de (akşam maçları dahil) otomatik kaydedilir. Şimdi kaydetmek istersen yukarıdaki düğme.</div>{% endif %}
 <h2 class="section">📊 TÜR BAZINDA GERÇEK BAŞARI (tüm maçlar, son 10 gün)</h2>
 <table class="kt"><tr><th class="l">tür</th><th>biten seçim</th><th>tutan</th><th>gerçek %</th><th>beklenen %</th></tr>

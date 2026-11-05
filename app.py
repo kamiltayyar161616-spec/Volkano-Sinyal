@@ -433,7 +433,7 @@ def desen_page():
 
 @app.route("/kupon-gunluk")
 def kupon_gunluk_page():
-    return render_template("kupon_gunluk.html", d=gunluk_kupon.get_page_data(yenile=bool(request.args.get("yenile"))), active_page="kupongunluk")
+    return render_template("kupon_gunluk.html", d=gunluk_kupon.get_page_data(yenile=bool(request.args.get("yenile")), sec=request.args.get("gun")), active_page="kupongunluk")
 
 
 @app.route("/kelly")
