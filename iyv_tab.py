@@ -180,6 +180,118 @@ def x1_takip():
             "ust": int(100 * X1_UST)}
 
 
+# ------------------------------------------------------------------ ILK YARI ALT/UST (Volkano pazar 68) vs 7M arsivi
+# Referans: data/iy_referans.json (m7_arsiv.py iy_referans) = mac gol beklentisine gore IY 0.5/1.5/2.5 ust gercek yuzdesi.
+# Mac gol beklentisi Volkano'nun kendi alt/ust pazarindan (18): cizgi + ust/alt orani. Deger = gercek olasilik x Volkano orani - 1.
+IY_BAS = "2026-11-05T06:00:00+00:00"
+IY_DEGER = 0.05
+IY_ORAN = (1.25, 6.0)
+REF = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "iy_referans.json")
+
+
+def _ref():
+    try:
+        return json.load(open(REF))["tablo"]
+    except Exception:
+        return None
+
+
+def _gol_bekl(vk):
+    ou = {}
+    for L, x in ((vk or {}).get("18") or {}).items():
+        try:
+            if x.get("over", 0) > 1 and x.get("under", 0) > 1:
+                ou[float(L)] = (x["over"], x["under"])
+        except (TypeError, ValueError, AttributeError):
+            continue
+    if not ou:
+        return None
+    L = min(ou, key=lambda z: abs(z - 2.5))
+    u, a = ou[L]
+    pu = (1 / u) / ((1 / u) + (1 / a))
+    return L + (pu - 0.5) * 3.33
+
+
+def iy_secimler(vk, T):
+    """-> [(cizgi, 'UST'/'ALT', oran, gercek p, deger)] deger >= IY_DEGER olanlar"""
+    gb = _gol_bekl(vk)
+    h = (vk or {}).get("68") or {}
+    if gb is None or not h or not T:
+        return [], None
+    b = f"{min(4.5, max(1.5, round(gb * 4) / 4)):.2f}"
+    if b not in T:
+        b = min(T, key=lambda k: abs(float(k) - gb))
+    R = T[b]
+    out = []
+    for L in ("0.5", "1.5", "2.5"):
+        x = h.get(L) or h.get(str(float(L)))
+        if not x or L not in R:
+            continue
+        pu = R[L]
+        for taraf, od, p in (("UST", x.get("over"), pu), ("ALT", x.get("under"), 1 - pu)):
+            if not od or not (IY_ORAN[0] <= od <= IY_ORAN[1]):
+                continue
+            d = p * od - 1
+            if d >= IY_DEGER:
+                out.append((float(L), taraf, od, round(p, 3), round(d, 3)))
+    return out, round(gb, 2)
+
+
+def iy_takip():
+    T = _ref()
+    c = _c()
+    if not c or not T:
+        if c:
+            c.close()
+        return {"hazir": False}
+    now = ng._iso(ng._now())
+    bek = []
+    for r in c.execute("SELECT mid, ko, home, away, lig, vk FROM iyv_aday WHERE ko > ? AND vk IS NOT NULL ORDER BY ko", (now,)):
+        sec, gb = iy_secimler(json.loads(r["vk"]), T)
+        for L, t, od, p, d in sec:
+            bek.append({"mid": r["mid"], "ko": r["ko"], "mac": f"{r['home']} - {r['away']}", "lig": r["lig"], "gb": gb,
+                        "cizgi": L, "taraf": t, "oran": od, "p": p, "deger": d})
+    isl = {mid: json.loads(vk) for mid, vk in c.execute("SELECT mid, vk FROM iyv_islenen WHERE vk IS NOT NULL")}
+    c.close()
+    sk = {}
+    if isl:
+        with ng._db_lock:
+            cc = ng._conn()
+            sk = {r[0]: r[1:] for r in cc.execute(
+                f"""SELECT mid, ht_h, ht_a, home, away, kickoff_utc, league_ng FROM ng_match
+                    WHERE ht_h IS NOT NULL AND ft_h IS NOT NULL AND mid IN ({','.join(map(str, isl))})""")}
+            cc.close()
+    bit = []
+    for mid, vk in isl.items():
+        x = sk.get(mid)
+        if not x:
+            continue
+        ig = x[0] + x[1]
+        sec, gb = iy_secimler(vk, T)
+        for L, t, od, p, d in sec:
+            ok = (ig > L) if t == "UST" else (ig < L)
+            bit.append({"mid": mid, "ko": x[4], "mac": f"{x[2]} - {x[3]}", "lig": x[5], "gb": gb, "cizgi": L, "taraf": t,
+                        "oran": od, "p": p, "deger": d, "iy": f"{x[0]}-{x[1]}", "tuttu": ok,
+                        "donem": "ileri" if x[4] >= IY_BAS else "gecmis"})
+    bit.sort(key=lambda z: z["ko"], reverse=True)
+    oz = []
+    for donem in ("ileri", "gecmis"):
+        for L in (0.5, 1.5, 2.5):
+            for t in ("UST", "ALT"):
+                B = [z for z in bit if z["donem"] == donem and z["cizgi"] == L and z["taraf"] == t]
+                if not B:
+                    continue
+                n = len(B)
+                w = sum(1 for z in B if z["tuttu"])
+                k = sum((z["oran"] - 1) if z["tuttu"] else -1 for z in B)
+                kv = sum((z["oran"] - 1) * (1 - VERGI) if z["tuttu"] else -1 for z in B)
+                oz.append({"donem": donem, "ad": f"İY {L} {'ÜST' if t == 'UST' else 'ALT'}", "n": n, "w": w,
+                           "yuzde": round(100 * w / n, 1), "bekl": round(100 * sum(z["p"] for z in B) / n, 1),
+                           "ort_oran": round(sum(z["oran"] for z in B) / n, 2), "roi": round(100 * k / n, 1), "roi_v": round(100 * kv / n, 1)})
+    return {"hazir": True, "bekleyen": bek[:60], "biten": [z for z in bit if z["donem"] == "ileri"][:80], "oz": oz,
+            "bas": IY_BAS, "deger": int(100 * IY_DEGER)}
+
+
 # ------------------------------------------------------------------ TERS YONTEM: Volkano IY/MS -> MS 1X2 ve IY 1X2 olmasi gereken
 TBANT = (("≥ +%8", lambda d: d >= 0.08), ("+%4 … +%8", lambda d: 0.04 <= d < 0.08), ("+%2 … +%4", lambda d: 0.02 <= d < 0.04),
          ("+%0.5 … +%2", lambda d: 0.005 <= d < 0.02), ("≈ 0 (±%0.5)", lambda d: abs(d) < 0.005),
@@ -268,7 +380,7 @@ def get_page_data():
         c.close()
     secim = sorted([(a, k, x) for a in aday for k, x in a["sec"]], key=lambda t: -t[2]["sapma"])
     return {"aday": aday, "secim": secim, "son": son, "son_eksi": son_eksi, "bias": bias, "son_liste": SON, "hazir": c is not None,
-            "kilit_mac": len({r["mid"] for r in kil}), "x1": x1_takip()}
+            "kilit_mac": len({r["mid"] for r in kil}), "x1": x1_takip(), "iy": iy_takip()}
 
 
 def export_json():
@@ -301,4 +413,4 @@ def export_json():
         c.close()
     L = sorted(M.values(), key=lambda m: m["ko"], reverse=True)
     return {"exported_at": ng._iso(ng._now()), "mac_sayisi": len(L), "sonuclu": sum(1 for m in L if m["skor"]),
-            "performans": get_performance(), "ters_performans": ters_perf(), "x1_takip": x1_takip(), "maclar": L}
+            "performans": get_performance(), "ters_performans": ters_perf(), "x1_takip": x1_takip(), "iy_takip": iy_takip(), "maclar": L}

@@ -438,6 +438,42 @@ def iyms(buro="Pinnacle Sports"):
             print(f"{k:14s} {n:6d} {ig / n:10.2f} %{100 * a1 / n:6.1f} %{100 * a2 / n:6.1f} %{100 * a3 / n:6.1f}")
 
 
+def gol_bekl(L, u, a):
+    """ana cizgi + ust/alt orani -> yaklasik mac gol beklentisi (0.25 cizgi ~ %7.5 ust olasiligi)"""
+    pu = (1 / u) / ((1 / u) + (1 / a))
+    return L + (pu - 0.5) * 3.33
+
+
+def iy_referans(buro="Pinnacle Sports"):
+    """mac gol beklentisine (büronun mac basi cizgi+oran) gore ilk yari 0.5 / 1.5 / 2.5 ust gercek yuzdeleri -> data/iy_referans.json"""
+    c = db()
+    rows = c.execute("SELECT ou, skor, goller, ko FROM mac").fetchall()
+    c.close()
+    T = defaultdict(lambda: [0, 0, 0, 0])
+    for ou, sk, gl, ko in rows:
+        skor = skor_al(sk, gl, _ko_tahmin(ko, ou))
+        if not skor:
+            continue
+        iy = (0, 0) if skor == "0-0" else _iy(gl, skor)
+        O = json.loads(ou or "{}").get(buro)
+        if iy is None or not O:
+            continue
+        t, L, u, a = O["kap"]
+        if L < 0.5 or u <= 1 or a <= 1:
+            continue
+        b = min(4.5, max(1.5, round(gol_bekl(L, u, a) * 4) / 4))
+        ig = iy[0] + iy[1]
+        x = T[b]
+        x[0] += 1; x[1] += ig > 0.5; x[2] += ig > 1.5; x[3] += ig > 2.5
+    out = {f"{b:.2f}": {"n": n, "0.5": round(a1 / n, 4), "1.5": round(a2 / n, 4), "2.5": round(a3 / n, 4)}
+           for b, (n, a1, a2, a3) in sorted(T.items()) if n >= 40}
+    yol = os.path.join(os.path.dirname(DB), "iy_referans.json")
+    json.dump({"buro": buro, "olusturma": datetime.now(timezone.utc).isoformat()[:16], "tablo": out}, open(yol, "w"), ensure_ascii=False, indent=1)
+    print(f"{yol} yazildi ({buro})\n{'gol bekl.':>9s} {'maç':>6s} {'İY 0.5Ü':>8s} {'İY 1.5Ü':>8s} {'İY 2.5Ü':>8s}")
+    for b, v in out.items():
+        print(f"{b:>9s} {v['n']:6d} %{100 * v['0.5']:6.1f} %{100 * v['1.5']:6.1f} %{100 * v['2.5']:6.1f}")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if not a or a[0] == "durum":
@@ -446,6 +482,8 @@ if __name__ == "__main__":
         topla(int(a[1]) if len(a) > 1 else 5183000, int(a[2]) if len(a) > 2 else 5138000)
     elif a[0] == "iy_doldur":
         iy_doldur()
+    elif a[0] == "iy_referans":
+        iy_referans(a[1] if len(a) > 1 else "Pinnacle Sports")
     elif a[0] == "iyms":
         iyms(a[1] if len(a) > 1 else "Pinnacle Sports")
     elif a[0] == "desen":

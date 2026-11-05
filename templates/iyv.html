@@ -49,6 +49,23 @@
 {% if x1.biten %}<h2 class="section">🧾 0/FAVORİ SONUÇLANAN ({{ x1.biten|length }})</h2>
 {% for x in x1.biten %}{{ x1k(x, 'bitti') }}{% endfor %}{% endif %}
 {% endif %}
+{% set iy = d.iy %}
+<h2 class="section">⏱ İLK YARI ALT/ÜST (Volkano vs 7M arşivi)</h2>
+{% if not iy or not iy.hazir %}<div class="section-sub">Referans tablosu henüz yok (sunucuda: <b>python3 m7_arsiv.py iy_referans</b>).</div>{% else %}
+<div class="section-sub">Maçın gol beklentisi Volkano'nun kendi maç alt/üst oranından; o gol beklentisindeki maçlarda ilk yarı 0.5 / 1.5 / 2.5 üstün gerçek yüzdesi 7M arşivinden (binlerce maç). Volkano İY oranı gerçek olasılığa göre <b>≥ %{{ iy.deger }}</b> fazla ödüyorsa seçim. 1 birim; "vergili" = %12 kesinti sonrası. <b>İleriye dönük</b> takip {{ iy.bas | localdatetime }}'dan sonra; <b>geçmiş</b> = 1 Kasım'dan beri kaydedilmiş gerçek Volkano oranlarıyla geriye dönük.</div>
+<table class="xt"><tr><th class="l">seçim</th><th>maç</th><th>tutan</th><th>beklenen</th><th>ort. oran</th><th>ROI</th><th>vergili</th></tr>
+{% for d_ in ['ileri', 'gecmis'] %}<tr><td class="l" colspan="7" style="color:var(--chalk-faint)"><b>{{ 'İLERİYE DÖNÜK' if d_ == 'ileri' else 'GEÇMİŞ (kayıtlı Volkano oranlarıyla)' }}</b></td></tr>
+{% for o in iy.oz if o.donem == d_ %}<tr><td class="l"><b>{{ o.ad }}</b></td><td>{{ o.n }}</td><td>{{ o.w }} · <b>%{{ o.yuzde }}</b></td><td>%{{ o.bekl }}</td><td>{{ o.ort_oran }}</td>
+<td><b class="{{ 'pos' if o.roi > 0 else 'neg' }}">{{ '+' if o.roi > 0 else '' }}%{{ o.roi }}</b></td><td><span class="{{ 'pos' if o.roi_v > 0 else 'neg' }}">{{ '+' if o.roi_v > 0 else '' }}%{{ o.roi_v }}</span></td></tr>
+{% else %}<tr><td class="l" colspan="7"><span class="ng-meta">henüz yok</span></td></tr>{% endfor %}{% endfor %}</table>
+<h2 class="section">⏳ İY ALT/ÜST BEKLEYEN ({{ iy.bekleyen|length }})</h2>
+{% for x in iy.bekleyen %}<div class="row"><span><b>{{ x.mac }}</b><br><span class="ng-meta">{{ x.ko | localdatetime }}{% if x.lig %} · {{ x.lig }}{% endif %} · maç gol bekl. {{ x.gb }} · gerçek %{{ (x.p*100)|round(1) }}</span></span>
+<span style="text-align:right;white-space:nowrap"><span class="tag a">İY {{ x.cizgi }} {{ 'ÜST' if x.taraf == 'UST' else 'ALT' }} @ {{ '%.2f'|format(x.oran) }}</span><br><span class="ng-meta">değer +%{{ (x.deger*100)|round(1) }}</span></span></div>
+{% else %}<div class="section-sub">Önümüzdeki 12 saatte değerli İY alt/üst seçimi yok.</div>{% endfor %}
+{% if iy.biten %}<h2 class="section">🧾 İY ALT/ÜST SONUÇLANAN ({{ iy.biten|length }})</h2>
+{% for x in iy.biten %}<div class="row"><span><b>{{ x.mac }}</b><br><span class="ng-meta">{{ x.ko | localdatetime }} · İY {{ x.iy }}</span></span>
+<span style="text-align:right;white-space:nowrap"><span class="tag a">İY {{ x.cizgi }} {{ 'ÜST' if x.taraf == 'UST' else 'ALT' }} @ {{ '%.2f'|format(x.oran) }}</span><br><span class="tag {{ 'w' if x.tuttu else 'l' }}">{{ 'tuttu +' ~ ('%.2f'|format(x.oran - 1)) if x.tuttu else 'yattı −1' }}</span></span></div>{% endfor %}{% endif %}
+{% endif %}
 <h2 class="section">📊 PERFORMANS (kilitli oranla, 1 birim)</h2>
 <div class="section-sub">Sonucu belli {{ perf.mac }} maç (toplam kilitli {{ d.kilit_mac }}). "model" = modelin ortalama olasılığı. Az maçta tek bir yüksek oran (2/1, 1/2) ROI'yi tek başına taşır; n≥300 olmadan karar yok.</div>
 {% if perf.esik %}<div class="section-sub">Artı eşikler (Volkano olması gerekenden yüksek)</div>{{ ptab(perf.esik) }}
