@@ -666,3 +666,43 @@ def get_page_data(gun=None, yenile=False):
             "sz": [{"s": k, "n": v[0], "fk": round(100 * v[1] / v[0], 1) if v[0] else None, "sk": round(100 * v[2] / v[0], 1) if v[0] else None} for k, v in sz.items()], "saat": SAAT, "turler": TURLER, "ozet": ozet,
             "tablo": {t: tablo[t] for t in TURLER if t in tablo}, "n_ogren": sum(v[0] for (t, _, _), v in O.items() if t == "Kazanan"),
             "M": M, "min_ogren": MIN_OGREN}
+
+
+def para_analiz():
+    """acilis -> kapanis favori (acilistaki favori) olasilik kaymasi kovalari: favori kazanma/berabere/kaybetme %"""
+    c = _ng()
+    rows = c.execute("SELECT odds_json, ft_h, ft_a FROM ng_match WHERE ft_h IS NOT NULL AND odds_json IS NOT NULL AND odds_final = 1").fetchall()
+    c.close()
+    K = [(-99, -0.05, "≤-5p"), (-0.05, -0.03, "-5..-3p"), (-0.03, 0.03, "sabit ±3p"), (0.03, 0.05, "+3..+5p"), (0.05, 0.08, "+5..+8p"), (0.08, 99, "≥+8p")]
+    B = [(0, 0.45, "fav <%45"), (0.45, 0.55, "fav %45-55"), (0.55, 0.65, "fav %55-65"), (0.65, 1.01, "fav ≥%65"), (0, 1.01, "HEPSİ")]
+    S = defaultdict(lambda: [0, 0, 0])
+    for oj, fh, fa in rows:
+        try:
+            o = json.loads(oj)
+        except ValueError:
+            continue
+        op, cu = o.get("cons_open"), o.get("cons_cur")
+        if not op or not cu:
+            continue
+        fav = 0 if op[0] >= op[2] else 2
+        d = cu[fav] - op[fav]
+        ff = (fh - fa) if fav == 0 else (fa - fh)
+        r = 0 if ff > 0 else 1 if ff == 0 else 2
+        for lo, hi, kb in B:
+            if lo <= op[fav] < hi:
+                for a, b, kk in K:
+                    if a <= d < b:
+                        S[(kb, kk)][r] += 1
+    for _, _, kb in B:
+        print(f"== {kb} (açılış olasılığı)")
+        for _, _, kk in K:
+            w, x, l = S[(kb, kk)]
+            n = w + x + l
+            if n:
+                print(f"  {kk:10s} n={n:5d}  fav kazandı %{100*w/n:4.1f}  berabere %{100*x/n:4.1f}  kaybetti %{100*l/n:4.1f}")
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:2] == ["para"]:
+        para_analiz()
