@@ -72,7 +72,7 @@
 {% for s in k.L %}<div class="ks {{ 'ok' if s.ok else 'ko' if s.ok is not none else '' }}"><div class="t">{{ (s.x.ko | localdatetime)[-5:] }}</div>
 <div class="m"><b>{{ s.x.mac }}</b><span class="meta">🏆 {% if k.ad.startswith('MIX') %}{{ s.tur }} · {% endif %}{{ s.x.lig or '' }}{% if s.x.skor %} · {{ s.x.skor }}{% if s.x.iy %} (İY {{ s.x.iy }}){% endif %}{% endif %}</span></div>
 {% set tn = s.x.ev if s.z.sec in ('1', '1X', '1/1') else s.x.dep if s.z.sec in ('2', 'X2', '2/2') else '' %}
-<div class="sc"><b>{{ s.z.sec }}</b> <span class="meta">%{{ s.z.p|round|int }}</span>{% if tn %}<div class="meta" style="max-width:110px;overflow:hidden;text-overflow:ellipsis">{{ tn }}</div>{% endif %}</div>
+<div class="sc"><b>{{ s.z.sec }}</b> <span class="meta">%{{ s.z.p|round|int }}{% if s.z.oran %} · {{ '' if s.z.oran_g else '≈' }}{{ '%.2f'|format(s.z.oran) }}{% endif %}</span>{% if tn %}<div class="meta" style="max-width:110px;overflow:hidden;text-overflow:ellipsis">{{ tn }}</div>{% endif %}</div>
 <div style="width:30px;text-align:right">{% if s.ok is not none %}<span class="tik {{ 'w' if s.ok else 'l' }}">{{ '✓' if s.ok else '✗' }}</span>{% endif %}</div></div>{% endfor %}
 </details>{% endif %}{% endfor %}
 
@@ -85,8 +85,8 @@
     {% if x.sur %}<span class="rz {{ 'g' if x.sur.seviye == 'güçlü' else '' }}">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} Sürpriz adayı: {{ x.sur.taraf }}</span>{% endif %}</div>
   <div class="skor">{% if x.skor %}{{ x.skor }}{% if x.iy %}<div class="meta" style="font-weight:500">İY {{ x.iy }}</div>{% endif %}{% endif %}</div></div>
   <div class="chips">{% for t in d.turler %}{% set z = x.T.get(t) %}{% if z %}{% set o = x.ok.get(t) %}{% set z5 = s5.T.get(t) if var else none %}{% set o5 = s5.ok.get(t) if var else none %}{% set okk = o5 if z5 else o %}
-    <div class="ch {{ 'w' if okk else 'l' if okk is not none else '' }}"><div class="lb">{{ t.replace("Favori kaybetmez", "1X / X2") }}</div><div class="v">{{ z.sec }}</div><div class="p">%{{ z.p|round|int }} sabah</div>
-    {% if z5 %}<div class="s5 {{ 'd' if t in s5.degisen else '' }}">son 5': <b>{{ z5.sec }}</b> %{{ z5.p|round|int }}</div>{% endif %}</div>{% endif %}{% endfor %}</div>
+    <div class="ch {{ 'w' if okk else 'l' if okk is not none else '' }}"><div class="lb">{{ t.replace("Favori kaybetmez", "1X / X2") }}</div><div class="v">{{ z.sec }}</div><div class="p">%{{ z.p|round|int }} sabah{% if z.oran %} · {{ '' if z.oran_g else '≈' }}{{ '%.2f'|format(z.oran) }}{% endif %}</div>
+    {% if z5 %}<div class="s5 {{ 'd' if t in s5.degisen else '' }}">son 5': <b>{{ z5.sec }}</b> %{{ z5.p|round|int }}{% if z5.oran %} · {{ '' if z5.oran_g else '≈' }}{{ '%.2f'|format(z5.oran) }}{% endif %}</div>{% endif %}</div>{% endif %}{% endfor %}</div>
   {% if var %}<div class="not {{ '' if s5['not'] else 'y' }}">{% if s5['not'] %}⚡ {{ s5['not']|join(' · ') }}{% else %}Son 5 dk ({{ s5.at }}): belirgin para akışı yok{% endif %}</div>
   {% elif s5 and s5.yok %}<div class="not y">Son 5 dk: oran okunamadı</div>{% endif %}
 </div>{% endfor %}

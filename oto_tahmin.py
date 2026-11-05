@@ -50,6 +50,10 @@ def ozellik(o, ou_ilk, ou_son, ah_son=None):
     fav = 0 if c[0] >= c[2] else 2
     pf = c[fav]
     F = {"fav": fav, "pf": round(pf, 4), "px": round(c[1], 4), "p": [round(x, 4) for x in c], "band": fav_band(pf), "ah": ah_son}
+    w = o.get("watch") or {}
+    bk = next((w[k] for k in ("Bet365", "Pinnacle", "1xBet", "William Hill") if k in w), None) or next(iter(w.values()), None)
+    if bk and bk.get("c") and all(bk["c"]):
+        F["o3"] = [round(x, 2) for x in bk["c"]]
     op = o.get("cons_open")
     d = (pf - op[fav]) if op else 0.0
     F["kayma"] = "favoriye ↑ (≥3p)" if d >= 0.03 else "favoriden ↓ (≥3p)" if d <= -0.03 else "sabit"
@@ -126,12 +130,26 @@ def ogren(yenile=False):
     return O
 
 
+MARJ = {"Kazanan": 1.05, "Favori kaybetmez": 1.06, "İY/MS": 1.15, "İY 0.5": 1.07, "İY 1.5": 1.07, "MS 2.5": 1.06}
+
+
+def oran(tur, p, F):
+    """(oran, gercek_mi): Kazanan icin bürodan gercek oran (Bet365 > Pinnacle > ...), digerleri tahmini (olasilik + marj)"""
+    o3 = F.get("o3")
+    if tur == "Kazanan" and o3:
+        return o3[F["fav"]], True
+    if tur == "Favori kaybetmez" and o3:
+        return max(1.01, round(1 / (1 / o3[F["fav"]] + 1 / o3[1]), 2)), False
+    return max(1.01, round(1 / (max(p, 0.01) * MARJ.get(tur, 1.06)), 2)), False
+
+
 def tahmin_seti(F, O):
     out = {}
     for tur, (sec, p, k) in tahminler(F).items():
         n, w, _ = O.get((tur, k, sec if tur.startswith("MS") else ""), (0, 0, 0))
+        o, g = oran(tur, p, F)
         out[tur] = {"sec": sec, "p": round(100 * (w + M * p) / (n + M), 1), "model": round(100 * p, 1), "n": n,
-                    "gercek": round(100 * w / n, 1) if n else None, "durum": k}
+                    "gercek": round(100 * w / n, 1) if n else None, "durum": k, "oran": o, "oran_g": g}
     return out
 
 
