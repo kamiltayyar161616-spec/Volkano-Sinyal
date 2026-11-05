@@ -368,6 +368,120 @@ def bant_analiz(burolar=("Pinnacle Sports", "SBOBET", "Bet365")):
                 print()
 
 
+def yavas_analiz(burolar=("Pinnacle Sports", "SBOBET", "Bet365"), pencere=240):
+    """YAVAS KACIS: mac basina 4 saat kala favori olan takimin aleyhine, hicbir 30 dk diliminde buyuk hareket (0.25) olmadan,
+    son 4 saatte toplam para gucu >= E gol kaymis maclar. Favori (T-240'taki) kazandi / X / surpriz %, ayni kapanis bandindaki
+    tum maclarla (normal) karsilastirma; surpriz tarafin handikap ve 1X2 tutma. Tersi (yavas akin, favoriye) de var."""
+    a = A.db()
+    M = {}
+    for i, ko, ou, sk, gl in a.execute("SELECT id, ko, ou, skor, goller FROM mac"):
+        s_ = A.skor_al(sk, gl, A._ko_tahmin(ko, ou))
+        if s_:
+            M[i] = tuple(int(x) for x in s_.split("-"))
+    a.close()
+    c = db()
+    rows = c.execute("SELECT id, d FROM s WHERE d IS NOT NULL").fetchall()
+    c.close()
+
+    def bant(L):
+        x = abs(L)
+        return "0-0.25" if x <= 0.25 else "0.5-0.75" if x <= 0.75 else "1-1.25" if x <= 1.25 else "1.5+"
+    KON = defaultdict(lambda: [0, 0, 0, 0])          # (büro, bant) -> n, fav kazandi, X, surpriz
+    G = defaultdict(lambda: [0, 0, 0, 0, 0.0, 0.0, 0.0])  # n, fav, X, sur, surpriz handikap tuttu, bekl, kar
+    for i, d in rows:
+        if i not in M:
+            continue
+        fh, fa = M[i]
+        S_ = json.loads(d)
+        for k in burolar:
+            L = S_.get(k)
+            if not L or len(L) < 2 or L[0][0] is None or L[0][0] > -pencere:
+                continue
+            ref = next((x for x in reversed(L) if x[0] <= -pencere), None)
+            if not ref:
+                continue
+            Lr, ohr, oar = ref[1], ref[2], ref[3]
+            fav = 0 if Lr < 0 else 2 if Lr > 0 else (0 if ohr <= oar else 2)
+            Lc, oh, oa = L[-1][1], L[-1][2], L[-1][3]
+            b = bant(Lc)
+            r = 0 if fh > fa else 1 if fh == fa else 2
+            sonuc = 1 if r == fav else 2 if r == 1 else 3
+            KON[(k, b)][0] += 1
+            KON[(k, b)][sonuc] += 1
+            g0, g1 = guc(Lr, ohr, oar), guc(Lc, oh, oa)
+            kay = (g1 - g0) if fav == 0 else (g0 - g1)       # + = favoriye, - = favori aleyhine
+            son = [x for x in L if x[0] > -pencere - 30]
+            ani = any(h[2] > -pencere for h in _hareketler(L, 0.25))
+            if ani:
+                continue
+            sp = A.asya((fh - fa) + Lc)
+            ph = (1 / oh) / (1 / oh + 1 / oa)
+            sur_ss, sur_p, sur_su = (1 - sp, 1 - ph, oa) if fav == 0 else (sp, ph, oh)
+            for E in (0.25, 0.4, 0.6):
+                for yon, ok in (("KAÇIŞ (favori aleyhine)", kay <= -E), ("AKIN (favoriye)", kay >= E)):
+                    if not ok:
+                        continue
+                    for key in ((k, yon, E, "HEPSİ"), (k, yon, E, b)):
+                        x = G[key]
+                        x[0] += 1
+                        x[sonuc] += 1
+                        x[4] += sur_ss
+                        x[5] += sur_p
+                        x[6] += A.kar(sur_ss, sur_su)
+    print(f"YAVAŞ HAREKET: son {pencere // 60} saatte, hiçbir 30 dk'da 0.25 gol büyük hareket olmadan toplam kayma >= E. Favori = maça 4 saat kala.")
+    print("fav/X/sürpriz % (normal = aynı büro + aynı kapanış bandındaki tüm maçlar) | sürpriz tarafın handikabı: tuttu (bekl), ROI kapanış suyuyla\n")
+    for k in burolar:
+        for yon in ("KAÇIŞ (favori aleyhine)", "AKIN (favoriye)"):
+            for E in (0.25, 0.4, 0.6):
+                x = G.get((k, yon, E, "HEPSİ"))
+                if not x or x[0] < 10:
+                    continue
+                print(f"== {k} | {yon} | >= {E} gol")
+                for b in ("HEPSİ", "0-0.25", "0.5-0.75", "1-1.25", "1.5+"):
+                    x = G.get((k, yon, E, b))
+                    if not x or not x[0]:
+                        continue
+                    n = x[0]
+                    if b == "HEPSİ":
+                        nk = {bb: G[(k, yon, E, bb)][0] for bb in ("0-0.25", "0.5-0.75", "1-1.25", "1.5+")}
+                        kn = [sum(nk[bb] * KON[(k, bb)][j] / max(1, KON[(k, bb)][0]) for bb in nk) / n for j in (1, 2, 3)]
+                    else:
+                        T = KON[(k, b)]
+                        kn = [T[j] / max(1, T[0]) for j in (1, 2, 3)]
+                    print(f"   {b:9s} {BANT_1X2.get(b, ''):24s} n={n:4d} | fav %{100 * x[1] / n:4.1f} (normal %{100 * kn[0]:4.1f})"
+                          f" X %{100 * x[2] / n:4.1f} (%{100 * kn[1]:4.1f}) sürpriz %{100 * x[3] / n:4.1f} (%{100 * kn[2]:4.1f})"
+                          f" | sürpriz handikap %{100 * x[4] / n:4.1f} (bekl %{100 * x[5] / n:4.1f}) ROI %{100 * x[6] / n:+5.1f}")
+                print()
+
+
+def goster(ara):
+    """Ada gore mac bul, 3 büronun handikap serisini goster (dk = maca kalan dakika, guc = ev lehine para gucu)."""
+    a = A.db()
+    bul = [r for r in a.execute("SELECT id, ta, tb, lig, ko, skor, goller, ou FROM mac") if ara.lower() in f"{r[1]} {r[2]}".lower()]
+    a.close()
+    c = db()
+    for i, ta, tb, lig, ko, sk, gl, ou in bul[-5:]:
+        s_ = A.skor_al(sk, gl, A._ko_tahmin(ko, ou))
+        iy = A._iy(gl, s_) if s_ else None
+        print(f"\n##### {ta} - {tb} | {lig} | {ko} UTC | skor {s_} | İY {iy}")
+        r = c.execute("SELECT d FROM s WHERE id=?", (i,)).fetchone()
+        if not r or not r[0]:
+            print("   seri yok")
+            continue
+        S_ = json.loads(r[0])
+        for k in ("Pinnacle Sports", "SBOBET", "Bet365"):
+            L = S_.get(k)
+            if not L:
+                continue
+            L = [x for x in L if x[0] is not None and x[0] >= -720]
+            print(f"   -- {k} (son 12 saat, {len(L)} değişiklik)")
+            for j, x in enumerate(L):
+                if len(L) > 40 and 0 < j < len(L) - 25 and j % 3:
+                    continue
+                print(f"      {x[0]:7.0f} dk | çizgi {x[1]:+.2f} | ev {x[2]:.2f} dep {x[3]:.2f} | güç {guc(x[1], x[2], x[3]):+.2f}")
+    c.close()
+
+
 def ozet_bas(min_n=300):
     Z = {}
     analiz(min_n, None, Z)
@@ -386,6 +500,10 @@ if __name__ == "__main__":
     a = sys.argv[1:] or ["durum"]
     if a[0] == "topla":
         topla(int(a[1]) if len(a) > 1 else 4)
+    elif a[0] == "yavas":
+        yavas_analiz()
+    elif a[0] == "goster":
+        goster(" ".join(a[1:]))
     elif a[0] == "bant":
         bant_analiz()
     elif a[0] == "iyms":
