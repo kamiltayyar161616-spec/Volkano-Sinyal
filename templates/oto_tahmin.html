@@ -32,7 +32,17 @@
 {% for o in d.ozet %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.s is not none %}<b>%{{ o.s }}</b> <span class="meta">({{ o.n }})</span>{% else %}—{% endif %}</td>
 <td>{% if o.s5 is not none %}<b class="{{ 'pos' if o.s is not none and o.s5 > o.s else '' }}">%{{ o.s5 }}</b> <span class="meta">({{ o.n5 }})</span>{% else %}—{% endif %}</td></tr>{% endfor %}</table>
 
+<h2 class="section">⚠️ SÜRPRİZ ADAYLARI — gerçek sonuç (14 gün)</h2>
+<table class="tt"><tr><th class="l">seviye</th><th>biten</th><th>favori kazanamadı</th><th>sürpriz kazandı</th></tr>
+{% for o in d.sz %}<tr><td class="l"><b>{{ '🔴 güçlü' if o.s == 'güçlü' else '🟠 aday' }}</b></td><td>{{ o.n }}</td><td>{{ ('%' ~ o.fk) if o.fk is not none else '—' }}</td><td>{{ ('%' ~ o.sk) if o.sk is not none else '—' }}</td></tr>{% endfor %}</table>
+<div class="section-sub">Aday = piyasa favoriye karşı işaret veriyor (açılıştan favoriden kaçış, keskin bürolar karşıda, son 5 dk favoriden para, favori değişimi, handikap favori aleyhine, beraberliğe para). 🔴 güçlü = birden fazla işaret. Kesinlik değil, uyarı; gerçek sonuç tablosu bu işaretin ne kadar işe yaradığını gösterir.</div>
+
 {% if d.gun %}{% set G = d.gun %}
+{% if G.SUR %}<h2 class="section">⚠️ {{ G.gun }} SÜRPRİZ ADAYLARI ({{ G.SUR|length }})</h2>
+<table class="tt"><tr><th class="l">saat · maç</th><th class="l">sürpriz tarafı</th><th class="l">işaretler</th><th>sonuç</th></tr>
+{% for x in G.SUR %}<tr class="{{ 'ok' if x.sur.sonuc and '✓' in x.sur.sonuc else 'ko' if x.sur.sonuc else '' }}"><td class="l">{{ (x.ko | localdatetime)[-5:] }} <b>{{ x.mac }}</b><br><span class="meta">{{ x.lig or '' }}</span></td>
+<td class="l">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} <b>{{ x.sur.taraf }}</b><br><span class="meta">kazanma %{{ x.sur.p_s }} · X %{{ x.sur.p_x }}</span></td>
+<td class="l meta">{{ x.sur.neden|join('<br>')|safe }}</td><td>{% if x.skor %}<b>{{ x.skor }}</b><br><span class="meta">{{ x.sur.sonuc }}</span>{% else %}<span class="meta">bekliyor</span>{% endif %}</td></tr>{% endfor %}</table>{% endif %}
 <h2 class="section">🎫 {{ G.gun }} KUPONLARI (sabah {{ G.at[11:16] }})</h2>
 {% for k in G.K %}{% if k.L %}
 <details {% if loop.first %}open{% endif %}><summary>{{ k.ad }} — {% if k.bit %}{{ k.tut }}/{{ k.bit }} tuttu ({{ k.L|length }} maç){% else %}beklenen {{ k.bek }} / {{ k.L|length }}{% endif %}</summary>
@@ -46,7 +56,7 @@
 {% for x in G.L %}{% set s5 = x.s5 %}{% set deg = s5 and s5.T is defined and (s5.degisen or s5['not']) %}
 <div class="mk {{ 'deg' if deg else '' }}">
   <div class="mk-u"><div><b>{{ (x.ko | localdatetime)[-5:] }} {{ x.mac }}</b><div class="meta">{{ x.lig or '' }} · sabah 1X2 %{{ (100*x.F.p[0])|round|int }}/%{{ (100*x.F.p[1])|round|int }}/%{{ (100*x.F.p[2])|round|int }}{% if x.F.L %} · gol çizgisi {{ x.F.L }}{% endif %}{% if x.F.ah is not none %} · AH {{ '%+g'|format(x.F.ah) }}{% endif %}</div></div>
-  <div style="text-align:right;white-space:nowrap">{% if x.skor %}<b>{{ x.skor }}</b>{% if x.iy %}<div class="meta">İY {{ x.iy }}</div>{% endif %}{% endif %}</div></div>
+  <div style="text-align:right;white-space:nowrap">{% if x.sur %}<span title="{{ x.sur.neden|join(' · ') }}" style="font-size:9.5px;font-weight:800;color:{{ 'var(--clay)' if x.sur.seviye == 'güçlü' else 'var(--amber-bright)' }}">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} SÜRPRİZ ADAYI: {{ x.sur.taraf }}</span><br>{% endif %}{% if x.skor %}<b>{{ x.skor }}</b>{% if x.iy %}<div class="meta">İY {{ x.iy }}</div>{% endif %}{% endif %}</div></div>
   <div class="g6"><div class="r"></div>{% for t in d.turler %}<div class="h">{{ t.replace('Favori kaybetmez','1X/X2').replace('Kazanan','Kaz.') }}</div>{% endfor %}
     <div class="r">sabah</div>{% for t in d.turler %}{% set z = x.T.get(t) %}{% set o = x.ok.get(t) %}<div class="{{ 'w' if o else 'l' if o is not none else '' }}">{% if z %}<b>{{ z.sec }}</b> {{ z.p|round|int }}{% else %}—{% endif %}</div>{% endfor %}
     {% if s5 and s5.T is defined %}<div class="r">son 5'<br>{{ s5.at }}</div>{% for t in d.turler %}{% set z = s5.T.get(t) %}{% set o = s5.ok.get(t) %}<div class="{{ 'ch' if t in s5.degisen else '' }} {{ 'w' if o else 'l' if o is not none else '' }}">{% if z %}<b>{{ z.sec }}</b> {{ z.p|round|int }}{% else %}—{% endif %}</div>{% endfor %}{% endif %}

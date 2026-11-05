@@ -292,6 +292,43 @@ def gunler():
     return sorted((f[:-5] for f in os.listdir(KLASOR) if f.endswith(".json") and "_son5" not in f and _oku(f[:-5])), reverse=True)
 
 
+def surpriz(x, s5):
+    """Sürpriz adayi: favoriden para kacisi / keskin bürolar karsida / favori degisti / handikap favori aleyhine."""
+    F = x["F"]
+    N, puan = [], 0
+    if F.get("kayma", "").startswith("favoriden"):
+        N.append("açılıştan beri favoriden para kaçtı")
+        puan += 1
+    if F.get("keskin") == "keskinler karşıda":
+        N.append("keskin bürolar (Pinnacle/Betfair) favoriye karşı")
+        puan += 1
+    if s5 and s5.get("F"):
+        d, fi = s5["d"], F["fav"]
+        if s5["F"]["fav"] != fi:
+            N.append("son 5 dk: FAVORİ DEĞİŞTİ")
+            puan += 2
+        elif d[fi] <= -4:
+            N.append(f"son 5 dk: favoriden {d[fi]}p para")
+            puan += 2
+        elif d[fi] <= -2.5:
+            N.append(f"son 5 dk: favoriden {d[fi]}p para")
+            puan += 1
+        if d[1] >= 3:
+            N.append(f"son 5 dk: beraberliğe +{d[1]}p")
+            puan += 1
+        if F.get("ah") is not None and s5["F"].get("ah") is not None:
+            dah = (s5["F"]["ah"] - F["ah"]) * (1 if fi == 0 else -1)      # NowGoal: + = ev veriyor
+            if dah <= -0.25:
+                N.append(f"son 5 dk: handikap favori aleyhine {F['ah']:+g} → {s5['F']['ah']:+g}")
+                puan += 1
+    if not puan:
+        return None
+    Fn = s5["F"] if s5 and s5.get("F") else F
+    di = 2 if F["fav"] == 0 else 0
+    return {"seviye": "güçlü" if puan >= 3 else "aday", "puan": puan, "neden": N,
+            "taraf": x["dep"] if F["fav"] == 0 else x["ev"], "p_s": round(100 * Fn["p"][di], 1), "p_x": round(100 * Fn["p"][1], 1)}
+
+
 def get_page_data(gun=None, yenile=False):
     G = gunler()
     bugun = (datetime.now(TR) - timedelta(hours=SAAT)).date().isoformat()
@@ -300,6 +337,7 @@ def get_page_data(gun=None, yenile=False):
         G = gunler()
     gun = gun if gun in G else (G[0] if G else None)
     oz = {"sabah": defaultdict(lambda: [0, 0]), "son5": defaultdict(lambda: [0, 0])}
+    sz = {"aday": [0, 0, 0], "güçlü": [0, 0, 0]}          # n, favori kazanamadi, surpriz kazandi
     for g in G[:14]:                                   # 14 gunluk tutma: sabah vs son 5 dk
         v = _oku(g)
         R5 = json.load(open(_son5_dosya(g), encoding="utf-8")) if os.path.exists(_son5_dosya(g)) else {}
@@ -308,6 +346,13 @@ def get_page_data(gun=None, yenile=False):
             r = S.get(m)
             if not r or r[0] is None:
                 continue
+            su = surpriz(x, R5.get(m))
+            if su:
+                ff = (r[0] - r[1]) if x["F"]["fav"] == 0 else (r[1] - r[0])
+                z = sz[su["seviye"]]
+                z[0] += 1
+                z[1] += ff <= 0
+                z[2] += ff < 0
             for t, z in x["T"].items():
                 k = tuttu(t, z["sec"], *r, x["F"]["fav"])
                 if k is not None:
@@ -335,6 +380,10 @@ def get_page_data(gun=None, yenile=False):
             if s5 and s5.get("T"):
                 s5 = dict(s5, ok={t: tuttu(t, z["sec"], *r, s5["F"]["fav"]) for t, z in s5["T"].items()})
             x["s5"] = s5
+            x["sur"] = surpriz(x, s5)
+            if x["sur"] and r[0] is not None:
+                ff = (r[0] - r[1]) if x["F"]["fav"] == 0 else (r[1] - r[0])
+                x["sur"]["sonuc"] = "sürpriz kazandı ✓" if ff < 0 else "berabere (favori kazanamadı) ✓" if ff == 0 else "favori kazandı ✗"
             L.append(x)
         K = []
         for ad, ids in v["kup"].items():
@@ -347,7 +396,7 @@ def get_page_data(gun=None, yenile=False):
             b = [s for s in satir if s["ok"] is not None]
             K.append({"ad": ad, "L": satir, "tut": sum(s["ok"] for s in b), "bit": len(b),
                       "bek": round(sum(s["z"]["p"] for s in satir) / 100, 1)})
-        gv = {"gun": gun, "at": v["at"], "L": L, "K": K, "n5": sum(1 for x in L if x["s5"]),
+        gv = {"gun": gun, "at": v["at"], "L": L, "K": K, "SUR": sorted((x for x in L if x["sur"]), key=lambda x: (-x["sur"]["puan"], x["ko"])), "n5": sum(1 for x in L if x["s5"]),
               "n_deg": sum(1 for x in L if x["s5"] and (x["s5"].get("degisen") or x["s5"].get("not")))}
     O = ogren()
     tablo = defaultdict(list)
@@ -356,6 +405,7 @@ def get_page_data(gun=None, yenile=False):
             tablo[tur].append({"durum": k + (f" | {sec}" if sec else ""), "n": n, "gercek": round(100 * w / n, 1), "model": round(100 * ps / n, 1)})
     for t in tablo:
         tablo[t].sort(key=lambda r: -r["gercek"])
-    return {"G": G, "gun": gv, "bugun": bugun, "last": _last, "saat": SAAT, "turler": TURLER, "ozet": ozet,
+    return {"G": G, "gun": gv, "bugun": bugun, "last": _last,
+            "sz": [{"s": k, "n": v[0], "fk": round(100 * v[1] / v[0], 1) if v[0] else None, "sk": round(100 * v[2] / v[0], 1) if v[0] else None} for k, v in sz.items()], "saat": SAAT, "turler": TURLER, "ozet": ozet,
             "tablo": {t: tablo[t] for t in TURLER if t in tablo}, "n_ogren": sum(v[0] for (t, _, _), v in O.items() if t == "Kazanan"),
             "M": M, "min_ogren": MIN_OGREN}
