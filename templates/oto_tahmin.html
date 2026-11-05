@@ -56,7 +56,7 @@
 {% if d.gun %}{% set G = d.gun %}
 {% if not kp %}<div class="h2">📅 {{ G.gun[8:10] }}.{{ G.gun[5:7] }} GÜNÜN SONUCU <span class="s">sabah {{ G.at[11:16] }} · {{ G.L|length }} maç · son 5 dk {{ G.n5 }}</span></div>
 <div class="box"><table class="tb"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
-{% for o in G.GO %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.n %}<b>%{{ (100*o.w/o.n)|round|int }}</b> <span class="meta">{{ o.w }}/{{ o.n }}</span>{% else %}<span class="meta">—</span>{% endif %}</td><td>{% if o.n5 %}<b>%{{ (100*o.w5/o.n5)|round|int }}</b> <span class="meta">{{ o.w5 }}/{{ o.n5 }}</span>{% else %}<span class="meta">—</span>{% endif %}</td></tr>{% endfor %}</table></div>
+{% for o in G.GO %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.n %}<b>%{{ (100*o.w/o.n)|round|int }}</b> <span class="meta">{{ o.w }}/{{ o.n }}</span>{% if o.r is not none %}<div class="meta {{ 'pos' if o.r > 0 else 'neg' }}">ROI {{ '%+.1f'|format(o.r) }}%</div>{% endif %}{% else %}<span class="meta">—</span>{% endif %}</td><td>{% if o.n5 %}<b>%{{ (100*o.w5/o.n5)|round|int }}</b> <span class="meta">{{ o.w5 }}/{{ o.n5 }}</span>{% if o.r5 is not none %}<div class="meta {{ 'pos' if o.r5 > 0 else 'neg' }}">ROI {{ '%+.1f'|format(o.r5) }}%</div>{% endif %}{% else %}<span class="meta">—</span>{% endif %}</td></tr>{% endfor %}</table></div>
 
 {% if G.SUR %}<div class="h2">⚠️ SÜRPRİZ ADAYLARI <span class="s">{{ G.SUR|length }} maç</span></div>
 {% for x in G.SUR %}<div class="box sur {{ 'g' if x.sur.seviye == 'güçlü' else '' }}">
@@ -94,8 +94,8 @@
 
 <div class="h2">📊 14 GÜNLÜK TUTMA</div>
 <div class="box"><table class="tb"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
-{% for o in d.ozet %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.s is not none %}<b>%{{ o.s }}</b> <span class="meta">({{ o.n }})</span>{% else %}<span class="meta">—</span>{% endif %}</td>
-<td>{% if o.s5 is not none %}<b class="{{ 'pos' if o.s is not none and o.s5 > o.s else '' }}">%{{ o.s5 }}</b> <span class="meta">({{ o.n5 }})</span>{% else %}<span class="meta">—</span>{% endif %}</td></tr>{% endfor %}</table></div>
+{% for o in d.ozet %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.s is not none %}<b>%{{ o.s }}</b> <span class="meta">({{ o.n }})</span>{% if o.r is not none %}<div class="meta {{ 'pos' if o.r > 0 else 'neg' }}">ROI {{ '%+.1f'|format(o.r) }}%</div>{% endif %}{% else %}<span class="meta">—</span>{% endif %}</td>
+<td>{% if o.s5 is not none %}<b class="{{ 'pos' if o.s is not none and o.s5 > o.s else '' }}">%{{ o.s5 }}</b> <span class="meta">({{ o.n5 }})</span>{% if o.r5 is not none %}<div class="meta {{ 'pos' if o.r5 > 0 else 'neg' }}">ROI {{ '%+.1f'|format(o.r5) }}%</div>{% endif %}{% else %}<span class="meta">—</span>{% endif %}</td></tr>{% endfor %}</table></div>
 <div class="box"><table class="tb"><tr><th class="l">sürpriz</th><th>biten</th><th>favori<br>kazanamadı</th><th>sürpriz<br>kazandı</th></tr>
 {% for o in d.sz %}<tr><td class="l" style="white-space:nowrap"><b>{{ '🔴 güçlü' if o.s == 'güçlü' else '🟠 aday' }}</b></td><td>{{ o.n }}</td><td>{{ ('%' ~ o.fk) if o.fk is not none else '—' }}</td><td>{{ ('%' ~ o.sk) if o.sk is not none else '—' }}</td></tr>{% endfor %}</table></div>
 

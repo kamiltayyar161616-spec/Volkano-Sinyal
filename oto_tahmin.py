@@ -476,6 +476,15 @@ def surpriz(x, s5):
             "taraf": x["dep"] if F["fav"] == 0 else x["ev"], "p_s": round(100 * Fn["p"][di], 1), "p_x": round(100 * Fn["p"][1], 1)}
 
 
+def _say(o, ok, oran):
+    """o = [n, tutan, oranli n, 1 birim kar]"""
+    o[0] += 1
+    o[1] += ok
+    if oran:
+        o[2] += 1
+        o[3] += (oran - 1) if ok else -1
+
+
 def get_page_data(gun=None, yenile=False):
     G = gunler()
     bugun = (datetime.now(TR) - timedelta(hours=SAAT)).date().isoformat()
@@ -483,7 +492,7 @@ def get_page_data(gun=None, yenile=False):
         kur(bugun, True)
         G = gunler()
     gun = gun if gun in G else (G[0] if G else None)
-    oz = {"sabah": defaultdict(lambda: [0, 0]), "son5": defaultdict(lambda: [0, 0])}
+    oz = {"sabah": defaultdict(lambda: [0, 0, 0, 0.0]), "son5": defaultdict(lambda: [0, 0, 0, 0.0])}   # n, tutan, oranli n, kar
     sz = {"aday": [0, 0, 0], "güçlü": [0, 0, 0]}          # n, favori kazanamadi, surpriz kazandi
     for g in G[:14]:                                   # 14 gunluk tutma: sabah vs son 5 dk
         v = _oku(g)
@@ -503,16 +512,16 @@ def get_page_data(gun=None, yenile=False):
             for t, z in x["T"].items():
                 k = tuttu(t, z["sec"], *r, x["F"]["fav"])
                 if k is not None:
-                    oz["sabah"][t][0] += 1
-                    oz["sabah"][t][1] += k
+                    _say(oz["sabah"][t], k, z.get("oran"))
                 y = R5.get(m, {}).get("T", {}).get(t)
                 if y:
                     k2 = tuttu(t, y["sec"], *r, R5[m]["F"]["fav"])
                     if k2 is not None:
-                        oz["son5"][t][0] += 1
-                        oz["son5"][t][1] += k2
+                        _say(oz["son5"][t], k2, y.get("oran"))
+    roi = lambda o: round(100 * o[3] / o[2], 1) if o[2] else None
     ozet = [{"tur": t, "n": oz["sabah"][t][0], "s": round(100 * oz["sabah"][t][1] / oz["sabah"][t][0], 1) if oz["sabah"][t][0] else None,
-             "n5": oz["son5"][t][0], "s5": round(100 * oz["son5"][t][1] / oz["son5"][t][0], 1) if oz["son5"][t][0] else None} for t in TURLER]
+             "r": roi(oz["sabah"][t]), "n5": oz["son5"][t][0], "s5": round(100 * oz["son5"][t][1] / oz["son5"][t][0], 1) if oz["son5"][t][0] else None,
+             "r5": roi(oz["son5"][t])} for t in TURLER]
     gv = None
     if gun:
         v = _oku(gun)
@@ -556,9 +565,14 @@ def get_page_data(gun=None, yenile=False):
                       "bek": round(sum(s["z"]["p"] for s in satir) / 100, 1)})
         GO = []
         for t in TURLER:
-            a = [x["ok"].get(t) for x in L if x["ok"].get(t) is not None]
-            b = [x["s5"]["ok"].get(t) for x in L if x["s5"] and x["s5"].get("ok") and x["s5"]["ok"].get(t) is not None]
-            GO.append({"tur": t, "n": len(a), "w": sum(a), "n5": len(b), "w5": sum(b)})
+            a, b = [0, 0, 0, 0.0], [0, 0, 0, 0.0]
+            for x in L:
+                if x["ok"].get(t) is not None:
+                    _say(a, x["ok"][t], x["T"][t].get("oran"))
+                if x["s5"] and x["s5"].get("ok") and x["s5"]["ok"].get(t) is not None:
+                    _say(b, x["s5"]["ok"][t], x["s5"]["T"][t].get("oran"))
+            GO.append({"tur": t, "n": a[0], "w": a[1], "r": round(100 * a[3] / a[2], 1) if a[2] else None,
+                       "n5": b[0], "w5": b[1], "r5": round(100 * b[3] / b[2], 1) if b[2] else None})
         gv = {"gun": gun, "at": v["at"], "L": L, "K": K, "GO": GO, "SUR": sorted((x for x in L if x["sur"]), key=lambda x: (-x["sur"]["puan"], x["ko"])), "n5": sum(1 for x in L if x["s5"]),
               "n_deg": sum(1 for x in L if x["s5"] and (x["s5"].get("degisen") or x["s5"].get("not")))}
     O = ogren()
