@@ -277,7 +277,7 @@ def iyms_analiz(burolar=("Pinnacle Sports", "SBOBET", "Bet365")):
             SIN[("HERHANGİ (3 büro)", g)].append(v)
     KON["HERHANGİ (3 büro)"] = KON["Pinnacle Sports"]
     print(f"İY skoru olan {len(M)} maç. Kontrol = aynı büro + aynı kapanış çizgisi bandındaki tüm maçlar (sinyalin bant karışımına göre ağırlıklı).")
-    print("Hücre: sinyal % (kontrol %) → oran. Oran > 1.15 olursa Volkano İY/MS marjını (~%15) aşabilir.\n")
+    print("Sonuçlar en sık olandan aza: sinyalli maçlarda tutma % (normal maçlarda %) → kaç kat.\n")
     for (k, g), L in sorted(SIN.items(), key=lambda t: (t[0][0] != "HERHANGİ (3 büro)", t[0])):
         n = len(L)
         if n < 40:
@@ -295,9 +295,10 @@ def iyms_analiz(burolar=("Pinnacle Sports", "SBOBET", "Bet365")):
                 T = sum(KON[k][b].values())
                 bek += v / n * (KON[k][b][s_] / T if T else 0)
             p = cnt[s_] / n
-            hs.append(f"{s_} %{100 * p:4.1f} (%{100 * bek:4.1f}) {p / bek if bek else 0:4.2f}")
+            hs.append((p, f"{s_:8s} %{100 * p:4.1f} (normal %{100 * bek:4.1f}) {p / bek if bek else 0:4.2f}x"))
+        hs.sort(key=lambda t: -t[0])
         for j in range(0, 9, 3):
-            print("   " + " | ".join(hs[j:j + 3]))
+            print("   " + " | ".join(h for _, h in hs[j:j + 3]))
         print()
 
 
