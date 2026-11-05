@@ -1,77 +1,105 @@
 {% extends "base.html" %}
 {% block title %}SAHA — OTO TAHMİN{% endblock %}
 {% block page_tag %}🤖 OTO TAHMİN{% endblock %}
-{% block subtitle %}Tamamen otomatik, iki mod. <b>Sabah ({{ '%02d'|format(d.saat) }}:00):</b> günün bütün maçları için tahmin ve kuponlar. <b>Son 5 dk:</b> her maç başlamadan 3-7 dakika önce 1X2 oranları bütün bürolardan anlık okunur, çizgiler SAHA'nın son kaydından; sabaha göre para akışı ve çizgi değişimi kıyaslanır, tahmin yeniden hesaplanır. Değişen tahmin sarı, tespit edilen hareket not olarak yazılır. <b>Öğrenme:</b> her tahmin bir duruma bağlanır (favori olasılığı bandı, açılıştan kayma, keskin bürolar, gol çizgisi); geçmişte aynı durum kaç tuttuysa yüzde ona göre düzeltilir. Kuponlara en az {{ d.min_ogren }} kez görülmüş durumlar girer. Öğrenilen biten maç: {{ d.n_ogren }}.{% endblock %}
+{% block subtitle %}Tamamen otomatik, iki mod. <b>Sabah ({{ '%02d'|format(d.saat) }}:00):</b> günün bütün maçları için tahmin ve kuponlar. <b>Son 5 dk:</b> her maç başlamadan 3-7 dakika önce 1X2 oranları bütün bürolardan anlık okunur, çizgiler SAHA'nın son kaydından; sabaha göre para akışı ve çizgi değişimi kıyaslanır, tahmin yeniden hesaplanır. <b>Öğrenme:</b> her tahmin bir duruma bağlanır (favori olasılığı bandı, açılıştan kayma, keskin bürolar, gol çizgisi); geçmişte aynı durum kaç tuttuysa yüzde ona göre düzeltilir. Kuponlara en az {{ d.min_ogren }} kez görülmüş durumlar girer. Öğrenilen biten maç: {{ d.n_ogren }}.{% endblock %}
 {% block extra_style %}
 <style>
-  .tt{ width:calc(100% - 32px); margin:0 16px 10px; border-collapse:collapse; font-size:10px; }
-  .tt th{ color:var(--chalk-faint); font-weight:600; padding:4px 2px; text-align:center; } .tt td{ padding:5px 2px; text-align:center; border-top:1px solid var(--navy-line); vertical-align:top; } .tt .l{ text-align:left; }
-  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); } .meta{ color:var(--chalk-faint); font-size:9px; }
-  tr.ok td{ background:rgba(40,160,90,.16); } tr.ko td{ background:rgba(200,70,60,.10); }
-  .tik{ display:inline-block; min-width:16px; padding:1px 4px; border-radius:5px; font-size:10px; font-weight:800; color:#fff; } .tik.w{ background:var(--turf); } .tik.l{ background:var(--clay-dim); }
-  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:12px; background:var(--navy); border:1px solid var(--navy-line); }
-  .kc h3{ margin:0 0 6px; font-family:'Space Grotesk',sans-serif; font-size:13.5px; display:flex; justify-content:space-between; gap:8px; }
-  .gb{ display:flex; gap:8px; margin:10px 16px; } .gb a{ flex:1; text-align:center; padding:9px; border-radius:10px; text-decoration:none; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); font-size:11px; font-weight:700; }
-  .tk{ display:flex; gap:5px; overflow-x:auto; margin:8px 16px; padding-bottom:4px; } .tk a{ flex:0 0 auto; padding:6px 9px; border-radius:8px; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:10.5px; font-weight:700; } .tk a.on{ border-color:var(--amber-dim); color:var(--amber-bright); }
-  .mk{ margin:0 16px 7px; padding:8px 10px; border-radius:10px; background:var(--navy); border:1px solid var(--navy-line); font-size:10px; } .mk.deg{ border-color:var(--amber-dim); }
-  .mk-u{ display:flex; justify-content:space-between; gap:6px; } .g6{ display:grid; grid-template-columns:44px repeat(6,1fr); gap:2px; margin-top:6px; text-align:center; }
-  .g6 > div{ padding:3px 1px; background:var(--navy-deep); border-radius:4px; font-size:9.5px; } .g6 .h{ background:none; color:var(--chalk-faint); font-weight:700; font-size:8.5px; } .g6 .r{ background:none; color:var(--chalk-faint); text-align:left; font-size:9px; }
-  .g6 .ch{ outline:1px solid var(--amber-dim); color:var(--amber-bright); font-weight:700; } .g6 .w{ background:rgba(40,160,90,.35); } .g6 .l{ background:rgba(200,70,60,.25); }
-  .not{ color:var(--amber-bright); font-size:9.5px; margin-top:4px; }
-  details{ margin:0 16px 10px; } summary{ cursor:pointer; font-size:11px; font-weight:700; color:var(--chalk); padding:6px 0; }
+  .wrap{ padding:0 14px; }
+  .h2{ font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:800; margin:20px 0 10px; display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .h2 .s{ font-size:11px; color:var(--chalk-faint); font-weight:500; }
+  .meta{ color:var(--chalk-faint); font-size:11px; }
+  .pos{ color:var(--turf-bright); } .neg{ color:var(--clay); }
+  .tk{ display:flex; gap:6px; overflow-x:auto; padding:10px 0 4px; } .tk a{ flex:0 0 auto; padding:8px 12px; border-radius:10px; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; font-weight:700; } .tk a.on{ border-color:var(--amber); color:var(--amber-bright); background:var(--navy-soft); }
+  .btn{ display:block; text-align:center; padding:11px; border-radius:12px; text-decoration:none; background:var(--navy); border:1px solid var(--navy-line); color:var(--chalk); font-size:12.5px; font-weight:700; margin-top:10px; }
+  .box{ background:var(--navy); border:1px solid var(--navy-line); border-radius:14px; padding:12px; margin-bottom:10px; }
+  .tb{ width:100%; border-collapse:collapse; font-size:13px; } .tb th{ color:var(--chalk-faint); font-weight:600; font-size:11px; padding:6px 4px; text-align:center; } .tb td{ padding:8px 4px; text-align:center; border-top:1px solid var(--navy-line); } .tb .l{ text-align:left; }
+  /* sürpriz */
+  .sur{ border-left:4px solid var(--amber); } .sur.g{ border-left-color:var(--clay); }
+  .sur .ust{ display:flex; justify-content:space-between; gap:8px; font-size:13.5px; }
+  .sur .neden{ margin-top:6px; font-size:12px; color:var(--amber-bright); line-height:1.5; }
+  /* kupon */
+  .kup summary{ cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; font-size:14px; font-weight:800; }
+  .kup summary::-webkit-details-marker{ display:none; }
+  .ks{ display:flex; align-items:center; gap:8px; padding:9px 0; border-top:1px solid var(--navy-line); font-size:13px; }
+  .ks:first-of-type{ margin-top:8px; }
+  .ks .t{ width:40px; color:var(--chalk-faint); font-size:12px; } .ks .m{ flex:1; min-width:0; } .ks .m b{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ks .sc{ text-align:right; white-space:nowrap; } .ks .sc b{ font-size:14px; }
+  .ks.ok{ background:rgba(40,160,90,.13); } .ks.ko{ background:rgba(200,70,60,.10); }
+  .tik{ display:inline-block; min-width:24px; padding:3px 6px; border-radius:7px; font-size:13px; font-weight:800; color:#fff; text-align:center; } .tik.w{ background:var(--turf); } .tik.l{ background:var(--clay-dim); }
+  .pill{ display:inline-block; padding:3px 8px; border-radius:20px; font-size:11.5px; font-weight:800; }
+  .pill.ok{ background:var(--turf); color:#fff; } .pill.bk{ background:var(--navy-deep); color:var(--chalk-dim); border:1px solid var(--navy-line); }
+  /* maç kartı */
+  .mk{ background:var(--navy); border:1px solid var(--navy-line); border-radius:14px; padding:12px; margin-bottom:10px; }
+  .mk.deg{ border-color:var(--amber-dim); }
+  .mk .ust{ display:flex; justify-content:space-between; gap:8px; }
+  .mk .ad{ font-size:14.5px; font-weight:800; line-height:1.3; } .mk .saat{ color:var(--amber-bright); margin-right:6px; }
+  .mk .skor{ font-size:18px; font-weight:800; text-align:right; white-space:nowrap; }
+  .rz{ display:inline-block; margin-top:6px; padding:3px 8px; border-radius:8px; font-size:11.5px; font-weight:800; background:rgba(230,160,40,.15); color:var(--amber-bright); }
+  .rz.g{ background:rgba(200,70,60,.18); color:#ff8f80; }
+  .chips{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:10px; }
+  .ch{ background:var(--navy-deep); border:1px solid var(--navy-line); border-radius:10px; padding:7px 6px; text-align:center; }
+  .ch .lb{ font-size:10.5px; color:var(--chalk-faint); } .ch .v{ font-size:15px; font-weight:800; margin-top:2px; } .ch .p{ font-size:11px; color:var(--chalk-dim); }
+  .ch .s5{ margin-top:4px; padding-top:4px; border-top:1px dashed var(--navy-line); font-size:11.5px; color:var(--chalk-dim); }
+  .ch .s5.d{ color:var(--amber-bright); font-weight:800; }
+  .ch.w{ border-color:var(--turf); background:rgba(40,160,90,.16); } .ch.l{ border-color:var(--clay-dim); background:rgba(200,70,60,.10); }
+  .not{ margin-top:8px; font-size:12px; color:var(--amber-bright); line-height:1.5; } .not.y{ color:var(--chalk-faint); }
+  details.bl > summary{ cursor:pointer; font-size:13px; font-weight:700; padding:8px 0; }
 </style>
 {% endblock %}
-{% block content %}
-<div class="gb"><a href="/oto-tahmin?yenile=1">🔄 Bugünün sabah tahminini şimdi yeniden kur</a></div>
-<div class="section-sub">Arka plan: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'başlıyor' }} · {{ d.last.log }} {{ d.last.son5 }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
-
-<div class="tk">{% for g in d.G %}<a class="{{ 'on' if d.gun and g == d.gun.gun else '' }}" href="/oto-tahmin?gun={{ g }}">📅 {{ g[8:10] }}.{{ g[5:7] }}{% if g == d.bugun %} bugün{% endif %}</a>{% endfor %}</div>
-
-<h2 class="section">📊 GERÇEK TUTMA — sabah vs son 5 dk (14 gün, tüm maçlar)</h2>
-<table class="tt"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
-{% for o in d.ozet %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.s is not none %}<b>%{{ o.s }}</b> <span class="meta">({{ o.n }})</span>{% else %}—{% endif %}</td>
-<td>{% if o.s5 is not none %}<b class="{{ 'pos' if o.s is not none and o.s5 > o.s else '' }}">%{{ o.s5 }}</b> <span class="meta">({{ o.n5 }})</span>{% else %}—{% endif %}</td></tr>{% endfor %}</table>
-
-<h2 class="section">⚠️ SÜRPRİZ ADAYLARI — gerçek sonuç (14 gün)</h2>
-<table class="tt"><tr><th class="l">seviye</th><th>biten</th><th>favori kazanamadı</th><th>sürpriz kazandı</th></tr>
-{% for o in d.sz %}<tr><td class="l"><b>{{ '🔴 güçlü' if o.s == 'güçlü' else '🟠 aday' }}</b></td><td>{{ o.n }}</td><td>{{ ('%' ~ o.fk) if o.fk is not none else '—' }}</td><td>{{ ('%' ~ o.sk) if o.sk is not none else '—' }}</td></tr>{% endfor %}</table>
-<div class="section-sub">Aday = piyasa favoriye karşı işaret veriyor (açılıştan favoriden kaçış, keskin bürolar karşıda, son 5 dk favoriden para, favori değişimi, handikap favori aleyhine, beraberliğe para). 🔴 güçlü = birden fazla işaret. Kesinlik değil, uyarı; gerçek sonuç tablosu bu işaretin ne kadar işe yaradığını gösterir.</div>
+{% block content %}<div class="wrap">
+<div class="tk">{% for g in d.G %}<a class="{{ 'on' if d.gun and g == d.gun.gun else '' }}" href="/oto-tahmin?gun={{ g }}">📅 {{ g[8:10] }}.{{ g[5:7] }}{% if g == d.bugun %} · bugün{% endif %}</a>{% endfor %}</div>
+<div class="meta" style="margin-top:6px">Arka plan: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'başlıyor' }} · {{ d.last.log }} {{ d.last.son5 }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
 
 {% if d.gun %}{% set G = d.gun %}
-{% if G.SUR %}<h2 class="section">⚠️ {{ G.gun }} SÜRPRİZ ADAYLARI ({{ G.SUR|length }})</h2>
-<table class="tt"><tr><th class="l">saat · maç</th><th class="l">sürpriz tarafı</th><th class="l">işaretler</th><th>sonuç</th></tr>
-{% for x in G.SUR %}<tr class="{{ 'ok' if x.sur.sonuc and '✓' in x.sur.sonuc else 'ko' if x.sur.sonuc else '' }}"><td class="l">{{ (x.ko | localdatetime)[-5:] }} <b>{{ x.mac }}</b><br><span class="meta">{{ x.lig or '' }}</span></td>
-<td class="l">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} <b>{{ x.sur.taraf }}</b><br><span class="meta">kazanma %{{ x.sur.p_s }} · X %{{ x.sur.p_x }}</span></td>
-<td class="l meta">{{ x.sur.neden|join('<br>')|safe }}</td><td>{% if x.skor %}<b>{{ x.skor }}</b><br><span class="meta">{{ x.sur.sonuc }}</span>{% else %}<span class="meta">bekliyor</span>{% endif %}</td></tr>{% endfor %}</table>{% endif %}
-<h2 class="section">📅 {{ G.gun }} GÜNÜN SONUCU</h2>
-<table class="tt"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
-{% for o in G.GO %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.n %}{{ o.w }}/{{ o.n }} <b>%{{ (100*o.w/o.n)|round(1) }}</b>{% else %}—{% endif %}</td><td>{% if o.n5 %}{{ o.w5 }}/{{ o.n5 }} <b>%{{ (100*o.w5/o.n5)|round(1) }}</b>{% else %}—{% endif %}</td></tr>{% endfor %}</table>
-<h2 class="section">🎫 {{ G.gun }} KUPONLARI (sabah {{ G.at[11:16] }})</h2>
-{% for k in G.K %}{% if k.L %}
-<details {% if loop.first %}open{% endif %}><summary>{{ k.ad }} — {% if k.bit %}{{ k.tut }}/{{ k.bit }} tuttu ({{ k.L|length }} maç){% else %}beklenen {{ k.bek }} / {{ k.L|length }}{% endif %}</summary>
-<table class="tt" style="width:100%;margin:0">{% for s in k.L %}<tr class="{{ 'ok' if s.ok else 'ko' if s.ok is not none else '' }}">
-<td class="l" style="width:34px">{{ (s.x.ko | localdatetime)[-5:] }}</td><td class="l"><b>{{ s.x.mac }}</b><br><span class="meta">{{ s.x.lig or '' }}{% if s.x.skor %} · {{ s.x.skor }}{% if s.x.iy %} (İY {{ s.x.iy }}){% endif %}{% endif %}</span></td>
-<td>{% if k.ad.startswith('MIX') %}<span class="meta">{{ s.tur }}</span><br>{% endif %}<b>{{ s.z.sec }}</b></td><td>%{{ s.z.p }}<br><span class="meta">{{ s.z.n }}×</span></td>
-<td>{% if s.ok is not none %}<span class="tik {{ 'w' if s.ok else 'l' }}">{{ '✓' if s.ok else '✗' }}</span>{% endif %}</td></tr>{% endfor %}</table></details>
-{% endif %}{% endfor %}
+<div class="h2">📅 {{ G.gun[8:10] }}.{{ G.gun[5:7] }} GÜNÜN SONUCU <span class="s">sabah {{ G.at[11:16] }} · {{ G.L|length }} maç · son 5 dk {{ G.n5 }}</span></div>
+<div class="box"><table class="tb"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
+{% for o in G.GO %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.n %}<b>%{{ (100*o.w/o.n)|round|int }}</b> <span class="meta">{{ o.w }}/{{ o.n }}</span>{% else %}<span class="meta">—</span>{% endif %}</td><td>{% if o.n5 %}<b>%{{ (100*o.w5/o.n5)|round|int }}</b> <span class="meta">{{ o.w5 }}/{{ o.n5 }}</span>{% else %}<span class="meta">—</span>{% endif %}</td></tr>{% endfor %}</table></div>
 
-<h2 class="section">📋 {{ G.gun }} BÜTÜN MAÇLAR ({{ G.L|length }}) · son 5 dk alınan {{ G.n5 }} · hareket/değişim {{ G.n_deg }}</h2>
-{% for x in G.L %}{% set s5 = x.s5 %}{% set deg = s5 and s5.T is defined and (s5.degisen or s5['not']) %}
+{% if G.SUR %}<div class="h2">⚠️ SÜRPRİZ ADAYLARI <span class="s">{{ G.SUR|length }} maç</span></div>
+{% for x in G.SUR %}<div class="box sur {{ 'g' if x.sur.seviye == 'güçlü' else '' }}">
+  <div class="ust"><div><span class="meta">{{ (x.ko | localdatetime)[-5:] }}</span> <b>{{ x.mac }}</b><div class="meta">{{ x.lig or '' }}</div></div>
+  <div style="text-align:right;white-space:nowrap">{% if x.skor %}<b style="font-size:16px">{{ x.skor }}</b><div class="meta">{{ x.sur.sonuc }}</div>{% else %}<span class="pill bk">bekliyor</span>{% endif %}</div></div>
+  <div style="margin-top:6px;font-size:13px">{{ '🔴 Güçlü aday' if x.sur.seviye == 'güçlü' else '🟠 Aday' }}: <b>{{ x.sur.taraf }}</b> <span class="meta">kazanma %{{ x.sur.p_s }} · beraberlik %{{ x.sur.p_x }}</span></div>
+  <div class="neden">{{ x.sur.neden|join(' · ') }}</div>
+</div>{% endfor %}{% endif %}
+
+<div class="h2">🎫 KUPONLAR</div>
+{% for k in G.K %}{% if k.L %}<details class="box kup" {% if loop.first %}open{% endif %}>
+<summary><span>{{ k.ad }} <span class="meta">· {{ k.L|length }} maç</span></span>{% if k.bit %}<span class="pill {{ 'ok' if k.tut >= k.bit * 0.85 else 'bk' }}">{{ k.tut }}/{{ k.bit }} tuttu</span>{% else %}<span class="pill bk">beklenen {{ k.bek }}</span>{% endif %}</summary>
+{% for s in k.L %}<div class="ks {{ 'ok' if s.ok else 'ko' if s.ok is not none else '' }}"><div class="t">{{ (s.x.ko | localdatetime)[-5:] }}</div>
+<div class="m"><b>{{ s.x.mac }}</b><span class="meta">{% if k.ad.startswith('MIX') %}{{ s.tur }} · {% endif %}{{ s.x.lig or '' }}{% if s.x.skor %} · {{ s.x.skor }}{% if s.x.iy %} (İY {{ s.x.iy }}){% endif %}{% endif %}</span></div>
+{% set tn = s.x.ev if s.z.sec in ('1', '1X', '1/1') else s.x.dep if s.z.sec in ('2', 'X2', '2/2') else '' %}
+<div class="sc"><b>{{ s.z.sec }}</b> <span class="meta">%{{ s.z.p|round|int }}</span>{% if tn %}<div class="meta" style="max-width:110px;overflow:hidden;text-overflow:ellipsis">{{ tn }}</div>{% endif %}</div>
+<div style="width:30px;text-align:right">{% if s.ok is not none %}<span class="tik {{ 'w' if s.ok else 'l' }}">{{ '✓' if s.ok else '✗' }}</span>{% endif %}</div></div>{% endfor %}
+</details>{% endif %}{% endfor %}
+
+<div class="h2">📋 BÜTÜN MAÇLAR <span class="s">sarı çerçeve = son 5 dk değişim</span></div>
+{% for x in G.L %}{% set s5 = x.s5 %}{% set var = s5 and s5.T is defined %}{% set deg = var and (s5.degisen or s5['not']) %}
 <div class="mk {{ 'deg' if deg else '' }}">
-  <div class="mk-u"><div><b>{{ (x.ko | localdatetime)[-5:] }} {{ x.mac }}</b><div class="meta">{{ x.lig or '' }} · sabah 1X2 %{{ (100*x.F.p[0])|round|int }}/%{{ (100*x.F.p[1])|round|int }}/%{{ (100*x.F.p[2])|round|int }}{% if x.F.L %} · gol çizgisi {{ x.F.L }}{% endif %}{% if x.F.ah is not none %} · AH {{ '%+g'|format(x.F.ah) }}{% endif %}</div></div>
-  <div style="text-align:right;white-space:nowrap">{% if x.sur %}<span title="{{ x.sur.neden|join(' · ') }}" style="font-size:9.5px;font-weight:800;color:{{ 'var(--clay)' if x.sur.seviye == 'güçlü' else 'var(--amber-bright)' }}">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} SÜRPRİZ ADAYI: {{ x.sur.taraf }}</span><br>{% endif %}{% if x.skor %}<b>{{ x.skor }}</b>{% if x.iy %}<div class="meta">İY {{ x.iy }}</div>{% endif %}{% endif %}</div></div>
-  <div class="g6"><div class="r"></div>{% for t in d.turler %}<div class="h">{{ t.replace('Favori kaybetmez','1X/X2').replace('Kazanan','Kaz.') }}</div>{% endfor %}
-    <div class="r">sabah</div>{% for t in d.turler %}{% set z = x.T.get(t) %}{% set o = x.ok.get(t) %}<div class="{{ 'w' if o else 'l' if o is not none else '' }}">{% if z %}<b>{{ z.sec }}</b> {{ z.p|round|int }}{% else %}—{% endif %}</div>{% endfor %}
-    {% if s5 and s5.T is defined %}<div class="r">son 5'<br>{{ s5.at }}</div>{% for t in d.turler %}{% set z = s5.T.get(t) %}{% set o = s5.ok.get(t) %}<div class="{{ 'ch' if t in s5.degisen else '' }} {{ 'w' if o else 'l' if o is not none else '' }}">{% if z %}<b>{{ z.sec }}</b> {{ z.p|round|int }}{% else %}—{% endif %}</div>{% endfor %}{% endif %}
-  </div>
-  {% if s5 and s5.T is defined %}<div class="{{ 'not' if s5['not'] else 'meta' }}" style="margin-top:4px">{% if s5['not'] %}⚡ {{ s5['not']|join(' · ') }}{% else %}son 5 dk: belirgin para akışı yok{% endif %} <span class="meta">(1X2 farkı {{ '%+.1f'|format(s5.d[0]) }} / {{ '%+.1f'|format(s5.d[1]) }} / {{ '%+.1f'|format(s5.d[2]) }})</span></div>
-  {% elif s5 and s5.yok %}<div class="meta">son 5 dk: oran okunamadı</div>{% endif %}
+  <div class="ust"><div style="min-width:0"><div class="ad"><span class="saat">{{ (x.ko | localdatetime)[-5:] }}</span>{{ x.mac }}</div>
+    <div class="meta" style="margin-top:3px">{{ x.lig or '' }} · 1X2 %{{ (100*x.F.p[0])|round|int }} / %{{ (100*x.F.p[1])|round|int }} / %{{ (100*x.F.p[2])|round|int }}{% if x.F.L %} · gol {{ x.F.L }}{% endif %}{% if x.F.ah is not none %} · AH {{ '%+g'|format(x.F.ah) }}{% endif %}</div>
+    {% if x.sur %}<span class="rz {{ 'g' if x.sur.seviye == 'güçlü' else '' }}">{{ '🔴' if x.sur.seviye == 'güçlü' else '🟠' }} Sürpriz adayı: {{ x.sur.taraf }}</span>{% endif %}</div>
+  <div class="skor">{% if x.skor %}{{ x.skor }}{% if x.iy %}<div class="meta" style="font-weight:500">İY {{ x.iy }}</div>{% endif %}{% endif %}</div></div>
+  <div class="chips">{% for t in d.turler %}{% set z = x.T.get(t) %}{% if z %}{% set o = x.ok.get(t) %}{% set z5 = s5.T.get(t) if var else none %}{% set o5 = s5.ok.get(t) if var else none %}{% set okk = o5 if z5 else o %}
+    <div class="ch {{ 'w' if okk else 'l' if okk is not none else '' }}"><div class="lb">{{ t }}</div><div class="v">{{ z.sec }}</div><div class="p">%{{ z.p|round|int }} sabah</div>
+    {% if z5 %}<div class="s5 {{ 'd' if t in s5.degisen else '' }}">son 5': <b>{{ z5.sec }}</b> %{{ z5.p|round|int }}</div>{% endif %}</div>{% endif %}{% endfor %}</div>
+  {% if var %}<div class="not {{ '' if s5['not'] else 'y' }}">{% if s5['not'] %}⚡ {{ s5['not']|join(' · ') }}{% else %}Son 5 dk ({{ s5.at }}): belirgin para akışı yok{% endif %}</div>
+  {% elif s5 and s5.yok %}<div class="not y">Son 5 dk: oran okunamadı</div>{% endif %}
 </div>{% endfor %}
-{% else %}<div class="section-sub">Henüz kayıtlı gün yok; ilk sabah tahmini birkaç dakika içinde kurulur.</div>{% endif %}
+{% else %}<div class="box">Henüz kayıtlı gün yok; ilk sabah tahmini birkaç dakika içinde kurulur.</div>{% endif %}
 
-<h2 class="section">🧠 ÖĞRENME TABLOSU</h2>
-<div class="section-sub">Kullanılan yüzde = (tutan + {{ d.M }} × model) / (görülme + {{ d.M }}).</div>
-{% for tur, L in d.tablo.items() %}<details><summary>{{ tur }} ({{ L|length }} durum)</summary>
-<table class="tt" style="width:100%;margin:0"><tr><th class="l">durum</th><th>görüldü</th><th>gerçek</th><th>model</th></tr>
-{% for r in L %}<tr><td class="l">{{ r.durum }}</td><td>{{ r.n }}</td><td><b class="{{ 'pos' if r.gercek > r.model + 2 else 'neg' if r.gercek < r.model - 2 else '' }}">%{{ r.gercek }}</b></td><td>%{{ r.model }}</td></tr>{% endfor %}</table></details>{% endfor %}
-{% endblock %}
+<div class="h2">📊 14 GÜNLÜK TUTMA</div>
+<div class="box"><table class="tb"><tr><th class="l">tür</th><th>sabah</th><th>son 5 dk</th></tr>
+{% for o in d.ozet %}<tr><td class="l"><b>{{ o.tur }}</b></td><td>{% if o.s is not none %}<b>%{{ o.s }}</b> <span class="meta">({{ o.n }})</span>{% else %}<span class="meta">—</span>{% endif %}</td>
+<td>{% if o.s5 is not none %}<b class="{{ 'pos' if o.s is not none and o.s5 > o.s else '' }}">%{{ o.s5 }}</b> <span class="meta">({{ o.n5 }})</span>{% else %}<span class="meta">—</span>{% endif %}</td></tr>{% endfor %}</table></div>
+<div class="box"><table class="tb"><tr><th class="l">sürpriz</th><th>biten</th><th>favori kazanamadı</th><th>sürpriz kazandı</th></tr>
+{% for o in d.sz %}<tr><td class="l"><b>{{ '🔴 güçlü' if o.s == 'güçlü' else '🟠 aday' }}</b></td><td>{{ o.n }}</td><td>{{ ('%' ~ o.fk) if o.fk is not none else '—' }}</td><td>{{ ('%' ~ o.sk) if o.sk is not none else '—' }}</td></tr>{% endfor %}</table></div>
+
+<details class="bl"><summary>🧠 Öğrenme tablosu</summary>
+<div class="meta" style="margin-bottom:8px">Kullanılan yüzde = (tutan + {{ d.M }} × model) / (görülme + {{ d.M }}).</div>
+{% for tur, L in d.tablo.items() %}<details class="box"><summary style="cursor:pointer;font-weight:700">{{ tur }} <span class="meta">({{ L|length }} durum)</span></summary>
+<table class="tb"><tr><th class="l">durum</th><th>görüldü</th><th>gerçek</th><th>model</th></tr>
+{% for r in L %}<tr><td class="l" style="font-size:12px">{{ r.durum }}</td><td>{{ r.n }}</td><td><b class="{{ 'pos' if r.gercek > r.model + 2 else 'neg' if r.gercek < r.model - 2 else '' }}">%{{ r.gercek }}</b></td><td>%{{ r.model }}</td></tr>{% endfor %}</table></details>{% endfor %}
+</details>
+<a class="btn" href="/oto-tahmin?yenile=1">🔄 Bugünün sabah tahminini şimdi yeniden kur</a>
+</div>{% endblock %}

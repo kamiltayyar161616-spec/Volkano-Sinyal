@@ -65,7 +65,10 @@
     100%{ box-shadow:0 0 0 0 rgba(111,216,154,0); }
   }
   .page-tag{ font-size:11px; color:var(--chalk-faint); font-weight:500; }
-  .subtitle{ color:var(--chalk-dim); font-size:11.5px; margin-top:5px; line-height:1.5; }
+  .subtitle{ color:var(--chalk-dim); font-size:11.5px; margin-top:4px; line-height:1.5; }
+  .subtitle > summary{ cursor:pointer; list-style:none; font-size:11px; color:var(--chalk-faint); padding:2px 0; }
+  .subtitle > summary::-webkit-details-marker{ display:none; }
+  .subtitle[open] .sub-ic{ max-height:38vh; overflow-y:auto; padding:4px 0 6px; }
   .meta-row{
     display:flex; justify-content:space-between; align-items:center;
     margin-top:11px; font-size:10.5px; color:var(--chalk-faint); letter-spacing:0.02em;
@@ -124,7 +127,7 @@
     <div class="brand"><span class="pulse"></span>SAHA</div>
     <div class="page-tag">{% block page_tag %}{% endblock %}</div>
   </div>
-  <div class="subtitle">{% block subtitle %}VolcanoBet · Admiral · Sansabet — piyasa karşılaştırmalı analiz{% endblock %}</div>
+  <details class="subtitle"><summary>ℹ️ Bu sekme ne yapar?</summary><div class="sub-ic">{% block subtitle %}VolcanoBet · Admiral · Sansabet — piyasa karşılaştırmalı analiz{% endblock %}</div></details>
   {% block meta %}{% endblock %}
   <nav class="topnav">
     <a href="/gunun-ozeti" class="{{ 'active' if active_page == 'ozet' else '' }}"><span class="ic">⭐</span>Özet</a>
