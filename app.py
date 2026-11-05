@@ -42,10 +42,22 @@ import toto_tab
 import kelly_tab
 import gunluk_kupon
 import m7
+import kalkan
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
 app.jinja_env.filters["localdatetime"] = to_local_full_str
+
+
+@app.before_request
+def _kalkan():
+    if kalkan.kontrol(request):
+        return "", 403
+
+
+@app.route("/kalkan")
+def kalkan_liste():
+    return jsonify(kalkan.liste())
 
 RECORD_INTERVAL_SEC = 300      # her 5 dakikada bir yeni pick'leri kaydet
 RESULT_CHECK_INTERVAL_SEC = 900  # her 15 dakikada bir sonuçları kontrol et
