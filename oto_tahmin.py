@@ -146,7 +146,7 @@ def kur(gun=None, kaydet=True):
     bas = max(bas, datetime.now(timezone.utc))
     O = ogren(True)
     c = _ng()
-    rows = c.execute("""SELECT mid, home, away, league_ng, kickoff_utc, odds_json, ou_ilk, ou_son, ah_son FROM ng_match
+    rows = c.execute("""SELECT mid, home, away, COALESCE(NULLIF(league_ng, ''), league_vk), kickoff_utc, odds_json, ou_ilk, ou_son, ah_son FROM ng_match
                         WHERE kickoff_utc > ? AND kickoff_utc <= ? AND odds_json IS NOT NULL""",
                      (bas.isoformat()[:19], bit.isoformat()[:19])).fetchall()
     c.close()
@@ -371,6 +371,13 @@ def get_page_data(gun=None, yenile=False):
         v = _oku(gun)
         R5 = json.load(open(_son5_dosya(gun), encoding="utf-8")) if os.path.exists(_son5_dosya(gun)) else {}
         S = _sonuclar(v["maclar"].keys())
+        eksik = [m for m, x in v["maclar"].items() if not x.get("lig")]
+        if eksik:
+            c = _ng()
+            q = ",".join("?" * len(eksik))
+            for m, lg in c.execute(f"SELECT mid, COALESCE(NULLIF(league_ng, ''), league_vk) FROM ng_match WHERE mid IN ({q})", [int(x) for x in eksik]):
+                v["maclar"][str(m)]["lig"] = lg
+            c.close()
         L = []
         for m, x in sorted(v["maclar"].items(), key=lambda t: t[1]["ko"]):
             r = S.get(m) or (None,) * 4
