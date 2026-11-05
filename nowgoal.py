@@ -952,8 +952,10 @@ def _cizgi(v):
     if v in (None, ""):
         return None
     try:
-        p = [float(x) for x in str(v).split("/")]
-        return sum(p) / len(p)
+        t = str(v).strip()
+        neg = t.startswith("-")                      # '-0.5/1' = -(0.5/1) = -0.75 (isaret tum cizgiye ait)
+        p = [abs(float(x)) for x in t.lstrip("-").split("/")] if neg else [float(x) for x in t.split("/")]
+        return -sum(p) / len(p) if neg else sum(p) / len(p)
     except ValueError:
         return None
 
