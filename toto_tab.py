@@ -282,8 +282,12 @@ def run_cycle():
                 c.commit()
                 c.close()
             time.sleep(ng.BEKLE)
+    try:
+        n7 = m7_doldur()
+    except Exception as e:
+        n7 = f"hata {str(e)[:40]}"
     _last["at"] = ng._iso(ng._now())
-    _last["log"] = f"bulten anlik {len(simdi)}, mac oncesi {n_on}/{len(on)}, sonrasi {n_son}, hata {err}"
+    _last["log"] = f"7M yedek {n7} · bulten anlik {len(simdi)}, mac oncesi {n_on}/{len(on)}, sonrasi {n_son}, hata {err}"
     print(f"[toto] {_last['log']}")
 
 
@@ -488,6 +492,11 @@ def toto_hafta(hafta=None):
              "sonuc": "1X2"[r["sonuc"]] if r.get("sonuc") is not None else None}
         x["simdi"] = secim(r.get("simdi"), "simdi")
         x["simdi_at"] = r.get("simdi_at")
+        x["m7"] = None
+        if not x["simdi"] and not r.get("son") and (m.get("m7") or {}).get("d"):
+            x["simdi"] = secim(m["m7"]["d"], "simdi")
+            x["simdi_at"] = m["m7"].get("at")
+            x["m7"] = m["m7"]
         for an in ("elle", "toto", "kap"):
             s = secim_elle(m.get("elle")) if an == "elle" else secim(r.get("son"), an)
             x[an] = s
@@ -500,7 +509,7 @@ def toto_hafta(hafta=None):
                          if ps and ps["kaynak"] == "Pinnacle"), None)
         kay, ks = next(((ad, x[k]) for k, ad in (("elle", "ekran"), ("toto", "kupon kapanışı"), ("simdi", "anlık"), ("kap", "maç başı")) if x.get(k)), (None, None))
         x["kupon"] = kupon_oneri(ks)
-        x["kupon_kaynak"] = kay
+        x["kupon_kaynak"] = ("7M (handikap + alt/üst'ten)" if x.get("m7") and kay == "anlık" else kay)
         x["banko"] = banko(ks, x.get("pin"))
         if x["kupon"] and r.get("sonuc") is not None:
             x["kupon_tuttu"] = "1X2"[r["sonuc"]] in x["kupon"]["isaret"]
@@ -1052,10 +1061,10 @@ def skor_elle(ad, skor, hafta=None):
     print(f"Skor yazıldı: {skor}")
 
 
-def m7_esle(ev, dep, bas, bit):
+def m7_esle(ev, dep, bas, bit, P=None):
     """7M programinda (sxl.js) bas..bit arasi baslayan maclardan isimle eslesen: (id, ta, tb, ko) / None"""
     import m7
-    P = m7.program()
+    P = P or m7.program()
     c = m7._db()
     best = None
     for i, x in P.items():
@@ -1072,35 +1081,133 @@ def m7_esle(ev, dep, bas, bit):
     return best[1:] if best else None
 
 
-def durum(probe=True):
-    """python3 toto_tab.py durum : bulten maclari -> eslesme / oran var mi; eksiklere 7M dosya yoklamasi"""
-    _yeniden_eslestir()
-    h = _liste()
+# ---- 7M yedek: NowGoal'da olmayan bulten maci -> 7M handikap + alt/ust (büro büro) -> Poisson ile 1X2 -> ayni Max First / Min Live yontemi
+M7_URL = "https://px-odds.7mdt.com/DataByLive2/{id}_{ek}.js"
+
+
+def _m7_bloklar(body):
+    """-> {büro: [(t, cizgi, p1, p2), ...] eski->yeni, mac oncesi}"""
+    import m7
+    out = {}
+    for blk in re.split(r"p\['\d+'\]\s*=\s*", body)[1:]:
+        nm = re.search(r"'name':'([^']*)'", blk)
+        if not nm:
+            continue
+        L = []
+        for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
+            g = dict(re.findall(r"'(\w+)':'([^']*)'", e))
+            if g.get("htime"):
+                continue
+            tt = m7.t8(g.get("dt"))
+            try:
+                v = (tt, float(g["p3"]), float(g["p1"]), float(g["p2"]))
+            except (KeyError, ValueError):
+                continue
+            if tt and v[2] > 1 and v[3] > 1:
+                L.append(v)
+        if L:
+            out[nm.group(1)] = sorted(L, key=lambda x: x[0])
+    return out
+
+
+def _poisson_1x2(G, S):
+    """G beklenen toplam gol, S ev lehine gol farki -> 1X2 orani (marjsiz)"""
+    from math import exp, factorial
+    lh, la = max(0.12, (G + S) / 2), max(0.12, (G - S) / 2)
+    ph = [exp(-lh) * lh ** k / factorial(k) for k in range(11)]
+    pa = [exp(-la) * la ** k / factorial(k) for k in range(11)]
+    p1 = sum(ph[i] * pa[j] for i in range(11) for j in range(11) if i > j)
+    px = sum(ph[i] * pa[i] for i in range(11))
+    p2 = max(1e-6, 1 - p1 - px)
+    return [round(1 / p1, 3), round(1 / px, 3), round(1 / p2, 3)]
+
+
+def _m7_1x2(ou, ah):
+    """büro: alt/ust (cizgi, ust, alt) + handikap (ev handikapi, ev, dep) -> 1X2"""
+    pu = (1 / ou[2]) / (1 / ou[2] + 1 / ou[3])
+    ph = (1 / ah[2]) / (1 / ah[2] + 1 / ah[3])
+    return _poisson_1x2(ou[1] + (pu - 0.5) * 3.33, -ah[1] + (ph - 0.5) * 4)
+
+
+def m7_oran(i7):
+    """7M mac no -> parse() bicimi {'first': ozet, 'simdi': ozet, 'n': büro sayisi} (1X2 handikap+alt/ust'ten turetilmis)"""
+    import m7_kesif as MK
+    st1, b1 = MK.get(M7_URL.format(id=i7, ek="ou"))
+    st2, b2 = MK.get(M7_URL.format(id=i7, ek="ah"))
+    if st1 != 200 or st2 != 200:
+        return None
+    OU, AH = _m7_bloklar(b1), _m7_bloklar(b2)
+    ilk, son = [], []
+    for k in set(OU) & set(AH):
+        try:
+            ilk.append(_m7_1x2(OU[k][0], AH[k][0]))
+            son.append(_m7_1x2(OU[k][-1], AH[k][-1]))
+        except (ZeroDivisionError, OverflowError, ValueError):
+            continue
+    if not ilk:
+        return None
+    return {"first": _ozet(ilk), "simdi": _ozet(son), "n": len(ilk)}
+
+
+def m7_doldur(zorla=False):
+    """bultende NowGoal'da eslesmemis (ya da NowGoal orani olmayan) maclar -> 7M yedek orani, SIMDI_DK'da bir yenilenir"""
+    import m7
+    H = _haftalar()
+    if not H:
+        return 0
+    h = H[0]
     try:
         ka = datetime.fromisoformat(h["kapanis"])
     except (KeyError, ValueError):
-        ka = ng._now()
+        return 0
+    if ka < ng._now() - timedelta(days=7):
+        return 0
+    simdi_var = {r["mid"] for r in _kayitlar(GERI_GUN + 10) if r.get("simdi") or r.get("son")}
+    P, n = None, 0
+    for m in h.get("maclar", []):
+        if m.get("mid") in simdi_var and m.get("mid"):
+            m.pop("m7", None)
+            continue
+        x = m.get("m7") or {}
+        if not zorla and x.get("at") and x["at"] > ng._iso(ng._now() - timedelta(minutes=SIMDI_DK)):
+            continue
+        try:
+            i7 = x.get("id")
+            if not i7:
+                P = P or m7.program()
+                b = m7_esle(m["ev"], m["dep"], ka - timedelta(hours=12), ka + timedelta(days=6), P)
+                if not b:
+                    m["m7"] = {"at": ng._iso(ng._now()), "durum": "7M programında yok"}
+                    continue
+                i7, x = b[0], {"id": b[0], "ad": f"{b[1]} - {b[2]}", "ko": b[3].isoformat()}
+            d = m7_oran(i7)
+            x.update(at=ng._iso(ng._now()), d=d, durum="tamam" if d else "7M oranı yok")
+            m["m7"] = x
+            if not m.get("ko") and x.get("ko"):
+                m["ko"] = x["ko"]
+            n += bool(d)
+        except Exception as e:
+            m["m7"] = dict(x, at=ng._iso(ng._now()), durum=f"hata {str(e)[:60]}")
+        time.sleep(0.5)
+    json.dump({"haftalar": H}, open(LISTELER_FILE, "w"), ensure_ascii=False)
+    return n
+
+
+def durum(probe=True):
+    """python3 toto_tab.py durum : bulten maclari -> eslesme / oran; eksiklere 7M yedek orani (hemen)"""
+    _yeniden_eslestir()
+    print("7M ile doldurulan:", m7_doldur(zorla=True))
+    h = _liste()
     rows = {r["mid"]: r for r in _kayitlar(GERI_GUN + 10)}
     for m in h.get("maclar", []):
         r = rows.get(m.get("mid")) or {}
         var = [k for k in ("simdi", "son", "on") if r.get(k)]
-        print(f"{m['no']:2d}. {m['ev']} - {m['dep']} | NG: {m.get('ng') or 'EŞLEŞMEDİ'} {m.get('ko') or ''} | oran: {','.join(var) or 'YOK'}")
-        if var or not probe:
-            continue
-        try:
-            b = m7_esle(m["ev"], m["dep"], ka - timedelta(hours=12), ka + timedelta(days=6))
-        except Exception as e:
-            print("    7M hata:", str(e)[:80])
-            continue
-        if not b:
-            print("    7M: programda yok")
-            continue
-        print(f"    7M {b[0]} ({b[1]} - {b[2]}) {b[3]}")
-        import m7_kesif as MK
-        for ek in ("1x2", "eu", "op", "ou"):
-            st, body = MK.get(f"https://px-odds.7mdt.com/DataByLive2/{b[0]}_{ek}.js")
-            print(f"      _{ek}.js {st} {len(body)}b {body[:220]!r}" if st == 200 and body else f"      _{ek}.js {st}")
-
+        x = m.get("m7") or {}
+        ek = ""
+        if not var:
+            s = secim((x.get("d") or {}), "simdi")
+            ek = f" | 7M {x.get('id', '')} {x.get('durum', '')}" + (f" ({x['d']['n']} büro) kupon: {kupon_oneri(s)['isaret'] if s else '-'} ort {s['ort']}" if x.get("d") else "")
+        print(f"{m['no']:2d}. {m['ev']} - {m['dep']} | NG: {m.get('ng') or 'EŞLEŞMEDİ'} | oran: {','.join(var) or 'YOK'}{ek}")
 
 if __name__ == "__main__":
     import sys
