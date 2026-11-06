@@ -586,6 +586,12 @@ def _loop():
                 v = kur(gun, True)
                 _last["log"] = f"{gun} sabah tahmini kuruldu: {len(v['maclar'])} maç"
             son5_tara()
+            if time.time() - _cache.get("s7_t", 0) > 900:
+                _cache["s7_t"] = time.time()
+                try:
+                    sonuc_7m()
+                except Exception as e:
+                    _last["sonuc7m"] = str(e)[:100]
             if time.time() - _cache.get("lig_t", 0) > 3600:
                 _cache["lig_t"] = time.time()
                 v = _oku(gun)
@@ -607,6 +613,16 @@ def start_background():
     threading.Thread(target=_loop, daemon=True, name="oto_tahmin").start()
 
 
+SONUC_DOSYA = os.path.join(KLASOR, "sonuc7m.json")
+
+
+def _sonuc7m_oku():
+    try:
+        return json.load(open(SONUC_DOSYA, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def _sonuclar(mids):
     if not mids:
         return {}
@@ -615,7 +631,67 @@ def _sonuclar(mids):
     R = {str(m): (fh, fa, hh, ha) for m, fh, fa, hh, ha in c.execute(f"SELECT mid, ft_h, ft_a, ht_h, ht_a FROM ng_match WHERE mid IN ({q})",
                                                                       [int(x) for x in mids])}
     c.close()
+    S7 = _sonuc7m_oku()
+    for m in mids:
+        m = str(m)
+        if (R.get(m) or (None,))[0] is None and S7.get(m):
+            R[m] = tuple(S7[m])
     return R
+
+
+def sonuc_7m(sure=120):
+    """NowGoal'da skoru gelmeyen (mac + 130 dk) oto maclari -> 7M goaldata'dan skor + ilk yari (sonuc7m.json)"""
+    import m7_arsiv as A
+    import kelly_tab as K
+    now = datetime.now(timezone.utc)
+    gunler = [(datetime.now(TR) - timedelta(hours=SAAT) - timedelta(days=d)).date().isoformat() for d in (0, 1)]
+    aday = {}
+    for g in gunler:
+        v = _oku(g)
+        for m, x in ((v or {}).get("maclar") or {}).items():
+            ko = datetime.fromisoformat(x["ko"])
+            if now - timedelta(days=2) < ko < now - timedelta(minutes=130):
+                aday[m] = x
+    if not aday:
+        return 0
+    R = _sonuclar(list(aday))
+    eksik = [m for m in aday if (R.get(m) or (None,))[0] is None]
+    if not eksik:
+        return 0
+    S7, C = _sonuc7m_oku(), _cache_oku()
+    t0, n = time.time(), 0
+    for m in eksik:
+        if time.time() - t0 > sure:
+            break
+        x = aday[m]
+        try:
+            i = C["id"].get(m)
+            if not i:
+                b = K.m7_bul(x["ev"], x["dep"], datetime.fromisoformat(x["ko"]))
+                i = b[1] if b else 0
+                if i:
+                    C["id"][m] = i
+            if not i:
+                continue
+            s, body = A.get(f"https://data.7mdt.com/goaldata/en/{i}.js")
+            time.sleep(0.5)
+            gl = A.goller_oku(body) if s == 200 else None
+            glj = json.dumps(gl) if gl is not None else None
+            gs = [g for _, g in (gl or []) if g and g[0].isdigit()]
+            skor = A.skor_al(gs[-1] if gs else None, glj, x["ko"][:16])
+            if not skor:
+                continue
+            iy = A._iy(glj, skor)
+            fh, fa = (int(v) for v in skor.split("-"))
+            S7[m] = [fh, fa, iy[0] if iy else None, iy[1] if iy else None]
+            n += 1
+        except Exception as e:
+            _last["sonuc7m"] = str(e)[:100]
+    with _kilit:
+        json.dump(S7, open(SONUC_DOSYA, "w", encoding="utf-8"))
+        json.dump(C, open(LIG_DOSYA, "w", encoding="utf-8"), ensure_ascii=False)
+    _last["sonuc7m"] = f"{n}/{len(eksik)} skor 7M'den"
+    return n
 
 
 def _oran_doldur(F, T):
