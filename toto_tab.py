@@ -1209,8 +1209,27 @@ def durum(probe=True):
             ek = f" | 7M {x.get('id', '')} {x.get('durum', '')}" + (f" ({x['d']['n']} büro) kupon: {kupon_oneri(s)['isaret'] if s else '-'} ort {s['ort']}" if x.get("d") else "")
         print(f"{m['no']:2d}. {m['ev']} - {m['dep']} | NG: {m.get('ng') or 'EŞLEŞMEDİ'} | oran: {','.join(var) or 'YOK'}{ek}")
 
+def elle_gir(js, hafta=None):
+    """python3 toto_tab.py elle '{"1":[[mxf],[mnl],[ort]], ...}' : NowGoal ekran degerlerini bultendeki maca (sira no) yaz"""
+    D = json.loads(js)
+    H = _haftalar()
+    h = next((x for x in H if x.get("hafta") == hafta), H[0]) if H else None
+    if not h:
+        print("Toto listesi yok")
+        return
+    for m in h["maclar"]:
+        v = D.get(str(m["no"]))
+        if v:
+            m["elle"] = {"mxf": v[0], "mnl": v[1], "ort": v[2]}
+            k = kupon_oneri(secim_elle(m["elle"]))
+            print(f"{m['no']:2d}. {m['ev']} - {m['dep']} -> {k['tur']} {k['isaret']}{' ⚠ yedek ' + k['isaret'] + k['yedek'] if k['dikkat'] else ''}")
+    json.dump({"haftalar": H}, open(LISTELER_FILE, "w"), ensure_ascii=False)
+
+
 if __name__ == "__main__":
     import sys
+    if sys.argv[1:2] == ["elle"] and len(sys.argv) >= 3:
+        elle_gir(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
     if sys.argv[1:2] == ["durum"]:
         durum()
     if sys.argv[1:2] == ["skor"] and len(sys.argv) >= 4:
