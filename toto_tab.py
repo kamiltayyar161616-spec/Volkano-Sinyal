@@ -1052,7 +1052,59 @@ def skor_elle(ad, skor, hafta=None):
     print(f"Skor yazıldı: {skor}")
 
 
+def m7_esle(ev, dep, bas, bit):
+    """7M programinda (sxl.js) bas..bit arasi baslayan maclardan isimle eslesen: (id, ta, tb, ko) / None"""
+    import m7
+    P = m7.program()
+    c = m7._db()
+    best = None
+    for i, x in P.items():
+        if not x.get("ko") or not (bas <= x["ko"] <= bit):
+            continue
+        try:
+            ta, tb, _ = m7.ad(i, c)
+        except Exception:
+            continue
+        s1, s2 = _benzer(ev, ta), _benzer(dep, tb)
+        if s1 > 0 and s2 > 0 and (not best or s1 + s2 > best[0]):
+            best = (s1 + s2, i, ta, tb, x["ko"])
+    c.close()
+    return best[1:] if best else None
+
+
+def durum(probe=True):
+    """python3 toto_tab.py durum : bulten maclari -> eslesme / oran var mi; eksiklere 7M dosya yoklamasi"""
+    _yeniden_eslestir()
+    h = _liste()
+    try:
+        ka = datetime.fromisoformat(h["kapanis"])
+    except (KeyError, ValueError):
+        ka = ng._now()
+    rows = {r["mid"]: r for r in _kayitlar(GERI_GUN + 10)}
+    for m in h.get("maclar", []):
+        r = rows.get(m.get("mid")) or {}
+        var = [k for k in ("simdi", "son", "on") if r.get(k)]
+        print(f"{m['no']:2d}. {m['ev']} - {m['dep']} | NG: {m.get('ng') or 'EŞLEŞMEDİ'} {m.get('ko') or ''} | oran: {','.join(var) or 'YOK'}")
+        if var or not probe:
+            continue
+        try:
+            b = m7_esle(m["ev"], m["dep"], ka - timedelta(hours=12), ka + timedelta(days=6))
+        except Exception as e:
+            print("    7M hata:", str(e)[:80])
+            continue
+        if not b:
+            print("    7M: programda yok")
+            continue
+        print(f"    7M {b[0]} ({b[1]} - {b[2]}) {b[3]}")
+        import m7_kesif as MK
+        for ek in ("1x2", "eu", "op", "ou"):
+            st, body = MK.get(f"https://px-odds.7mdt.com/DataByLive2/{b[0]}_{ek}.js")
+            print(f"      _{ek}.js {st} {len(body)}b {body[:220]!r}" if st == 200 and body else f"      _{ek}.js {st}")
+
+
 if __name__ == "__main__":
     import sys
+    if sys.argv[1:2] == ["durum"]:
+        durum()
     if sys.argv[1:2] == ["skor"] and len(sys.argv) >= 4:
         skor_elle(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
