@@ -819,6 +819,18 @@ def json_disari(gun=None):
     R5 = _son5_oku(gun) or {}
     S = _sonuclar(list(v["maclar"]))
     now = datetime.now(timezone.utc)
+    vy = os.path.join(KLASOR, f"{gun}_volkano.json")          # iyv.db maci 3 saat sonra siliyor -> gun dosyasinda sakla
+    try:
+        V = json.load(open(vy, encoding="utf-8"))
+    except (OSError, ValueError):
+        V = {}
+    V.update(vk_oranlar(list(v["maclar"])))
+    try:
+        with _kilit:
+            json.dump(V, open(vy, "w", encoding="utf-8"))
+    except OSError:
+        pass
+    PZ_AD = {"1": "1X2", "47": "İY/MS", "18": "Alt/Üst", "60": "İY 1X2", "68": "İY Alt/Üst"}
     L = []
     for m, x in sorted(v["maclar"].items(), key=lambda t: t[1]["ko"]):
         ko = datetime.fromisoformat(x["ko"])
@@ -828,7 +840,8 @@ def json_disari(gun=None):
                   "durum": "bitti" if r[0] is not None else ("başlamadı" if ko > now else "oynanıyor/bitti (skor yok)"),
                   "ev": x["ev"], "dep": x["dep"], "lig": x.get("lig"),
                   "skor": f"{r[0]}-{r[1]}" if r[0] is not None else None, "iy": f"{r[2]}-{r[3]}" if r[2] is not None else None,
-                  "sabah": {"F": x["F"], "T": x["T"]}, "son5": s5, "surpriz": surpriz(x, s5)})
+                  "sabah": {"F": x["F"], "T": x["T"]}, "son5": s5, "surpriz": surpriz(x, s5),
+                  "volkano": {PZ_AD.get(k, k): z for k, z in (V.get(m) or {}).items()} or None})
     return {"gun": gun, "indirildi": datetime.now(TR).isoformat()[:19], "sabah_kurulus": v.get("at"), "n": len(L), "maclar": L}
 
 
