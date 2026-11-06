@@ -768,6 +768,29 @@ def _say(o, ok, oran):
         o[3] += (oran - 1) if ok else -1
 
 
+def json_disari(gun=None):
+    """o anki tam gun dokumu (sabah + son 5 dk + skor) -> canli analiz icin indirilir"""
+    G = gunler()
+    gun = gun if gun in G else (G[0] if G else None)
+    v = _oku(gun) if gun else None
+    if not v:
+        return {"gun": gun, "maclar": []}
+    R5 = _son5_oku(gun) or {}
+    S = _sonuclar(list(v["maclar"]))
+    now = datetime.now(timezone.utc)
+    L = []
+    for m, x in sorted(v["maclar"].items(), key=lambda t: t[1]["ko"]):
+        ko = datetime.fromisoformat(x["ko"])
+        r = S.get(m) or (None,) * 4
+        s5 = R5.get(m)
+        L.append({"mid": m, "saat": ko.astimezone(TR).strftime("%H:%M"), "ko_utc": x["ko"],
+                  "durum": "bitti" if r[0] is not None else ("başlamadı" if ko > now else "oynanıyor/bitti (skor yok)"),
+                  "ev": x["ev"], "dep": x["dep"], "lig": x.get("lig"),
+                  "skor": f"{r[0]}-{r[1]}" if r[0] is not None else None, "iy": f"{r[2]}-{r[3]}" if r[2] is not None else None,
+                  "sabah": {"F": x["F"], "T": x["T"]}, "son5": s5, "surpriz": surpriz(x, s5)})
+    return {"gun": gun, "indirildi": datetime.now(TR).isoformat()[:19], "sabah_kurulus": v.get("at"), "n": len(L), "maclar": L}
+
+
 def get_page_data(gun=None, yenile=False):
     G = gunler()
     bugun = (datetime.now(TR) - timedelta(hours=SAAT)).date().isoformat()

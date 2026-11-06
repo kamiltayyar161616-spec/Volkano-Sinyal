@@ -88,6 +88,7 @@
 {% block content %}<div class="wrap">{% set kp = mod == 'kupon' %}{% set yol = '/oto-tahmin/kupon' if kp else '/oto-tahmin' %}
 <div class="sek"><a class="{{ '' if kp else 'on' }}" href="/oto-tahmin{{ ('?gun=' ~ d.gun.gun) if d.gun else '' }}">📋 Tahminler</a><a class="{{ 'on' if kp else '' }}" href="/oto-tahmin/kupon{{ ('?gun=' ~ d.gun.gun) if d.gun else '' }}">🎫 Kuponlar</a></div>
 <div class="tk">{% for g in d.G %}<a class="{{ 'on' if d.gun and g == d.gun.gun else '' }}" href="{{ yol }}?gun={{ g }}">📅 {{ g[8:10] }}.{{ g[5:7] }}{% if g == d.bugun %} · bugün{% endif %}</a>{% endfor %}</div>
+{% if d.gun %}<a href="/oto-tahmin/json?gun={{ d.gun.gun }}" style="display:block;margin:8px 16px 4px;padding:10px;border-radius:10px;border:1px solid #e0a030;background:var(--navy);color:#e0a030;font-weight:700;text-align:center;text-decoration:none">⬇️ {{ d.gun.gun[8:10] }}.{{ d.gun.gun[5:7] }} JSON indir (anlık)</a>{% endif %}
 <div class="meta" style="margin-top:6px">Arka plan: {{ (d.last.at ~ '+00:00') | localdatetime if d.last.at else 'başlıyor' }} · {{ d.last.log }} {{ d.last.son5 }} {{ d.last.lig }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
 
 {% if d.gun %}{% set G = d.gun %}

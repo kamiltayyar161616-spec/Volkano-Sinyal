@@ -426,6 +426,17 @@ def oto_tahmin_page():
     return render_template("oto_tahmin.html", d=oto_tahmin.get_page_data(request.args.get("gun"), request.args.get("yenile") == "1"), active_page="oto", mod="tahmin")
 
 
+@app.route("/oto-tahmin/json")
+def oto_tahmin_json():
+    import json as _json
+    from flask import Response
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    d = oto_tahmin.json_disari(request.args.get("gun"))
+    ad = f"oto_{d.get('gun')}_{(_dt.now(_tz.utc) + _td(hours=3)):%H%M}.json"
+    return Response(_json.dumps(d, ensure_ascii=False, default=str), mimetype="application/json",
+                    headers={"Content-Disposition": f"attachment; filename={ad}", "Cache-Control": "no-store"})
+
+
 @app.route("/oto-tahmin/kupon")
 def oto_tahmin_kupon_page():
     return render_template("oto_tahmin.html", d=oto_tahmin.get_page_data(request.args.get("gun")), active_page="oto", mod="kupon")
