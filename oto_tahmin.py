@@ -888,7 +888,64 @@ def para_analiz():
             if n:
                 print(f"  {kk:10s} n={n:5d}  fav kazandı %{100*w/n:4.1f}  berabere %{100*x/n:4.1f}  kaybetti %{100*l/n:4.1f}")
 
+
+def _cli_canli(ek=0):
+    now = datetime.now(timezone.utc)
+    g = (datetime.now(TR) - timedelta(hours=SAAT)).date().isoformat()
+    v = _oku(g) or {}
+    R5 = _son5_oku(g) or {}
+    M = {m: x for m, x in (v.get("maclar") or {}).items()
+         if now - timedelta(minutes=125) < datetime.fromisoformat(x["ko"]) < now + timedelta(minutes=ek)}
+    S = _sonuclar(list(M))
+    for m, x in sorted(M.items(), key=lambda t: t[1]["ko"]):
+        F, s5 = x["F"], R5.get(m) or {}
+        dk = int((now - datetime.fromisoformat(x["ko"])).total_seconds() // 60)
+        r = S.get(m) or (None,) * 4
+        print(f"[{m}] {datetime.fromisoformat(x['ko']).astimezone(TR):%H:%M} ({dk}') {x['ev']} - {x['dep']} | {x.get('lig') or ''} | skor {r[0]}-{r[1]} İY {r[2]}-{r[3]}")
+        print(f"   1X2 % {[round(100 * p) for p in F.get('p', [])]} fav {'1X2'[F['fav']]} | AH {F.get('ah')} | gol {F.get('L')}")
+        print("   sabah: " + " · ".join(f"{t} {z['sec']} %{z['p']:g}" + (f" @{z['oran']}" if z.get("oran") else "") for t, z in x["T"].items()))
+        if s5.get("T"):
+            print("   son5 : " + " · ".join(f"{t} {z['sec']} %{z['p']:g}" + (f" @{z['oran']}" if z.get("oran") else "") for t, z in s5["T"].items()))
+            if s5.get("N"):
+                print("   not  : " + " | ".join(s5["N"]))
+    print(f"{len(M)} maç (oynanan + {ek} dk içinde başlayacak)")
+
+
+def _cli_sonuc():
+    from collections import Counter
+    now = datetime.now(timezone.utc)
+    for g in [(datetime.now(TR) - timedelta(hours=SAAT) - timedelta(days=d)).date().isoformat() for d in (1, 0)]:
+        v = _oku(g) or {}
+        M = {m: x for m, x in (v.get("maclar") or {}).items() if datetime.fromisoformat(x["ko"]) < now - timedelta(minutes=130)}
+        if not M:
+            continue
+        c = _ng()
+        q = ",".join("?" * len(M))
+        st = {str(r[0]): (r[1], r[2]) for r in c.execute(f"SELECT mid, status, ft_h FROM ng_match WHERE mid IN ({q})", [int(m) for m in M])}
+        c.close()
+        print(g, "biten maç", len(M), "| NowGoal skorlu", sum(1 for s in st.values() if s[1] is not None),
+              "| skorsuz durumları", dict(Counter(s[0] for s in st.values() if s[1] is None)), "| ng_match'te yok", len(M) - len(st))
+    print("7M'den:", sonuc_7m(sure=400), _last.get("sonuc7m"))
+
+
+def _cli_vktest(ms):
+    if not ms:
+        c = _ng()
+        ms = [str(r[0]) for r in c.execute("SELECT mid FROM ng_match WHERE volkano_json IS NOT NULL AND kickoff_utc > ? ORDER BY kickoff_utc LIMIT 3",
+                                           (datetime.now(timezone.utc).isoformat(),))]
+        c.close()
+    for k, v in vk_taze(ms).items():
+        print(k, "1X2:", v.get("1"), "| çifte şans:", v.get("dc"), "| pazarlar:", sorted(v))
+
+
 if __name__ == "__main__":
     import sys
-    if sys.argv[1:2] == ["para"]:
+    a = sys.argv[1:]
+    if a[:1] == ["para"]:
         para_analiz()
+    elif a[:1] == ["canli"]:
+        _cli_canli(int(a[1]) if len(a) > 1 else 0)
+    elif a[:1] == ["sonuc"]:
+        _cli_sonuc()
+    elif a[:1] == ["vktest"]:
+        _cli_vktest(a[1:])
