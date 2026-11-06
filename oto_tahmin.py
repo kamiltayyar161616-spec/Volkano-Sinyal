@@ -606,7 +606,7 @@ def _loop():
 
 
 YAYIN_DAL = "canli-veri"
-YAYIN_SN = 300
+YAYIN_SN = 300          # 5 dk
 
 
 def yayin():
