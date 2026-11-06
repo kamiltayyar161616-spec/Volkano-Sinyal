@@ -8,7 +8,6 @@
   * OGRENME: her tahmin bir DURUM'a baglanir (favori olasilik bandi, 1X2 acilistan kayma, keskin bürolar, gol cizgisi + hareketi);
     gecmiste ayni durumun gercek tutma orani ile model harmanlanir: (tutan + M x model) / (n + M). Oncelik: TUTMA %."""
 import json
-import re
 import os
 import sqlite3
 import threading
@@ -890,77 +889,26 @@ def para_analiz():
                 print(f"  {kk:10s} n={n:5d}  fav kazandı %{100*w/n:4.1f}  berabere %{100*x/n:4.1f}  kaybetti %{100*l/n:4.1f}")
 
 
-def _canli_cizgi(i7, ek):
-    """7M canli (mac ici) son cizgi: Pinnacle > SBOBET > ilk büro -> (cizgi, p1, p2, skor) / None"""
-    import m7_kesif as MK
-    st, b = MK.get(f"https://px-odds.7mdt.com/DataByLive2/{i7}_{ek}.js")
-    if st != 200:
-        return None
-    best = {}
-    for blk in re.split(r"p\['\d+'\]\s*=\s*", b)[1:]:
-        nm = re.search(r"'name':'([^']*)'", blk)
-        if not nm:
-            continue
-        son = None
-        for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
-            g = dict(re.findall(r"'(\w+)':'([^']*)'", e))
-            if g.get("score"):
-                son = g
-        if son:
-            best[nm.group(1)] = son
-    g = best.get("Pinnacle Sports") or best.get("SBOBET") or next(iter(best.values()), None)
-    return (g["p3"], g["p1"], g["p2"], g["score"]) if g else None
-
-
 def _cli_canli(ek=0):
-    """oynanan (7M canli) + ek dk icinde baslayacak oto maclari: 7M skor/dakika + canli cizgi + sabah/son5 tahmin"""
-    import m7
-    import kelly_tab as K
     now = datetime.now(timezone.utc)
     g = (datetime.now(TR) - timedelta(hours=SAAT)).date().isoformat()
     v = _oku(g) or {}
     R5 = _son5_oku(g) or {}
-    P = m7.program()
-    C = _cache_oku()
-    say = 0
-    for m, x in sorted((v.get("maclar") or {}).items(), key=lambda t: t[1]["ko"]):
-        ko = datetime.fromisoformat(x["ko"])
-        if not (now - timedelta(minutes=130) < ko < now + timedelta(minutes=ek)):
-            continue
-        i7 = C["id"].get(m)
-        if not i7:
-            try:
-                b = K.m7_bul(x["ev"], x["dep"], ko)
-                i7 = b[1] if b else 0
-                if i7:
-                    C["id"][m] = i7
-            except Exception:
-                i7 = 0
-        p = P.get(int(i7)) if i7 else None
-        if ko <= now and (not p or p["durum"] not in (1, 2, 3)):
-            continue                                       # bitmis / 7M'de yok
-        say += 1
+    M = {m: x for m, x in (v.get("maclar") or {}).items()
+         if now - timedelta(minutes=125) < datetime.fromisoformat(x["ko"]) < now + timedelta(minutes=ek)}
+    S = _sonuclar(list(M))
+    for m, x in sorted(M.items(), key=lambda t: t[1]["ko"]):
         F, s5 = x["F"], R5.get(m) or {}
-        T = (s5.get("T") or x["T"])
-        if p and p["durum"] in (1, 2, 3):
-            durum = f"{m7.dakika(p) or 'İY'}' {p['kev']}-{p['kdep']}" + (f" (İY {p['iy']})" if p.get("iy") and p["durum"] == 3 else "")
-        else:
-            durum = f"başlamadı {ko.astimezone(TR):%H:%M}"
-        print(f"[{m}] {x['ev']} - {x['dep']} | {x.get('lig') or ''} | {durum}")
-        print(f"   maç önü: 1X2 % {[round(100 * q) for q in (s5.get('F') or F).get('p', [])]} · AH {F.get('ah')} · gol {F.get('L')}"
-              + (" | not: " + " | ".join(s5["N"]) if s5.get("N") else ""))
-        print("   tahmin: " + " · ".join(f"{t} {z['sec']} %{z['p']:g}" for t, z in T.items()))
-        if p and p["durum"] in (1, 2, 3):
-            try:
-                ou, ah = _canli_cizgi(i7, "ou"), _canli_cizgi(i7, "ah")
-                print("   canlı : " + (f"gol çizgisi {ou[0]} (üst {ou[1]} / alt {ou[2]})" if ou else "gol çizgisi yok")
-                      + " · " + (f"handikap {ah[0]} (ev {ah[1]} / dep {ah[2]})" if ah else "handikap yok"))
-            except Exception as e:
-                print("   canlı : okunamadı", str(e)[:60])
-            time.sleep(0.3)
-    with _kilit:
-        json.dump(C, open(LIG_DOSYA, "w", encoding="utf-8"), ensure_ascii=False)
-    print(f"{say} maç (canlı + {ek} dk içinde başlayacak)")
+        dk = int((now - datetime.fromisoformat(x["ko"])).total_seconds() // 60)
+        r = S.get(m) or (None,) * 4
+        print(f"[{m}] {datetime.fromisoformat(x['ko']).astimezone(TR):%H:%M} ({dk}') {x['ev']} - {x['dep']} | {x.get('lig') or ''} | skor {r[0]}-{r[1]} İY {r[2]}-{r[3]}")
+        print(f"   1X2 % {[round(100 * p) for p in F.get('p', [])]} fav {'1X2'[F['fav']]} | AH {F.get('ah')} | gol {F.get('L')}")
+        print("   sabah: " + " · ".join(f"{t} {z['sec']} %{z['p']:g}" + (f" @{z['oran']}" if z.get("oran") else "") for t, z in x["T"].items()))
+        if s5.get("T"):
+            print("   son5 : " + " · ".join(f"{t} {z['sec']} %{z['p']:g}" + (f" @{z['oran']}" if z.get("oran") else "") for t, z in s5["T"].items()))
+            if s5.get("N"):
+                print("   not  : " + " | ".join(s5["N"]))
+    print(f"{len(M)} maç (oynanan + {ek} dk içinde başlayacak)")
 
 
 def _cli_sonuc():
