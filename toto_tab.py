@@ -212,8 +212,34 @@ def _yeniden_eslestir():
         json.dump({"haftalar": H}, open(LISTELER_FILE, "w"), ensure_ascii=False)
 
 
+YUKLE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "toto_elle_yukle.json")
+
+
+def _yukle_uygula():
+    """repodan gelen toto_elle_yukle.json (ekran degerleri) -> bultene bir kez uygula (dosya degisince yeniden)"""
+    try:
+        Y = json.load(open(YUKLE_FILE))
+    except Exception:
+        return
+    imza = json.dumps(Y, sort_keys=True)
+    iz = os.path.join(os.path.dirname(LISTELER_FILE), "toto_elle_yukle.done")
+    try:
+        if open(iz).read() == imza:
+            return
+    except Exception:
+        pass
+    if not any(h.get("hafta") == Y.get("hafta") for h in _haftalar()):
+        return
+    elle_gir(json.dumps(Y["elle"]), Y.get("hafta"))
+    open(iz, "w").write(imza)
+
+
 def run_cycle():
     now = ng._now()
+    try:
+        _yukle_uygula()
+    except Exception as e:
+        print(f"[toto] yukle hatasi {e}")
     try:
         _yeniden_eslestir()
     except Exception as e:
