@@ -605,12 +605,53 @@ def _loop():
         time.sleep(60)
 
 
+YAYIN_DAL = "canli-veri"
+YAYIN_SN = 300
+
+
+def yayin():
+    """o gunun Oto JSON'unu (gzip) GitHub'da ayri dala (canli-veri) koyar; calisma agacina/ana dala dokunmaz (git plumbing)"""
+    import gzip
+    import subprocess
+    gun = (datetime.now(TR) - timedelta(hours=SAAT)).date().isoformat()
+    d = json_disari(gun)
+    yol = os.path.join(KLASOR, "yayin.json.gz")
+    with gzip.open(yol, "wt", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, default=str)
+    env = dict(os.environ, GIT_AUTHOR_NAME="saha", GIT_AUTHOR_EMAIL="saha@localhost", GIT_COMMITTER_NAME="saha",
+               GIT_COMMITTER_EMAIL="saha@localhost", GIT_TERMINAL_PROMPT="0")
+    g = lambda *a, inp=None: subprocess.run(["git", *a], cwd=KOK, env=env, input=inp, capture_output=True, text=True, timeout=120)
+    b = g("hash-object", "-w", yol)
+    if b.returncode:
+        raise RuntimeError("hash-object: " + b.stderr[-200:])
+    tr = g("mktree", inp=f"100644 blob {b.stdout.strip()}\toto.json.gz\n")
+    cm = g("commit-tree", tr.stdout.strip(), "-m", f"oto {d.get('indirildi')}")
+    p = g("push", "-f", "-q", "origin", f"{cm.stdout.strip()}:refs/heads/{YAYIN_DAL}")
+    if p.returncode:
+        raise RuntimeError("push: " + (p.stderr or p.stdout)[-300:])
+    if time.time() - _cache.get("prune_t", 0) > 3600:
+        _cache["prune_t"] = time.time()
+        g("prune", "--expire=1.hour.ago")
+    return f"{d.get('indirildi')} · {d.get('n')} maç · {os.path.getsize(yol) // 1024} KB"
+
+
+def _yayin_loop():
+    time.sleep(200)
+    while True:
+        try:
+            _last["yayin"] = yayin()
+        except Exception as e:
+            _last["yayin"] = "HATA " + str(e)[:200]
+        time.sleep(YAYIN_SN)
+
+
 def start_background():
     global _started
     if _started:
         return
     _started = True
     threading.Thread(target=_loop, daemon=True, name="oto_tahmin").start()
+    threading.Thread(target=_yayin_loop, daemon=True, name="oto_yayin").start()
 
 
 SONUC_DOSYA = os.path.join(KLASOR, "sonuc7m.json")
@@ -970,5 +1011,7 @@ if __name__ == "__main__":
         _cli_canli(int(a[1]) if len(a) > 1 else 0)
     elif a[:1] == ["sonuc"]:
         _cli_sonuc()
+    elif a[:1] == ["yayin"]:
+        print("GitHub'a yüklendi:", yayin())
     elif a[:1] == ["vktest"]:
         _cli_vktest(a[1:])
