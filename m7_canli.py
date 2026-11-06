@@ -25,8 +25,9 @@ def seri(i, ek):
         for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
             g = dict(re.findall(r"'(\w+)':'([^']*)'", e))
             t = m7.t8(g.get("dt"))
-            L.append(((t + TR).strftime("%H:%M") if t else "?", g.get("p3"), g.get("p1"), g.get("p2"), g.get("score") or "", g.get("htime") or ""))
-        out[nm.group(1)] = L
+            L.append((t, (t + TR).strftime("%H:%M") if t else "?", g.get("p3"), g.get("p1"), g.get("p2"), g.get("score") or "", g.get("htime") or ""))
+        L.sort(key=lambda r: (r[0] is None, r[0]))          # eski -> yeni
+        out[nm.group(1)] = [r[1:] for r in L]
     return out
 
 
