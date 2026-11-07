@@ -27,13 +27,13 @@
 <div class="section-sub">Son tur: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~2 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %} · sayfa dakikada bir yenilenir</div>
 
 {% set ks = d.kasa %}
-<h2 class="section">🧠 KARAR AJANI · SANAL KASA <span style="font-size:11px;color:var(--chalk-faint)">gerçek bahis yok · 100 ₺ başlangıç · kupon 1-5 ₺ · sadece iddaa oranı × bizim ihtimal ≥ 1.10 ise · maç başı tek kupon</span></h2>
+<h2 class="section">🧠 KARAR AJANI · SANAL KASA <span style="font-size:11px;color:var(--chalk-faint)">gerçek bahis yok · 1000 ₺ başlangıç · kupon 50-100 ₺ · en az 2 kaynak aynı yönde · sadece iddaa oranı × bizim ihtimal ≥ 1.10 ise · maç başı tek kupon</span></h2>
 {% if ks %}<div class="kc s"><div class="ust"><span class="tk">Bakiye <b style="font-size:20px">{{ '%.2f'|format(ks.bakiye) }} ₺</b></span><span class="sk" style="font-size:16px;color:{{ '#3ccf7a' if ks.net >= 0 else '#ff5a4f' }}">{{ '%+.2f'|format(ks.net) }} ₺</span></div>
 <div class="meta">ROI <b>{{ ('%+.1f'|format(ks.roi)) ~ '%' if ks.roi is not none else '-' }}</b> · biten {{ ks.kazanan + ks.kaybeden }} kupon ({{ ks.kazanan }} ✓ / {{ ks.kaybeden }} ✗) · oynanan {{ '%.2f'|format(ks.yatirilan) }} ₺ · açık {{ ks.acik_n }} kupon {{ '%.2f'|format(ks.acik) }} ₺ · serbest {{ '%.2f'|format(ks.serbest) }} ₺</div></div>{% endif %}
 {% set kr = [] %}{% for s in d.log %}{% if s.tip == 'KARAR' and s.bahis %}{% set _ = kr.append(s) %}{% endif %}{% endfor %}
 {% for s in kr %}<div class="kc"><div class="ust"><span class="dk">{{ s.dk }}'</span><span class="tk">{{ s.ev }} – {{ s.dep }}<br><span class="meta">{{ s.saat }} · o an {{ s.skor }}</span></span><span class="sk" style="font-size:15px">{% if s.pnl is not none %}<span style="color:{{ '#3ccf7a' if s.pnl > 0 else '#ff5a4f' }}">{{ '%+.2f'|format(s.pnl) }} ₺</span>{% else %}açık{% endif %}</span></div>
 <div class="sg g"><span class="tip">KUPON</span><b>{{ s.sec }}</b> · <b>{{ s.bahis|round(1) }} ₺ @ {{ s.oran }}</b> · bizim %{{ s.p }} · iddaa %{{ s.piyasa }} · değer {{ s.deger }}{% if s.ft %} · bitti <b>{{ s.ft }}</b> {{ '✓' if s.sonuc else '✗' }}{% endif %}<div class="meta">{{ s.acik }}</div></div></div>
-{% else %}<div class="section-sub">Bu gün henüz kupon yok — şartlar (3 kaynak aynı yönde + değer ≥ 1.10) sağlanınca açılır.</div>{% endfor %}
+{% else %}<div class="section-sub">Bu gün henüz kupon yok — şartlar (2 kaynak aynı yönde + değer ≥ 1.10) sağlanınca açılır.</div>{% endfor %}
 
 <h2 class="section">🔥 CANLI MAÇLAR ({{ d.canli|length }})</h2>
 {% for c in d.canli %}
