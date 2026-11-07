@@ -15,6 +15,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+import iddaa_canli as IC
 import istat_ajan as IS
 import karar_ajan as KA
 import m7
@@ -34,6 +35,7 @@ _last = {"at": None, "log": "", "hata": None, "canli": []}
 _oran = {}                    # i7 -> {"t", "ah", "ou"}
 _baz = {}                     # (i7, skor) -> (t, guc)
 _eid = {}                     # mid -> LiveScore Eid ("" = bulunamadi)
+_iid = {}                     # mid -> iddaa canli mac no ("" = bulunamadi)
 
 
 # ---------------------------------------------------------------- arsiv kural tablosu
@@ -190,6 +192,11 @@ def run_cycle():
     except Exception as e:
         LS = []
         IS._d["hata"] = str(e)[:120]
+    try:
+        IL = IC.liste()
+    except Exception as e:
+        IL = []
+        IC._d["hata"] = str(e)[:120]
     for g in _gunler():
         v = O._oku(g) or {}
         R5 = O._son5_oku(g) or {}
@@ -229,6 +236,11 @@ def run_cycle():
                     st = IS.ozet(IS.istat(_eid[mid]))
                 except Exception:
                     st = IS.ozet(IS._d["istat"].get(_eid[mid]))
+            if mid not in _iid and IL:
+                m_ = IC.esle(x["ev"], x["dep"], IL)
+                _iid[mid] = m_["i"] if m_ else ""
+            idd_m = next((z for z in IL if z["i"] == _iid.get(mid)), None) if _iid.get(mid) else None
+            idd = IC.ihtimal(idd_m["p"], h, a) if idd_m else None
             kirmizi = bool((p.get("kev") or p.get("kdep")) or (st and (st["kirmizi"][0] or st["kirmizi"][1])))
             kk7 = (p.get("kev") or 0, p.get("kdep") or 0)
             dusuk_tempo = bool(st and dk >= 65 and h + a <= 1 and st["sut_top"] / max(dk, 1) < 0.13 and st["isabetli_top"] <= 4)
@@ -287,9 +299,18 @@ def run_cycle():
             kay_now = round(gnow - _baz[(i7, f"{h}-{a}")][1], 2) if gnow is not None else None
             try:
                 F5 = (R5.get(mid) or {}).get("F") or x["F"]
-                S += KA.karar(dk, h, a, F5, r, st, ah, (o or {}).get("ou"), kay_now, kirmizi)
+                S += KA.karar(dk, h, a, F5, r, st, ah, (o or {}).get("ou"), kay_now, kirmizi, idd)
             except Exception as e:
                 _last["karar_hata"] = str(e)[:150]
+            if idd:
+                for s in S:
+                    if s.get("iddaa") is None:
+                        io = idd["oran"].get(s["sec"]) or (idd["oran"].get("Sıradaki gol ev") if s["sec"] == "Ev gol atar" else
+                                                         idd["oran"].get("Sıradaki gol dep") if s["sec"] == "Dep gol atar" else None)
+                        if io:
+                            s["iddaa"] = io
+                            if s.get("p"):
+                                s["deger"] = round(io * s["p"] / 100, 2)
             for s in S:
                 key = (mid, s["tip"], s["sec"])
                 if key not in var:
@@ -299,7 +320,7 @@ def run_cycle():
                     yeni_sinyal += 1
             canli.append({"mid": mid, "i7": i7, "ev": x["ev"], "dep": x["dep"], "lig": x.get("lig"), "dk": dks or str(dk),
                           "dkn": dk, "skor": f"{h}-{a}", "iy": p.get("iy"), "oz": oz, "S": S,
-                          "st": st, "kirmizi": kirmizi, "kk": kk7, "ah": ah, "ou": (o or {}).get("ou"), "kay": round(gnow - _baz[(i7, f'{h}-{a}')][1], 2) if gnow is not None else None})
+                          "st": st, "kirmizi": kirmizi, "kk": kk7, "idd": idd, "ah": ah, "ou": (o or {}).get("ou"), "kay": round(gnow - _baz[(i7, f'{h}-{a}')][1], 2) if gnow is not None else None})
         if LOG:
             os.makedirs(KLASOR, exist_ok=True)
             with _kilit:
@@ -308,7 +329,7 @@ def run_cycle():
         json.dump(C, open(O.LIG_DOSYA, "w", encoding="utf-8"), ensure_ascii=False)
     canli.sort(key=lambda c: (-len(c["S"]), -c["dkn"]))
     _last.update(at=now.isoformat(), canli=canli, hata=None,
-                 log=f"{len(canli)} canlı maç · {yeni_sinyal} yeni sinyal · {n_oran} oran · {n_ist} istatistik çekildi · LiveScore {len(LS)} canlı"
+                 log=f"{len(canli)} canlı maç · {yeni_sinyal} yeni sinyal · {n_oran} oran · {n_ist} istatistik çekildi · LiveScore {len(LS)} canlı · iddaa {len(IL)} canlı"
                      + (f" · ⚠ LiveScore: {IS._d['hata']}" if IS._d.get("hata") and not LS else ""))
 
 
@@ -374,15 +395,15 @@ def _test():
     t0 = time.time()
     run_cycle()
     print(f"tur {time.time() - t0:.0f} sn | {_last['log']}" + (f" | ⚠ {_last.get('karar_hata')}" if _last.get("karar_hata") else ""))
-    print(f"{'dk':>4} {'skor':5} {'maç':38} | 7M | LiveScore istat | canlı AH/AÜ | arşiv | piyasa% | sinyaller")
+    print(f"{'dk':>4} {'skor':5} {'maç':38} | 7M | LiveScore istat | canlı AH/AÜ | arşiv | kaynak piyasa% | sinyaller")
     for c in _last["canli"]:
         st, ah, ou = c.get("st"), c.get("ah"), c.get("ou")
         h, a = (int(v) for v in c["skor"].split("-"))
         F = c["oz"]
-        py = KA.piyasa(ah, ou, c["dkn"], h, a) if ah and ou else None
+        py = c.get("idd") if c.get("idd") and "ev" in c["idd"] else (KA.piyasa(ah, ou, c["dkn"], h, a) if ah and ou else None)
         print(f"{c['dk']:>4} {c['skor']:5} {(c['ev'] + ' - ' + c['dep'])[:38]:38} | ✓  | "
               f"{('✓ k' + st['korner'] + ' i' + st['isabetli'] + (' B' + str(st['baski']) if st['baski'] else '')) if st else ('eşleşmedi' if not _eid.get(c['mid']) else 'istat yok'):16} | "
-              f"{'✓' if ah else '-'}/{'✓' if ou else '-'} | {'evet' if c['dkn'] >= 55 else '55dk altı':9} | "
+              f"{'✓' if ah else '-'}/{'✓' if ou else '-'} | {'evet' if c['dkn'] >= 55 else '55dk altı':9} | {'iddaa' if c.get('idd') and 'ev' in c['idd'] else '7M' if py else '-':5} "
               f"{(str(round(100 * py['ev'])) + '/' + str(round(100 * py['x'])) + '/' + str(round(100 * py['dep']))) if py else '-':9} | "
               + ", ".join(f"{s['tip']}:{s['sec']}" for s in c["S"]))
 

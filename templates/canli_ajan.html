@@ -29,7 +29,7 @@
 {% set kr = [] %}{% for c in d.canli %}{% for s in c.S %}{% if s.tip == 'KARAR' %}{% set _ = kr.append((c, s)) %}{% endif %}{% endfor %}{% endfor %}
 <h2 class="section">🧠 KARAR AJANI <span style="font-size:11px;color:var(--chalk-faint)">gölge mod · en az 3 kaynak aynı yönde + Pinnacle'dan 5+ puan yüksek</span></h2>
 {% for c, s in kr %}<div class="kc s"><div class="ust"><span class="dk">{{ c.dk }}{{ "'" if c.dk[:1].isdigit() else '' }}</span><span class="tk">{{ c.ev }} – {{ c.dep }}</span><span class="sk">{{ c.skor }}</span></div>
-<div class="sg g"><span class="tip">KARAR</span><b>{{ s.sec }}</b> · bizim %{{ s.p }} · Pinnacle %{{ s.piyasa }} · <b>{{ s.adil }} üstüyse oyna</b><div class="meta">{{ s.acik }}</div></div></div>
+<div class="sg g"><span class="tip">KARAR</span><b>{{ s.sec }}</b> · bizim %{{ s.p }} · {{ s.kaynak or 'piyasa' }} %{{ s.piyasa }}{% if s.iddaa %} · iddaa şu an <b>{{ s.iddaa }}</b>{% endif %} · <b>{{ s.adil }} üstüyse oyna</b><div class="meta">{{ s.acik }}</div></div></div>
 {% else %}<div class="section-sub">Şu an karar ajanının şartlarını sağlayan maç yok.</div>{% endfor %}
 
 <h2 class="section">🔥 CANLI MAÇLAR ({{ d.canli|length }})</h2>
@@ -38,10 +38,11 @@
   <div class="ust"><span class="dk">{{ c.dk }}{{ "'" if c.dk[:1].isdigit() else '' }}</span><span class="tk">{{ c.ev }}<br>{{ c.dep }}</span><span class="sk">{{ c.skor }}</span></div>
   <div class="meta">{{ c.lig or '' }} · maç önü {{ c.oz.p|join(' / ') }} · {{ c.oz.fav_ad }} · para {{ c.oz.para }} ({{ '%+.1f'|format(c.oz.dd) }}p) · gol çizgisi {{ c.oz.L or '-' }}</div>
   {% if c.ah or c.ou %}<div class="meta">canlı: {% if c.ah %}AH {{ c.ah.cizgi }} ({{ c.ah.p1 }}/{{ c.ah.p2 }}){% if c.kay %} · kayma {{ '%+.2f'|format(c.kay) }}{% endif %}{% endif %}{% if c.ou %} · AÜ {{ c.ou.cizgi }} (üst {{ c.ou.p1 }} / alt {{ c.ou.p2 }}){% endif %}</div>{% endif %}
+  {% if c.idd %}{% set io = c.idd.oran %}<div class="meta">💰 iddaa: {% if io['MS 1'] %}MS {{ io['MS 1'] }} / {{ io['MS X'] }} / {{ io['MS 2'] }}{% endif %}{% for k, v in io.items() if k[:3] in ('Üst', 'Alt') %} · {{ k }} {{ v }}{% endfor %}{% if io['Sıradaki gol ev'] %} · sıradaki gol ev {{ io['Sıradaki gol ev'] }} / yok {{ io['Maçta gol olmaz'] }} / dep {{ io['Sıradaki gol dep'] }}{% endif %}</div>{% endif %}
   {% if c.st %}<div class="meta">📊 korner {{ c.st.korner }} · isabetli {{ c.st.isabetli }} · şut {{ c.st.sut }} · top {{ c.st.top }}{% if c.st.baski %} · <b style="color:#e0a030">baskı {{ 'EV' if c.st.baski == 1 else 'DEP' }}</b>{% endif %}</div>{% endif %}
   {% if c.kirmizi %}<div class="meta" style="color:#ff5a4f"><b>🟥 kırmızı kart ({{ c.kk[0] }}-{{ c.kk[1] }}) — arşiv ve karar sinyalleri kapatıldı</b></div>{% endif %}
   {% for n in c.oz.not %}<div class="meta">⚡ {{ n }}</div>{% endfor %}
-  {% for s in c.S %}<div class="sg {{ 'g' if s.guclu else '' }}"><span class="tip">{{ s.tip }}</span><b>{{ s.sec }}</b>{% if s.p %} · arşiv %{{ s.p }} · adil {{ s.adil }} · {{ s.n }} maç{% endif %}<div class="meta">{{ s.acik }}</div></div>{% endfor %}
+  {% for s in c.S %}<div class="sg {{ 'g' if s.guclu else '' }}"><span class="tip">{{ s.tip }}</span><b>{{ s.sec }}</b>{% if s.p %} · {{ 'bizim' if s.tip == 'KARAR' else 'arşiv' }} %{{ s.p }} · adil {{ s.adil }}{% if s.n %} · {{ s.n }} maç{% endif %}{% endif %}{% if s.iddaa %} · iddaa <b>{{ s.iddaa }}</b>{% if s.deger %} {{ '✅ değerli' if s.deger >= 1.05 else '❌ düşük' }}{% endif %}{% endif %}<div class="meta">{{ s.acik }}</div></div>{% endfor %}
 </div>
 {% else %}<div class="section-sub">Şu an Oto listesinde oynanan maç yok.</div>{% endfor %}
 

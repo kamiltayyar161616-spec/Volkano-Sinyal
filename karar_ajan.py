@@ -97,15 +97,19 @@ def karne():
     return w
 
 
-def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi):
-    """-> [sinyal] (gölge mod: KARAR turu)"""
+def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi, idd=None):
+    """-> [sinyal] (gölge mod: KARAR turu). Piyasa: iddaa canli (varsa, marjsiz) yoksa 7M Pinnacle/SBOBET"""
     if dk < 50 or kirmizi:
         return []
     W = karne()
     M = model(F, dk, h, a)
-    PY = piyasa(ah, ou, dk, h, a)
+    if idd and all(x in idd for x in ("ev", "x", "dep")):
+        PY, kaynak_ad = idd, "iddaa"
+    else:
+        PY, kaynak_ad = piyasa(ah, ou, dk, h, a), "Pinnacle"
     if not PY:
         return []
+    ORAN = (idd or {}).get("oran") or {}
     cur = "ev" if h > a else "dep" if a > h else "x"
     out = []
     adlar = {"ev": "MS 1", "x": "MS X", "dep": "MS 2"}
@@ -149,9 +153,14 @@ def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi):
                 destek.append("PİYASA")
             else:
                 p -= 3 * wk
+        if k not in PY:
+            continue
         pp = PY[k] * 100
+        sec = adlar.get(k, "Maçta gol olur")
+        io = ORAN.get(sec)
         if len(set(destek)) >= 3 and p - pp >= ESIK_FARK and p >= ESIK_P:
-            out.append({"tip": "KARAR", "sec": adlar.get(k, "Maçta gol olur"), "p": round(p, 1), "n": None, "adil": round(100 / p, 2),
-                        "guclu": p - pp >= 10, "piyasa": round(pp, 1),
-                        "acik": f"bizim %{p:.0f} · Pinnacle %{pp:.0f} · destek: {', '.join(sorted(set(destek)))} · oran {100 / p:.2f} üstüyse"})
+            out.append({"tip": "KARAR", "sec": sec, "p": round(p, 1), "n": None, "adil": round(100 / p, 2),
+                        "guclu": p - pp >= 10, "piyasa": round(pp, 1), "kaynak": kaynak_ad, "iddaa": io,
+                        "acik": f"bizim %{p:.0f} · {kaynak_ad} %{pp:.0f} · destek: {', '.join(sorted(set(destek)))}"
+                                + (f" · iddaa şu an {io}" if io else "") + f" · {100 / p:.2f} üstüyse oyna"})
     return out
