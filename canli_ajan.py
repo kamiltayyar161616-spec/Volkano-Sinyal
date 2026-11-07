@@ -359,3 +359,27 @@ def get_page_data(gun=None):
     LOG.sort(key=lambda s: s["at"], reverse=True)
     return {"last": _last, "canli": _last.get("canli") or [], "gunler": G, "gun": gun, "log": LOG,
             "ozet": sorted(([k, n, w, round(100 * w / n, 1)] for k, (n, w) in ozet.items()), key=lambda z: z[0])}
+
+
+def _test():
+    """python3 canli_ajan.py test : bir tur calistirir, her canli macta veri akisini gosterir (3 ajan)"""
+    t0 = time.time()
+    run_cycle()
+    print(f"tur {time.time() - t0:.0f} sn | {_last['log']}" + (f" | ⚠ {_last.get('karar_hata')}" if _last.get("karar_hata") else ""))
+    print(f"{'dk':>4} {'skor':5} {'maç':38} | 7M | LiveScore istat | canlı AH/AÜ | arşiv | piyasa% | sinyaller")
+    for c in _last["canli"]:
+        st, ah, ou = c.get("st"), c.get("ah"), c.get("ou")
+        h, a = (int(v) for v in c["skor"].split("-"))
+        F = c["oz"]
+        py = KA.piyasa(ah, ou, c["dkn"], h, a) if ah and ou else None
+        print(f"{c['dk']:>4} {c['skor']:5} {(c['ev'] + ' - ' + c['dep'])[:38]:38} | ✓  | "
+              f"{('✓ k' + st['korner'] + ' i' + st['isabetli'] + (' B' + str(st['baski']) if st['baski'] else '')) if st else ('eşleşmedi' if not _eid.get(c['mid']) else '25dk altı/yok'):16} | "
+              f"{'✓' if ah else '-'}/{'✓' if ou else '-'} | {'evet' if c['dkn'] >= 55 else '55dk altı':9} | "
+              f"{(str(round(100 * py['ev'])) + '/' + str(round(100 * py['x'])) + '/' + str(round(100 * py['dep']))) if py else '-':9} | "
+              + ", ".join(f"{s['tip']}:{s['sec']}" for s in c["S"]))
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:2] == ["test"]:
+        _test()
