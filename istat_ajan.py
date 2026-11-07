@@ -93,7 +93,7 @@ def ozet(x):
     if not x:
         return None
     e, d = x["ev"], x["dep"]
-    if sum(e.values()) + sum(d.values()) == 0:
+    if sum(v for k, v in e.items() if k != "top") + sum(v for k, v in d.items() if k != "top") == 0:
         return None                       # LiveScore bu lige istatistik vermiyor (hepsi 0)
     ks, ss = e["korner"] - d["korner"], e["isabetli"] - d["isabetli"]
     sut_e, sut_d = e["sut"], d["sut"]

@@ -52,12 +52,15 @@ def piyasa(ah, ou, dk, h, a):
     """canli AH (kalan sure handikabi) + canli AÜ (toplam cizgi) -> piyasanin kalan sure ihtimali"""
     if not ah or not ou:
         return None
+    sk = f"{h}-{a}"
+    if str(ah.get("skor", "")).replace(" ", "") != sk or str(ou.get("skor", "")).replace(" ", "") != sk:
+        return None                       # oran eski skordan kalma (gol sonrasi henuz guncellenmedi)
     try:
         pu = (1 / ou["p1"]) / (1 / ou["p1"] + 1 / ou["p2"])
         ph = (1 / ah["p1"]) / (1 / ah["p1"] + 1 / ah["p2"])
     except (ZeroDivisionError, TypeError, KeyError):
         return None
-    lam = max(0.05, ou["cizgi"] - (h + a) + 0.15 + (pu - 0.5) * 1.5)
+    lam = max(0.15, ou["cizgi"] - (h + a) + 0.15 + (pu - 0.5) * 1.5)
     s = max(-lam * 0.95, min(lam * 0.95, -ah["cizgi"] + (ph - 0.5) * 2))
     return sonuc_olasilik((lam + s) / 2, (lam - s) / 2, h, a)
 
