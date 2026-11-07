@@ -100,7 +100,7 @@ def kural(T, dk, skor, para, fav):
 
 
 # ---------------------------------------------------------------- canli oran (7M)
-def _canli_son(i7, ek):
+def _canli_son(i7, ek, skor=None):
     import m7_kesif as MK
     st, b = MK.get(f"https://px-odds.7mdt.com/DataByLive2/{i7}_{ek}.js")
     if st != 200:
@@ -118,9 +118,12 @@ def _canli_son(i7, ek):
         L = [x for x in L if x[0]]
         if L:
             best[nm.group(1)] = max(L, key=lambda x: x[0])[1]
-    g = best.get("Pinnacle Sports") or best.get("SBOBET") or next(iter(best.values()), None)
+    sira = ["Pinnacle Sports", "SBOBET", "Bet365", "12BET", "Macauslot"] + sorted(set(best) - {"Pinnacle Sports", "SBOBET", "Bet365", "12BET", "Macauslot"})
+    uy = [b for b in sira if b in best and skor and best[b].get("score", "").replace(" ", "") == skor]
+    bb = uy[0] if uy else next((b for b in sira if b in best), None)        # guncel skorlu büro yoksa en iyi büro (eski)
+    g = best.get(bb) if bb else None
     try:
-        return {"cizgi": float(g["p3"]), "p1": float(g["p1"]), "p2": float(g["p2"]), "skor": g["score"]} if g else None
+        return {"cizgi": float(g["p3"]), "p1": float(g["p1"]), "p2": float(g["p2"]), "skor": g["score"], "buro": bb} if g else None
     except (KeyError, ValueError):
         return None
 
@@ -231,10 +234,11 @@ def run_cycle():
             dusuk_tempo = bool(st and dk >= 65 and h + a <= 1 and st["sut_top"] / max(dk, 1) < 0.13 and st["isabetli_top"] <= 4)
             # canli oran (2. yari ve devre arasi, ya da sinyal adayi)
             o = _oran.get(i7)
-            if (dk >= 40) and (not o or time.time() - o["t"] > ORAN_SN) and n_oran < ORAN_MAX:
+            eski = o and any((o.get(k) or {}).get("skor", "").replace(" ", "") != f"{h}-{a}" for k in ("ah", "ou"))
+            if (dk >= 40) and (not o or time.time() - o["t"] > ORAN_SN or (eski and time.time() - o["t"] > 60)) and n_oran < ORAN_MAX:
                 n_oran += 1
                 try:
-                    o = {"t": time.time(), "ah": _canli_son(i7, "ah"), "ou": _canli_son(i7, "ou")}
+                    o = {"t": time.time(), "ah": _canli_son(i7, "ah", f"{h}-{a}"), "ou": _canli_son(i7, "ou", f"{h}-{a}")}
                     _oran[i7] = o
                 except Exception:
                     pass
