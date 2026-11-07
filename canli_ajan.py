@@ -15,6 +15,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+import istat_ajan as IS
 import m7
 import oto_tahmin as O
 
@@ -31,6 +32,7 @@ _kilit = threading.Lock()
 _last = {"at": None, "log": "", "hata": None, "canli": []}
 _oran = {}                    # i7 -> {"t", "ah", "ou"}
 _baz = {}                     # (i7, skor) -> (t, guc)
+_eid = {}                     # mid -> LiveScore Eid ("" = bulunamadi)
 
 
 # ---------------------------------------------------------------- arsiv kural tablosu
@@ -175,7 +177,12 @@ def run_cycle():
     P = m7.program()
     C = O._cache_oku()
     T = tablo()
-    canli, yeni_sinyal, n_bul, n_oran = [], 0, 0, 0
+    canli, yeni_sinyal, n_bul, n_oran, n_ist = [], 0, 0, 0, 0
+    try:
+        LS = IS.liste()
+    except Exception as e:
+        LS = []
+        IS._d["hata"] = str(e)[:120]
     for g in _gunler():
         v = O._oku(g) or {}
         R5 = O._son5_oku(g) or {}
@@ -202,6 +209,21 @@ def run_cycle():
             h, a = p["kev"], p["kdep"]
             oz = ozellik(x, R5.get(mid))
             S = []
+            # istatistik ajani (LiveScore)
+            if mid not in _eid and LS:
+                m_ = IS.esle(x["ev"], x["dep"], LS)
+                _eid[mid] = m_["eid"] if m_ else ""
+            st = None
+            if _eid.get(mid) and dk >= 25 and n_ist < IS.ISTAT_MAX:
+                try:
+                    x0 = IS._d["istat"].get(_eid[mid])
+                    if not x0 or time.time() - x0["t"] >= IS.ISTAT_SN:
+                        n_ist += 1
+                    st = IS.ozet(IS.istat(_eid[mid]))
+                except Exception:
+                    st = IS.ozet(IS._d["istat"].get(_eid[mid]))
+            kirmizi = bool(st and (st["kirmizi"][0] or st["kirmizi"][1]))
+            dusuk_tempo = bool(st and dk >= 65 and h + a <= 1 and st["sut_top"] / max(dk, 1) < 0.13 and st["isabetli_top"] <= 4)
             # canli oran (2. yari ve devre arasi, ya da sinyal adayi)
             o = _oran.get(i7)
             if (dk >= 40) and (not o or time.time() - o["t"] > ORAN_SN) and n_oran < ORAN_MAX:
@@ -222,18 +244,34 @@ def run_cycle():
                 if time.time() - t0 >= 600 and abs(kay) >= 0.25:
                     taraf = 1 if kay > 0 else 2
                     if not ((taraf == 1 and h > a) or (taraf == 2 and a > h)):
+                        if st and st["baski"] == taraf:
+                            S.append({"tip": "BİRLEŞİK", "sec": f"{'Ev' if taraf == 1 else 'Dep'} gol atar", "guclu": True,
+                                      "acik": f"canlı handikap {kay:+.2f} kaydı + istatistik baskı (korner {st['korner']}, isabetli {st['isabetli']}, şut {st['sut']})",
+                                      "p": None, "n": None})
                         S.append({"tip": "KAYMA", "sec": f"{'Ev' if taraf == 1 else 'Dep'} gol atar",
                                   "acik": f"canlı handikap aynı skorda {kay:+.2f} gol gücü {'eve' if taraf == 1 else 'deplasmana'} kaydı", "p": None, "n": None})
             # arsiv kurali
-            if dk >= 55 and (h + a) <= 5:
+            if st and st["baski"] and dk >= 55:
+                taraf = st["baski"]
+                if not ((taraf == 1 and h > a) or (taraf == 2 and a > h)) and not kirmizi:
+                    S.append({"tip": "İSTAT", "sec": f"{'Ev' if taraf == 1 else 'Dep'} gol atar", "p": None, "n": None,
+                              "acik": f"baskı: korner {st['korner']}, isabetli şut {st['isabetli']}, şut {st['sut']}, top {st['top']}"})
+            if dusuk_tempo and not kirmizi:
+                S.append({"tip": "İSTAT", "sec": "Maçta gol olmaz", "p": None, "n": None,
+                          "acik": f"düşük tempo: {dk} dakikada {st['sut_top']} şut, {st['isabetli_top']} isabetli"})
+            if dk >= 55 and (h + a) <= 5 and not kirmizi:
                 r = kural(T, dk, f"{h}-{a}", oz["para"], oz["fav_ad"])
                 if r:
                     cur = "ev" if h > a else "dep" if a > h else "x"
                     for kk, ad in (("ev", "MS 1"), ("x", "MS X"), ("dep", "MS 2")):
                         if kk != cur and r[kk] >= 0.45:
-                            S.append({"tip": "ARŞİV", "sec": ad, "acik": r["kova"], "p": round(100 * r[kk], 1), "n": r["n"],
-                                      "adil": round(1 / r[kk], 2), "guclu": r[kk] >= 0.55})
-                    if r["gol"] >= 0.70:
+                            ters = st and st["baski"] and ((kk == "ev" and st["baski"] == 2) or (kk == "dep" and st["baski"] == 1))
+                            if ters:
+                                continue                       # istatistik ters tarafta baski goruyor
+                            dest = st and ((kk == "ev" and st["baski"] == 1) or (kk == "dep" and st["baski"] == 2))
+                            S.append({"tip": "ARŞİV", "sec": ad, "acik": r["kova"] + (" + istatistik baskı destekliyor" if dest else ""),
+                                      "p": round(100 * r[kk], 1), "n": r["n"], "adil": round(1 / r[kk], 2), "guclu": r[kk] >= 0.55 or bool(dest)})
+                    if r["gol"] >= 0.70 and not dusuk_tempo:
                         S.append({"tip": "GOL", "sec": "Maçta gol olur", "acik": r["kova"], "p": round(100 * r["gol"], 1), "n": r["n"],
                                   "adil": round(1 / r["gol"], 2), "guclu": r["gol"] >= 0.80})
             for s in S:
@@ -245,7 +283,7 @@ def run_cycle():
                     yeni_sinyal += 1
             canli.append({"mid": mid, "i7": i7, "ev": x["ev"], "dep": x["dep"], "lig": x.get("lig"), "dk": dks or str(dk),
                           "dkn": dk, "skor": f"{h}-{a}", "iy": p.get("iy"), "oz": oz, "S": S,
-                          "ah": ah, "ou": (o or {}).get("ou"), "kay": round(gnow - _baz[(i7, f'{h}-{a}')][1], 2) if gnow is not None else None})
+                          "st": st, "kirmizi": kirmizi, "ah": ah, "ou": (o or {}).get("ou"), "kay": round(gnow - _baz[(i7, f'{h}-{a}')][1], 2) if gnow is not None else None})
         if LOG:
             os.makedirs(KLASOR, exist_ok=True)
             with _kilit:
@@ -254,7 +292,8 @@ def run_cycle():
         json.dump(C, open(O.LIG_DOSYA, "w", encoding="utf-8"), ensure_ascii=False)
     canli.sort(key=lambda c: (-len(c["S"]), -c["dkn"]))
     _last.update(at=now.isoformat(), canli=canli, hata=None,
-                 log=f"{len(canli)} canlı maç · {yeni_sinyal} yeni sinyal · {n_oran} oran çekildi")
+                 log=f"{len(canli)} canlı maç · {yeni_sinyal} yeni sinyal · {n_oran} oran · {n_ist} istatistik çekildi · LiveScore {len(LS)} canlı"
+                     + (f" · ⚠ LiveScore: {IS._d['hata']}" if IS._d.get("hata") and not LS else ""))
 
 
 def _loop():
@@ -286,6 +325,8 @@ def _degerlendir(s, r):
         return fa > fh
     if sec == "Maçta gol olur":
         return fh + fa > h + a
+    if sec == "Maçta gol olmaz":
+        return fh + fa == h + a
     if sec == "Ev gol atar":
         return fh > h
     if sec == "Dep gol atar":
