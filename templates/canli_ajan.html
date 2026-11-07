@@ -26,6 +26,12 @@
 {% block content %}
 <div class="section-sub">Son tur: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~2 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %} · sayfa dakikada bir yenilenir</div>
 
+{% set kr = [] %}{% for c in d.canli %}{% for s in c.S %}{% if s.tip == 'KARAR' %}{% set _ = kr.append((c, s)) %}{% endif %}{% endfor %}{% endfor %}
+<h2 class="section">🧠 KARAR AJANI <span style="font-size:11px;color:var(--chalk-faint)">gölge mod · en az 3 kaynak aynı yönde + Pinnacle'dan 5+ puan yüksek</span></h2>
+{% for c, s in kr %}<div class="kc s"><div class="ust"><span class="dk">{{ c.dk }}{{ "'" if c.dk[:1].isdigit() else '' }}</span><span class="tk">{{ c.ev }} – {{ c.dep }}</span><span class="sk">{{ c.skor }}</span></div>
+<div class="sg g"><span class="tip">KARAR</span><b>{{ s.sec }}</b> · bizim %{{ s.p }} · Pinnacle %{{ s.piyasa }} · <b>{{ s.adil }} üstüyse oyna</b><div class="meta">{{ s.acik }}</div></div></div>
+{% else %}<div class="section-sub">Şu an karar ajanının şartlarını sağlayan maç yok.</div>{% endfor %}
+
 <h2 class="section">🔥 CANLI MAÇLAR ({{ d.canli|length }})</h2>
 {% for c in d.canli %}
 <div class="kc {{ 's' if c.S else '' }}">

@@ -16,6 +16,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import istat_ajan as IS
+import karar_ajan as KA
 import m7
 import oto_tahmin as O
 
@@ -259,6 +260,7 @@ def run_cycle():
             if dusuk_tempo and not kirmizi:
                 S.append({"tip": "İSTAT", "sec": "Maçta gol olmaz", "p": None, "n": None,
                           "acik": f"düşük tempo: {dk} dakikada {st['sut_top']} şut, {st['isabetli_top']} isabetli"})
+            r = None
             if dk >= 55 and (h + a) <= 5 and not kirmizi:
                 r = kural(T, dk, f"{h}-{a}", oz["para"], oz["fav_ad"])
                 if r:
@@ -274,6 +276,12 @@ def run_cycle():
                     if r["gol"] >= 0.70 and not dusuk_tempo:
                         S.append({"tip": "GOL", "sec": "Maçta gol olur", "acik": r["kova"], "p": round(100 * r["gol"], 1), "n": r["n"],
                                   "adil": round(1 / r["gol"], 2), "guclu": r["gol"] >= 0.80})
+            kay_now = round(gnow - _baz[(i7, f"{h}-{a}")][1], 2) if gnow is not None else None
+            try:
+                F5 = (R5.get(mid) or {}).get("F") or x["F"]
+                S += KA.karar(dk, h, a, F5, r, st, ah, (o or {}).get("ou"), kay_now, kirmizi)
+            except Exception as e:
+                _last["karar_hata"] = str(e)[:150]
             for s in S:
                 key = (mid, s["tip"], s["sec"])
                 if key not in var:
