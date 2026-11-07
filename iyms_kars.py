@@ -52,7 +52,38 @@ def db():
     c = sqlite3.connect(DB, timeout=30)
     c.execute("""CREATE TABLE IF NOT EXISTS k (mid INTEGER PRIMARY KEY, i INTEGER, ko TEXT, ev TEXT, dep TEXT, lig TEXT,
                  at_ilk TEXT, idd_ilk TEXT, at_son TEXT, idd_son TEXT)""")
+    for kol in ("at_son5 TEXT", "idd_son5 TEXT"):
+        try:
+            c.execute(f"ALTER TABLE k ADD COLUMN {kol}")
+        except sqlite3.OperationalError:
+            pass
     return c
+
+
+SON5 = (3, 7)          # mactan 3-7 dk once iddaa İY/MS anlik son kayit (para yonu icin)
+
+
+def son5_kaydet():
+    """baslamasina 3-7 dk kalan kayitli maclar -> iddaa İY/MS anlik oran (bir kez)"""
+    now = datetime.now(timezone.utc)
+    c = db()
+    L = [(m, i) for m, i, ko in c.execute("SELECT mid, i, ko FROM k WHERE idd_son5 IS NULL")
+         if now + timedelta(minutes=SON5[0]) <= datetime.fromisoformat(ko) <= now + timedelta(minutes=SON5[1])]
+    n = 0
+    for m, i in L:
+        try:
+            d = _get(f"{B}/event/{i}")["data"]
+            d = (d.get("events") or [d])[0] if isinstance(d, dict) else d
+            o = _iyms(d)
+        except Exception:
+            o = None
+        if o:
+            c.execute("UPDATE k SET at_son5=?, idd_son5=? WHERE mid=?", (now.isoformat(), json.dumps(o), m))
+            n += 1
+        time.sleep(0.4)
+    c.commit()
+    c.close()
+    return n
 
 
 def kaydet():
@@ -135,6 +166,13 @@ GRUPLAR = ("en yakın 3", "kalan 3", "en uzak 3")
 KOVALAR = ("iddaa ≥%15 yüksek", "iddaa %5-15 yüksek", "yakın (±%5)", "iddaa %5-15 düşük", "iddaa ≥%15 düşük")
 
 
+PARA_KOVA = ("para girdi ≥%15", "para girdi %5-15", "sabit (±%5)", "para çıktı %5-15", "para çıktı ≥%15")
+
+
+def _para_kova(d):
+    return PARA_KOVA[0] if d >= 0.15 else PARA_KOVA[1] if d >= 0.05 else PARA_KOVA[2] if d > -0.05 else PARA_KOVA[3] if d > -0.15 else PARA_KOVA[4]
+
+
 def _kova(d):
     return KOVALAR[0] if d >= 0.15 else KOVALAR[1] if d >= 0.05 else KOVALAR[2] if d > -0.05 else KOVALAR[3] if d > -0.15 else KOVALAR[4]
 
@@ -143,8 +181,8 @@ def hesap():
     """-> {"ozet": {...}, "gruplar": [...], "kovalar": [...], "maclar": [...]} (tum kayitlar)"""
     import oto_tahmin as O
     c = db()
-    K = {m: (json.loads(js), ev, dep, lg, ko, ji, ai) for m, js, ev, dep, lg, ko, ji, ai in
-         c.execute("SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk FROM k")}
+    K = {m: (json.loads(js), ev, dep, lg, ko, ji, ai, j5) for m, js, ev, dep, lg, ko, ji, ai, j5 in
+         c.execute("SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk, idd_son5 FROM k")}
     c.close()
     VK = _vk_oku()
     R = O._sonuclar([str(m) for m in K]) if K else {}
@@ -154,7 +192,19 @@ def hesap():
     marj_i = marj_v = 0.0
     n = yuksek = 0
     maclar = []
-    for m, (io, ev, dep, lg, ko, ji, ai) in K.items():
+    PK = {g: [0, 0, 0.0, 0.0] for g in PARA_KOVA}           # secim, tuttu, beklenen, iddaa (son) kar
+    PS = {g: [0, 0, 0.0, 0.0] for g in ("en çok para giren", "en çok para çıkan")}
+    n_para = n_son5 = 0
+    for m, (io, ev, dep, lg, ko, ji, ai, j5) in K.items():
+        # PARA YONU: iddaa ilk kayit -> son 5 dk (yoksa son 30 dk'lik kayit); ilk kayit mactan en az 2 saat once olmali
+        para = None
+        try:
+            i0, i1 = json.loads(ji), json.loads(j5 or "null") or io
+            if (datetime.fromisoformat(ko) - datetime.fromisoformat(ai)).total_seconds() >= 7200:
+                p0, p1 = _novig(i0), _novig(i1)
+                para = {k: (p1[k] - p0[k]) / p0[k] for k in S9}
+        except (TypeError, ValueError, KeyError, ZeroDivisionError):
+            para = None
         if m not in VK:
             continue
         vo, kil = VK[m]
@@ -167,9 +217,27 @@ def hesap():
         sira = sorted(S9, key=lambda k: abs(fark[k]))
         grup = {k: GRUPLAR[sira.index(k) // 3] for k in S9}
         maclar.append({"mid": m, "ko": ko, "ev": ev, "dep": dep, "lig": lg, "kilitli": kil, "skor": f"{r[0]}-{r[1]}" if bitti else None,
-                       "iy": f"{r[2]}-{r[3]}" if bitti else None, "sonuc": sonuc,
-                       "S": [{"sec": k, "idd": io[k], "vk": vo[k], "fark": round(100 * fark[k], 1), "grup": grup[k], "tuttu": k == sonuc}
-                             for k in sira]})
+                       "iy": f"{r[2]}-{r[3]}" if bitti else None, "sonuc": sonuc, "son5": bool(j5),
+                       "para": [{"sec": k, "d": round(100 * para[k]), "ilk": json.loads(ji)[k], "son": i1[k], "tuttu": k == sonuc}
+                                for k in sorted(S9, key=lambda k: -para[k])[:3]] if para else None,
+                       "S": [{"sec": k, "idd": io[k], "vk": vo[k], "fark": round(100 * fark[k], 1), "grup": grup[k], "tuttu": k == sonuc,
+                              "para": round(100 * para[k]) if para else None} for k in sira]})
+        if bitti and para:
+            n_para += 1
+            n_son5 += bool(j5)
+            p1 = _novig(i1)
+            for k in S9:
+                x = PK[_para_kova(para[k])]
+                x[0] += 1
+                x[1] += k == sonuc
+                x[2] += p1[k]
+                x[3] += (i1[k] - 1) if k == sonuc else -1
+            for g, k in (("en çok para giren", max(S9, key=para.get)), ("en çok para çıkan", min(S9, key=para.get))):
+                x = PS[g]
+                x[0] += 1
+                x[1] += k == sonuc
+                x[2] += p1[k]
+                x[3] += (i1[k] - 1) if k == sonuc else -1
         if not bitti or not kil:
             continue
         n += 1
@@ -189,7 +257,12 @@ def hesap():
     maclar.sort(key=lambda x: x["ko"], reverse=True)
     return {"ozet": {"kayit": len(K), "biten": n, "marj_i": round(100 * marj_i / n, 1) if n else None,
                      "marj_v": round(100 * marj_v / n, 1) if n else None, "yuksek": round(100 * yuksek / (9 * n)) if n else None},
-            "gruplar": [satir(g, G[g]) for g in GRUPLAR], "kovalar": [satir(g, KV[g]) for g in KOVALAR if KV[g][0]], "maclar": maclar}
+            "gruplar": [satir(g, G[g]) for g in GRUPLAR], "kovalar": [satir(g, KV[g]) for g in KOVALAR if KV[g][0]], "maclar": maclar,
+            "para": {"n": n_para, "son5": n_son5, "secim": [psatir(g, PS[g]) for g in PS], "kova": [psatir(g, PK[g]) for g in PARA_KOVA if PK[g][0]]}}
+
+
+def psatir(ad, x):
+    return {"ad": ad, "n": x[0], "w": x[1], "e": round(x[2], 1), "roi": round(100 * x[3] / x[0], 1) if x[0] else None, "kar": round(x[3], 2)}
 
 
 def rapor(yaz=print):
@@ -208,6 +281,11 @@ def rapor(yaz=print):
                 yaz(f"{x['ad']:20} {x['n']:6} {x['w']:6} {x['e']:9.1f} {x['roi_i']:+9.1f}% {x['roi_v']:+11.1f}%")
         yaz("")
     yaz("(beklenen = iki sitenin marjsız ihtimal ortalaması; ROI = o grubun her seçimine 1 birim, o sitenin oranıyla)")
+    P = H["para"]
+    yaz(f"\n— PARA YÖNÜ (iddaa ilk kayıt → son 5 dk): {P['n']} biten maç, {P['son5']}'inde son 5 dk kaydı var —")
+    for x in P["secim"] + P["kova"]:
+        if x["n"]:
+            yaz(f"{x['ad']:20} {x['n']:6} {x['w']:6} {x['e']:9.1f} {x['roi']:+9.1f}%")
 
 
 def get_page_data(gun=None):
@@ -244,12 +322,21 @@ def get_page_data(gun=None):
 
 def _loop():
     time.sleep(180)
+    t = 0
     while True:
+        if time.time() - t > TUR_SN:
+            t = time.time()
+            try:
+                _last.update(at=datetime.now(timezone.utc).isoformat(), log=kaydet(), hata=None)
+            except Exception as e:
+                _last["hata"] = str(e)[:200]
         try:
-            _last.update(at=datetime.now(timezone.utc).isoformat(), log=kaydet(), hata=None)
+            n = son5_kaydet()
+            if n:
+                _last["son5"] = f"{datetime.now(timezone.utc).isoformat()[11:16]} UTC +{n} maç son 5 dk kaydı"
         except Exception as e:
-            _last["hata"] = str(e)[:200]
-        time.sleep(TUR_SN)
+            _last["hata"] = "son5: " + str(e)[:150]
+        time.sleep(60)
 
 
 _started = False

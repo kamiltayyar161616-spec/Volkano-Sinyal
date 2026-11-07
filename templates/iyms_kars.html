@@ -23,7 +23,7 @@
 {% endblock %}
 {% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
 {% block content %}
-<div class="section-sub">Son kayıt: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~3 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %}</div>
+<div class="section-sub">Son kayıt: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~3 dk sonra)' }} · {{ d.last.log }}{% if d.last.son5 %} · {{ d.last.son5 }}{% endif %}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %}</div>
 
 <h2 class="section">📈 TÜM ZAMANLAR ({{ d.ozet.biten or 0 }} biten maç)</h2>
 {% if d.ozet.biten %}
@@ -35,6 +35,13 @@
 <div class="section-sub">Beklenen = iki sitenin marjsız ihtimal ortalaması. "Tuttu" beklenenden belirgin fazlaysa o grup bilgi taşıyor.</div>
 {% else %}<div class="section-sub">Henüz biten ve iki oranı da olan maç yok. İlk sonuçlar maçlar bittikçe gelir.</div>{% endif %}
 
+<h2 class="section">💸 PARA YÖNÜ · iddaa ilk kayıt → son 5 dk ({{ d.para.n if d.para else 0 }} biten maç)</h2>
+{% if d.para and d.para.n %}
+<div class="section-sub">Para = iddaa'nın marjsız ihtimalindeki değişim (oran düştükçe para giriyor). {{ d.para.son5 }} maçta maçtan 3-7 dk önceki kayıt var, diğerlerinde son 30 dk'lık kayıt kullanıldı. İlk kaydı maçtan 2 saatten az önce alınan maçlar sayılmaz. ROI iddaa'nın son oranıyla.</div>
+<table class="tt"><tr><th>seçim</th><th>maç/seçim</th><th>tuttu</th><th>beklenen</th><th>iddaa ROI</th></tr>
+{% for x in d.para.secim + d.para.kova %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten ve iki kaydı olan maç yok. Para yönü için ilk kayıt maçtan en az 2 saat önce alınmış olmalı.</div>{% endif %}
+
 <h2 class="section">📅 GÜN GÜN</h2>
 <div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/iyms-kars?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
 {% if d.gun_ozet and d.gun_ozet[0].n %}<table class="tt"><tr><th>{{ d.gun[8:10] }}.{{ d.gun[5:7] }} biten</th><th>seçim</th><th>tuttu</th><th>iddaa ROI</th><th>Volkano ROI</th></tr>
@@ -44,6 +51,7 @@
 <div class="kc">
   <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
   <div class="meta">{{ x.lig or '' }} · Volkano {{ 'kilit oranı' if x.kilitli else 'güncel oran (henüz kilitlenmedi)' }} · her satır: seçim · iddaa / Volkano · fark</div>
+  {% if x.para %}<div class="meta">💸 para (iddaa ilk → {{ 'son 5 dk' if x.son5 else 'son kayıt' }}): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
   <div class="g9">{% for g in ('en yakın 3', 'kalan 3', 'en uzak 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
     {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><span>{{ s.sec }}</span><span>{{ s.idd }}/{{ s.vk }}</span><span>{{ '%+.0f'|format(s.fark) }}%</span></div>{% endfor %}
   </div>{% endfor %}</div>
