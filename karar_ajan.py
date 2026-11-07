@@ -7,8 +7,8 @@ Kaynaklar (birbirini tekrar saymayan 4 bilgi grubu):
 Birlesik ihtimal = TARİH ve MODEL'in karne agirlikli ortalamasi + SAHA/PİYASA kayma duzeltmesi (karne agirlikli, ±puan).
 Sinyal sarti: en az 3 grup ayni yonu destekliyor + birlesik ihtimal piyasadan >= 5 puan yuksek + birlesik >= %40.
 Karne: gecmis gunlerin sinyal kayitlarindan her sinyal turunun gercek tutma orani (20+ biten sinyal varsa agirlik 0.5-1.5).
-SANAL KASA (gercek bahis YOK): 1000 TL ile baslar, kupon basi en az 50 TL, en fazla 100 TL. En az 2 kaynak ayni yonde. Sadece iddaa canli orani varken ve
-deger = iddaa orani x bizim ihtimal >= 1.10 ise oynar; tutar = ceyrek Kelly (serbest kasa x f/4), 50-100 TL arasi, 5 TL'ye yuvarli. Mac basina tek kupon."""
+SANAL KASA (gercek bahis YOK): 5000 TL ile baslar, kupon basi en az 100 TL, en fazla 500 TL. En az 2 kaynak ayni yonde. Sadece iddaa canli orani varken ve
+deger = iddaa orani x bizim ihtimal >= 1.10 ise oynar; tutar = ceyrek Kelly (serbest kasa x f/4), 100-500 TL arasi, 5 TL ye yuvarli. Mac basina tek kupon."""
 import json
 import os
 import re
@@ -19,7 +19,7 @@ KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "canli
 _karne = {"t": 0, "w": {}}
 ESIK_P = 30.0
 DEGER_ESIK = 1.10
-KASA0, MAX_BAHIS, MIN_BAHIS, KELLY = 1000.0, 100.0, 50.0, 0.25
+KASA0, MAX_BAHIS, MIN_BAHIS, KELLY = 5000.0, 500.0, 100.0, 0.25
 MIN_DESTEK = 2
 _kasa = {"t": 0, "v": None}
 
@@ -141,7 +141,7 @@ def kasa(zorla=False):
 
 
 def bahis_tutar(p, io, serbest):
-    """ceyrek Kelly, 50-100 TL arasina sikistirilir, 5 TL'ye yuvarli; serbest kasa 50 TL'nin altindaysa 0"""
+    """ceyrek Kelly, 100-500 TL arasina sikistirilir, 5 TL ye yuvarli; serbest kasa 100 TL altindaysa 0"""
     f = (p * io - 1) / (io - 1) if io > 1 else 0
     if f <= 0:
         return 0

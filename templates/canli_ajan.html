@@ -27,7 +27,7 @@
 <div class="section-sub">Son tur: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~2 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %} · sayfa dakikada bir yenilenir</div>
 
 {% set ks = d.kasa %}
-<h2 class="section">🧠 KARAR AJANI · SANAL KASA <span style="font-size:11px;color:var(--chalk-faint)">gerçek bahis yok · 1000 ₺ başlangıç · kupon 50-100 ₺ · en az 2 kaynak aynı yönde · sadece iddaa oranı × bizim ihtimal ≥ 1.10 ise · maç başı tek kupon</span></h2>
+<h2 class="section">🧠 KARAR AJANI · SANAL KASA <span style="font-size:11px;color:var(--chalk-faint)">gerçek bahis yok · 5000 ₺ başlangıç · kupon 100-500 ₺ · en az 2 kaynak aynı yönde · sadece iddaa oranı × bizim ihtimal ≥ 1.10 ise · maç başı tek kupon</span></h2>
 {% if ks %}<div class="kc s"><div class="ust"><span class="tk">Bakiye <b style="font-size:20px">{{ '%.2f'|format(ks.bakiye) }} ₺</b></span><span class="sk" style="font-size:16px;color:{{ '#3ccf7a' if ks.net >= 0 else '#ff5a4f' }}">{{ '%+.2f'|format(ks.net) }} ₺</span></div>
 <div class="meta">ROI <b>{{ ('%+.1f'|format(ks.roi)) ~ '%' if ks.roi is not none else '-' }}</b> · biten {{ ks.kazanan + ks.kaybeden }} kupon ({{ ks.kazanan }} ✓ / {{ ks.kaybeden }} ✗) · oynanan {{ '%.2f'|format(ks.yatirilan) }} ₺ · açık {{ ks.acik_n }} kupon {{ '%.2f'|format(ks.acik) }} ₺ · serbest {{ '%.2f'|format(ks.serbest) }} ₺</div></div>{% endif %}
 {% set kr = [] %}{% for s in d.log %}{% if s.tip == 'KARAR' and s.bahis %}{% set _ = kr.append(s) %}{% endif %}{% endfor %}
