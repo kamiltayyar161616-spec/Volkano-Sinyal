@@ -223,24 +223,34 @@ def run_cycle():
             h, a = p["ev"], p["dep"]          # 7M: ev/dep = skor, kev/kdep = kirmizi kart
             oz = ozellik(x, R5.get(mid))
             S = []
-            # istatistik ajani (LiveScore)
-            if mid not in _eid and LS:
-                m_ = IS.esle(x["ev"], x["dep"], LS)
-                _eid[mid] = m_["eid"] if m_ else ""
-            st = None
-            if _eid.get(mid) and dk >= 25 and n_ist < IS.ISTAT_MAX:
-                try:
-                    x0 = IS._d["istat"].get(_eid[mid])
-                    if not x0 or time.time() - x0["t"] >= IS.ISTAT_SN:
-                        n_ist += 1
-                    st = IS.ozet(IS.istat(_eid[mid]))
-                except Exception:
-                    st = IS.ozet(IS._d["istat"].get(_eid[mid]))
             if mid not in _iid and IL:
                 m_ = IC.esle(x["ev"], x["dep"], IL)
                 _iid[mid] = m_["i"] if m_ else ""
             idd_m = next((z for z in IL if z["i"] == _iid.get(mid)), None) if _iid.get(mid) else None
             idd = IC.ihtimal(idd_m["p"], h, a) if idd_m else None
+            # istatistik ajani: once iddaa canli takip ekrani (bgi), yoksa LiveScore
+            st = None
+            bgi = (idd_m or {}).get("bgi")
+            if bgi and dk >= 20 and n_ist < IS.ISTAT_MAX:
+                try:
+                    x0 = IS._d["istat"].get(f"bg:{bgi}")
+                    if not x0 or time.time() - x0["t"] >= IS.ISTAT_SN:
+                        n_ist += 1
+                    st = IS.ozet(IS.idd_istat(bgi))
+                except Exception:
+                    st = IS.ozet(IS._d["istat"].get(f"bg:{bgi}"))
+            if not st:
+                if mid not in _eid and LS:
+                    m_ = IS.esle(x["ev"], x["dep"], LS)
+                    _eid[mid] = m_["eid"] if m_ else ""
+                if _eid.get(mid) and dk >= 25 and n_ist < IS.ISTAT_MAX:
+                    try:
+                        x0 = IS._d["istat"].get(_eid[mid])
+                        if not x0 or time.time() - x0["t"] >= IS.ISTAT_SN:
+                            n_ist += 1
+                        st = IS.ozet(IS.istat(_eid[mid]))
+                    except Exception:
+                        st = IS.ozet(IS._d["istat"].get(_eid[mid]))
             kirmizi = bool((p.get("kev") or p.get("kdep")) or (st and (st["kirmizi"][0] or st["kirmizi"][1])))
             kk7 = (p.get("kev") or 0, p.get("kdep") or 0)
             dusuk_tempo = bool(st and dk >= 65 and h + a <= 1 and st["sut_top"] / max(dk, 1) < 0.13 and st["isabetli_top"] <= 4)
@@ -267,7 +277,8 @@ def run_cycle():
                     if not ((taraf == 1 and h > a) or (taraf == 2 and a > h)):
                         if st and st["baski"] == taraf:
                             S.append({"tip": "BİRLEŞİK", "sec": f"{'Ev' if taraf == 1 else 'Dep'} gol atar", "guclu": True,
-                                      "acik": f"canlı handikap {kay:+.2f} kaydı + istatistik baskı (korner {st['korner']}, isabetli {st['isabetli']}, şut {st['sut']})",
+                                      "acik": f"canlı handikap {kay:+.2f} kaydı + istatistik baskı (korner {st['korner']}, isabetli {st['isabetli']}, şut {st['sut']}"
+                                              + (f", tehlikeli atak {st['tatak']}" if st.get("tatak") else "") + ")",
                                       "p": None, "n": None})
                         S.append({"tip": "KAYMA", "sec": f"{'Ev' if taraf == 1 else 'Dep'} gol atar",
                                   "acik": f"canlı handikap aynı skorda {kay:+.2f} gol gücü {'eve' if taraf == 1 else 'deplasmana'} kaydı", "p": None, "n": None})
@@ -276,7 +287,8 @@ def run_cycle():
                 taraf = st["baski"]
                 if not ((taraf == 1 and h > a) or (taraf == 2 and a > h)) and not kirmizi:
                     S.append({"tip": "İSTAT", "sec": f"{'Ev' if taraf == 1 else 'Dep'} gol atar", "p": None, "n": None,
-                              "acik": f"baskı: korner {st['korner']}, isabetli şut {st['isabetli']}, şut {st['sut']}, top {st['top']}"})
+                              "acik": f"baskı: korner {st['korner']}, isabetli şut {st['isabetli']}, şut {st['sut']}, top {st['top']}"
+                                      + (f", tehlikeli atak {st['tatak']} (%{st['tatak_pay']})" if st.get("tatak") else "")})
             if dusuk_tempo and not kirmizi:
                 S.append({"tip": "İSTAT", "sec": "Maçta gol olmaz", "p": None, "n": None,
                           "acik": f"düşük tempo: {dk} dakikada {st['sut_top']} şut, {st['isabetli_top']} isabetli"})
@@ -402,7 +414,7 @@ def _test():
         F = c["oz"]
         py = c.get("idd") if c.get("idd") and "ev" in c["idd"] else (KA.piyasa(ah, ou, c["dkn"], h, a) if ah and ou else None)
         print(f"{c['dk']:>4} {c['skor']:5} {(c['ev'] + ' - ' + c['dep'])[:38]:38} | ✓  | "
-              f"{('✓ k' + st['korner'] + ' i' + st['isabetli'] + (' B' + str(st['baski']) if st['baski'] else '')) if st else ('eşleşmedi' if not _eid.get(c['mid']) else 'istat yok'):16} | "
+              f"{((st['kaynak'][:3] + ' k' + st['korner'] + ' i' + st['isabetli'] + (' ta' + st['tatak'] if st.get('tatak') else '') + (' B' + str(st['baski']) if st['baski'] else ''))) if st else ('eşleşmedi' if not _eid.get(c['mid']) else 'istat yok'):26} | "
               f"{'✓' if ah else '-'}/{'✓' if ou else '-'} | {'evet' if c['dkn'] >= 55 else '55dk altı':9} | {'iddaa' if c.get('idd') and 'ev' in c['idd'] else '7M' if py else '-':5} "
               f"{(str(round(100 * py['ev'])) + '/' + str(round(100 * py['x'])) + '/' + str(round(100 * py['dep']))) if py else '-':9} | "
               + ", ".join(f"{s['tip']}:{s['sec']}" for s in c["S"]))

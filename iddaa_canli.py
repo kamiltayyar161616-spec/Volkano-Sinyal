@@ -38,7 +38,7 @@ def liste():
         return _d["L"]
     E = _get()["data"]["events"]
     now = time.time()
-    L = [{"i": e["i"], "ev": e["hn"], "dep": e["an"], "s": e.get("s"), "p": _pazar(e)}
+    L = [{"i": e["i"], "ev": e["hn"], "dep": e["an"], "s": e.get("s"), "bgi": e.get("bgi"), "p": _pazar(e)}
          for e in E if e.get("sid") == 1 and e.get("d") and e["d"] < now]
     _d.update(t=time.time(), L=L, hata=None)
     return L
