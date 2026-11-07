@@ -444,6 +444,11 @@ def canli_ajan_page():
     return render_template("canli_ajan.html", d=canli_ajan.get_page_data(request.args.get("gun")), active_page="ajan")
 
 
+@app.route("/iyms-kars")
+def iyms_kars_page():
+    return render_template("iyms_kars.html", d=iyms_kars.get_page_data(request.args.get("gun")), active_page="iymsk")
+
+
 @app.route("/oto-tahmin/kupon")
 def oto_tahmin_kupon_page():
     return render_template("oto_tahmin.html", d=oto_tahmin.get_page_data(request.args.get("gun")), active_page="oto", mod="kupon")

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}SAHA — İY/MS iddaa vs Volkano{% endblock %}
+{% block page_tag %}⚖️ İY/MS iddaa–VOLKANO{% endblock %}
+{% block subtitle %}Tüm bültende iddaa ve Volkano'nun 9 İY/MS oranı karşılaştırılır (iddaa 30 dk'da bir, Volkano maçtan ~15 dk önceki kilit oranı). Her maçta seçenekler iki oran arasındaki farka göre sıralanır: <b>en yakın 3</b> / <b>kalan 3</b> / <b>en uzak 3</b>. ROI = gruptaki her seçime 1 birim, o sitenin oranıyla. Fark = iddaa ÷ Volkano − 1 (artı: iddaa daha yüksek veriyor).{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .ust{ display:flex; justify-content:space-between; gap:8px; font-weight:700; font-size:14.5px; }
+  .meta{ color:var(--chalk-faint); font-size:12px; margin-top:2px; }
+  .g9{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
+  .gb{ border-radius:10px; padding:6px 7px; background:var(--navy-deep); font-size:12px; }
+  .gb h4{ margin:0 0 4px; font-size:11px; color:#e0a030; font-weight:800; }
+  .sl{ display:flex; justify-content:space-between; padding:2px 0; font-family:'Space Grotesk',sans-serif; white-space:nowrap; }
+  .sl.ok{ background:rgba(40,160,90,.28); border-radius:5px; padding:2px 3px; font-weight:800; }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="300">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% block content %}
+<div class="section-sub">Son kayıt: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~3 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %}</div>
+
+<h2 class="section">📈 TÜM ZAMANLAR ({{ d.ozet.biten or 0 }} biten maç)</h2>
+{% if d.ozet.biten %}
+<div class="section-sub">Ortalama marj: iddaa %{{ d.ozet.marj_i }} · Volkano %{{ d.ozet.marj_v }} · seçimlerin %{{ d.ozet.yuksek }}'inde iddaa daha yüksek oran veriyor</div>
+<table class="tt"><tr><th>grup</th><th>seçim</th><th>tuttu</th><th>beklenen</th><th>iddaa ROI</th><th>Volkano ROI</th></tr>
+{% for x in d.gruplar %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi_i) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_i) }} br</span></td><td>{{ roi(x.roi_v) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_v) }} br</span></td></tr>{% endfor %}</table>
+<table class="tt"><tr><th>fark kovası</th><th>seçim</th><th>tuttu</th><th>beklenen</th><th>iddaa ROI</th><th>Volkano ROI</th></tr>
+{% for x in d.kovalar %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi_i) }}</td><td>{{ roi(x.roi_v) }}</td></tr>{% endfor %}</table>
+<div class="section-sub">Beklenen = iki sitenin marjsız ihtimal ortalaması. "Tuttu" beklenenden belirgin fazlaysa o grup bilgi taşıyor.</div>
+{% else %}<div class="section-sub">Henüz biten ve iki oranı da olan maç yok. İlk sonuçlar maçlar bittikçe gelir.</div>{% endif %}
+
+<h2 class="section">📅 GÜN GÜN</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/iyms-kars?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+{% if d.gun_ozet and d.gun_ozet[0].n %}<table class="tt"><tr><th>{{ d.gun[8:10] }}.{{ d.gun[5:7] }} biten</th><th>seçim</th><th>tuttu</th><th>iddaa ROI</th><th>Volkano ROI</th></tr>
+{% for x in d.gun_ozet %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ roi(x.roi_i) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_i) }} br</span></td><td>{{ roi(x.roi_v) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_v) }} br</span></td></tr>{% endfor %}</table>{% endif %}
+
+{% for x in d.L %}
+<div class="kc">
+  <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
+  <div class="meta">{{ x.lig or '' }} · Volkano {{ 'kilit oranı' if x.kilitli else 'güncel oran (henüz kilitlenmedi)' }} · her satır: seçim · iddaa / Volkano · fark</div>
+  <div class="g9">{% for g in ('en yakın 3', 'kalan 3', 'en uzak 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
+    {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><span>{{ s.sec }}</span><span>{{ s.idd }}/{{ s.vk }}</span><span>{{ '%+.0f'|format(s.fark) }}%</span></div>{% endfor %}
+  </div>{% endfor %}</div>
+</div>
+{% else %}<div class="section-sub">Bu gün için eşleşen maç yok.</div>{% endfor %}
+{% endblock %}

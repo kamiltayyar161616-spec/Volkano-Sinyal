@@ -113,75 +113,133 @@ def _novig(o):
     return {k: x / t for k, x in q.items()}
 
 
-def rapor(yaz=print):
+def _vk_oku():
+    """Volkano İY/MS: kilitli son oran (iyv_islenen) yoksa guncel (iyv_aday) -> {mid: (oranlar, kilitli_mi)}"""
+    VK = {}
+    if not os.path.exists(IYV):
+        return VK
+    v = sqlite3.connect(f"file:{IYV}?mode=ro", uri=True, timeout=10)
+    for tablo, kil in (("iyv_aday", False), ("iyv_islenen", True)):
+        for m, vk in v.execute(f"SELECT mid, vk FROM {tablo}"):
+            try:
+                o = (json.loads(vk) or {}).get("47")
+            except (TypeError, ValueError):
+                continue
+            if o and all(k in o for k in S9):
+                VK[m] = (o, kil)
+    v.close()
+    return VK
+
+
+GRUPLAR = ("en yakın 3", "kalan 3", "en uzak 3")
+KOVALAR = ("iddaa ≥%15 yüksek", "iddaa %5-15 yüksek", "yakın (±%5)", "iddaa %5-15 düşük", "iddaa ≥%15 düşük")
+
+
+def _kova(d):
+    return KOVALAR[0] if d >= 0.15 else KOVALAR[1] if d >= 0.05 else KOVALAR[2] if d > -0.05 else KOVALAR[3] if d > -0.15 else KOVALAR[4]
+
+
+def hesap():
+    """-> {"ozet": {...}, "gruplar": [...], "kovalar": [...], "maclar": [...]} (tum kayitlar)"""
     import oto_tahmin as O
     c = db()
-    K = {m: (json.loads(js), ev, dep, ko) for m, js, ev, dep, ko in c.execute("SELECT mid, idd_son, ev, dep, ko FROM k")}
+    K = {m: (json.loads(js), ev, dep, lg, ko, ji, ai) for m, js, ev, dep, lg, ko, ji, ai in
+         c.execute("SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk FROM k")}
     c.close()
-    if not K:
-        yaz("henüz kayıt yok")
-        return
-    v = sqlite3.connect(f"file:{IYV}?mode=ro", uri=True, timeout=10)
-    VK = {}
-    for m, vk in v.execute("SELECT mid, vk FROM iyv_islenen"):
-        try:
-            VK[m] = (json.loads(vk) or {}).get("47")
-        except (TypeError, ValueError):
-            pass
-    v.close()
-    R = O._sonuclar([str(m) for m in K])
+    VK = _vk_oku()
+    R = O._sonuclar([str(m) for m in K]) if K else {}
     f = lambda x, y: "1" if x > y else "2" if y > x else "X"
-    G = {g: [0, 0, 0.0, 0.0, 0.0] for g in ("en yakın 3", "kalan 3", "en uzak 3")}     # secim, tuttu, beklenen, iddaa kar, volkano kar
-    KV = {}
+    G = {g: [0, 0, 0.0, 0.0, 0.0] for g in GRUPLAR}
+    KV = {g: [0, 0, 0.0, 0.0, 0.0] for g in KOVALAR}
     marj_i = marj_v = 0.0
     n = yuksek = 0
-    for m, (io, ev, dep, ko) in K.items():
-        vo = VK.get(m)
-        r = R.get(str(m))
-        if not vo or not all(k in vo for k in S9) or not r or r[0] is None or r[2] is None:
+    maclar = []
+    for m, (io, ev, dep, lg, ko, ji, ai) in K.items():
+        if m not in VK:
             continue
-        n += 1
-        sonuc = f"{f(r[2], r[3])}/{f(r[0], r[1])}"
-        marj_i += sum(1 / io[k] for k in S9) - 1
-        marj_v += sum(1 / vo[k] for k in S9) - 1
+        vo, kil = VK[m]
+        r = R.get(str(m)) or (None,) * 4
+        bitti = r[0] is not None and r[2] is not None
+        sonuc = f"{f(r[2], r[3])}/{f(r[0], r[1])}" if bitti else None
         pi, pv = _novig(io), _novig(vo)
         p = {k: (pi[k] + pv[k]) / 2 for k in S9}
         fark = {k: io[k] / vo[k] - 1 for k in S9}
-        yuksek += sum(1 for k in S9 if fark[k] > 0)
         sira = sorted(S9, key=lambda k: abs(fark[k]))
-        for g, L in (("en yakın 3", sira[:3]), ("kalan 3", sira[3:6]), ("en uzak 3", sira[6:])):
-            for k in L:
-                x = G[g]
+        grup = {k: GRUPLAR[sira.index(k) // 3] for k in S9}
+        maclar.append({"mid": m, "ko": ko, "ev": ev, "dep": dep, "lig": lg, "kilitli": kil, "skor": f"{r[0]}-{r[1]}" if bitti else None,
+                       "iy": f"{r[2]}-{r[3]}" if bitti else None, "sonuc": sonuc,
+                       "S": [{"sec": k, "idd": io[k], "vk": vo[k], "fark": round(100 * fark[k], 1), "grup": grup[k], "tuttu": k == sonuc}
+                             for k in sira]})
+        if not bitti or not kil:
+            continue
+        n += 1
+        marj_i += sum(1 / io[k] for k in S9) - 1
+        marj_v += sum(1 / vo[k] for k in S9) - 1
+        yuksek += sum(1 for k in S9 if fark[k] > 0)
+        for k in S9:
+            for x in (G[grup[k]], KV[_kova(fark[k])]):
                 x[0] += 1
                 x[1] += k == sonuc
                 x[2] += p[k]
                 x[3] += (io[k] - 1) if k == sonuc else -1
                 x[4] += (vo[k] - 1) if k == sonuc else -1
-        for k in S9:
-            d = fark[k]
-            kv = "iddaa ≥%15 yüksek" if d >= 0.15 else "iddaa %5-15 yüksek" if d >= 0.05 else "yakın (±%5)" if d > -0.05 \
-                else "iddaa %5-15 düşük" if d > -0.15 else "iddaa ≥%15 düşük"
-            x = KV.setdefault(kv, [0, 0, 0.0, 0.0, 0.0])
-            x[0] += 1
-            x[1] += k == sonuc
-            x[2] += p[k]
-            x[3] += (io[k] - 1) if k == sonuc else -1
-            x[4] += (vo[k] - 1) if k == sonuc else -1
-    yaz(f"kayıtlı iddaa İY/MS: {len(K)} maç · biten ve Volkano kilit oranı olan: {n}")
-    if not n:
+    satir = lambda ad, x: {"ad": ad, "n": x[0], "w": x[1], "e": round(x[2], 1),
+                           "roi_i": round(100 * x[3] / x[0], 1) if x[0] else None, "roi_v": round(100 * x[4] / x[0], 1) if x[0] else None,
+                           "kar_i": round(x[3], 2), "kar_v": round(x[4], 2)}
+    maclar.sort(key=lambda x: x["ko"], reverse=True)
+    return {"ozet": {"kayit": len(K), "biten": n, "marj_i": round(100 * marj_i / n, 1) if n else None,
+                     "marj_v": round(100 * marj_v / n, 1) if n else None, "yuksek": round(100 * yuksek / (9 * n)) if n else None},
+            "gruplar": [satir(g, G[g]) for g in GRUPLAR], "kovalar": [satir(g, KV[g]) for g in KOVALAR if KV[g][0]], "maclar": maclar}
+
+
+def rapor(yaz=print):
+    H = hesap()
+    o = H["ozet"]
+    yaz(f"kayıtlı iddaa İY/MS: {o['kayit']} maç · biten ve Volkano kilit oranı olan: {o['biten']}")
+    if not o["biten"]:
         yaz("henüz biten eşleşmiş maç yok")
         return
-    yaz(f"ortalama marj: iddaa %{100 * marj_i / n:.1f} · Volkano %{100 * marj_v / n:.1f} · seçimlerin %{100 * yuksek / (9 * n):.0f}'inde iddaa oranı daha yüksek\n")
+    yaz(f"ortalama marj: iddaa %{o['marj_i']} · Volkano %{o['marj_v']} · seçimlerin %{o['yuksek']}'inde iddaa oranı daha yüksek\n")
     bas = f"{'grup':20} {'seçim':>6} {'tuttu':>6} {'beklenen':>9} {'iddaa ROI':>10} {'Volkano ROI':>12}"
-    yaz("— iddaa/Volkano farkına göre (her maçta 9 seçenek sıralı) —\n" + bas)
-    for g, (s, w, e, ki, kv) in G.items():
-        yaz(f"{g:20} {s:6} {w:6} {e:9.1f} {100 * ki / s:+9.1f}% {100 * kv / s:+11.1f}%")
-    yaz("\n— fark kovaları —\n" + bas)
-    for g in ("iddaa ≥%15 yüksek", "iddaa %5-15 yüksek", "yakın (±%5)", "iddaa %5-15 düşük", "iddaa ≥%15 düşük"):
-        if g in KV:
-            s, w, e, ki, kv = KV[g]
-            yaz(f"{g:20} {s:6} {w:6} {e:9.1f} {100 * ki / s:+9.1f}% {100 * kv / s:+11.1f}%")
-    yaz("\n(beklenen = iki sitenin marjsız ihtimal ortalaması; ROI = o grubun her seçimine 1 birim, o sitenin oranıyla)")
+    for baslik, L in (("— iddaa/Volkano farkına göre (her maçta 9 seçenek sıralı) —", H["gruplar"]), ("— fark kovaları —", H["kovalar"])):
+        yaz(baslik + "\n" + bas)
+        for x in L:
+            if x["n"]:
+                yaz(f"{x['ad']:20} {x['n']:6} {x['w']:6} {x['e']:9.1f} {x['roi_i']:+9.1f}% {x['roi_v']:+11.1f}%")
+        yaz("")
+    yaz("(beklenen = iki sitenin marjsız ihtimal ortalaması; ROI = o grubun her seçimine 1 birim, o sitenin oranıyla)")
+
+
+def get_page_data(gun=None):
+    from zoneinfo import ZoneInfo
+    TR = ZoneInfo("Europe/Istanbul")
+    try:
+        H = hesap()
+    except Exception as e:
+        return {"last": _last, "hata": str(e)[:200], "ozet": {}, "gruplar": [], "kovalar": [], "maclar": [], "gunler": [], "gun": gun}
+    for x in H["maclar"]:
+        t = datetime.fromisoformat(x["ko"]).astimezone(TR)
+        x["gun"], x["saat"] = t.date().isoformat(), t.strftime("%H:%M")
+    gunler = sorted({x["gun"] for x in H["maclar"]}, reverse=True)
+    bugun = datetime.now(TR).date().isoformat()
+    if gun not in gunler:
+        gun = bugun if bugun in gunler or not gunler else gunler[0]
+    L = sorted([x for x in H["maclar"] if x["gun"] == gun], key=lambda x: x["ko"])
+    G = {g: [0, 0, 0.0, 0.0] for g in GRUPLAR}
+    for x in L:
+        if not x["sonuc"]:
+            continue
+        for s in x["S"]:
+            y = G[s["grup"]]
+            y[0] += 1
+            y[1] += s["tuttu"]
+            y[2] += (s["idd"] - 1) if s["tuttu"] else -1
+            y[3] += (s["vk"] - 1) if s["tuttu"] else -1
+    H.update(last=_last, gunler=gunler, gun=gun, L=L,
+             gun_ozet=[{"ad": g, "n": v[0], "w": v[1], "kar_i": round(v[2], 2), "kar_v": round(v[3], 2),
+                        "roi_i": round(100 * v[2] / v[0], 1) if v[0] else None, "roi_v": round(100 * v[3] / v[0], 1) if v[0] else None}
+                       for g, v in G.items()])
+    return H
 
 
 def _loop():
