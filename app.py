@@ -46,6 +46,7 @@ import kalkan
 import gecpara
 import desen_tab
 import oto_tahmin
+import canli_ajan
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -437,6 +438,11 @@ def oto_tahmin_json():
                     headers={"Content-Disposition": f"attachment; filename={ad}", "Cache-Control": "no-store"})
 
 
+@app.route("/canli-ajan")
+def canli_ajan_page():
+    return render_template("canli_ajan.html", d=canli_ajan.get_page_data(request.args.get("gun")), active_page="ajan")
+
+
 @app.route("/oto-tahmin/kupon")
 def oto_tahmin_kupon_page():
     return render_template("oto_tahmin.html", d=oto_tahmin.get_page_data(request.args.get("gun")), active_page="oto", mod="kupon")
@@ -569,4 +575,5 @@ if __name__ == "__main__":
     gecpara.start_background()
     desen_tab.start_background()
     oto_tahmin.start_background()
+    canli_ajan.start_background()
     app.run(host="0.0.0.0", port=8080)

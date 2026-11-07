@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}SAHA — CANLI AJAN{% endblock %}
+{% block page_tag %}🔴 CANLI AJAN{% endblock %}
+{% block subtitle %}Oynanan maçlar dakikada bir izlenir (7M canlı program + canlı Asya handikap / alt-üst). Maç önü yüzde ve son 5 dk para yönü Oto Tahmin'den gelir. Sinyaller: <b>ARŞİV</b> = 60/70/80. dakikada aynı skor + aynı para yönü + aynı favori gücündeki geçmiş maçlarda henüz gerçekleşmemiş sonucun tutma %'si (%45+, güçlü %55+); <b>GOL</b> = arşivde maçta bir gol daha %70+; <b>KAYMA</b> = canlı handikap aynı skorda 10+ dk içinde bir takıma 0.25+ gol gücü kaydı. "Adil" = arşiv %'sinin oranı: Bilyoner bunun üstünü veriyorsa değerli. Kırmızı kart bilgisi yok, ekrandan kontrol et.{% endblock %}
+{% block extra_style %}
+<style>
+  .kc{ margin:0 16px 12px; padding:12px 14px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .kc.s{ border-color:#e0a030; box-shadow:0 0 0 1px #e0a03055 inset; }
+  .ust{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .dk{ font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:15px; color:#ff5a4f; min-width:52px; }
+  .tk{ flex:1; font-size:15px; font-weight:700; line-height:1.3; }
+  .sk{ font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:800; }
+  .meta{ color:var(--chalk-faint); font-size:12px; margin-top:4px; }
+  .sg{ margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--navy-deep); border-left:3px solid #e0a030; font-size:13.5px; }
+  .sg.g{ border-left-color:var(--turf-bright); }
+  .sg b{ font-size:14.5px; }
+  .tip{ display:inline-block; font-size:10.5px; font-weight:800; padding:1px 6px; border-radius:6px; background:#e0a03033; color:#e0a030; margin-right:6px; }
+  .tt{ width:calc(100% - 32px); margin:0 16px 12px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:left; } .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); vertical-align:top; }
+  tr.ok td{ background:rgba(40,160,90,.16); } tr.ko td{ background:rgba(200,70,60,.10); }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="60">
+{% endblock %}
+{% block content %}
+<div class="section-sub">Son tur: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~2 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %} · sayfa dakikada bir yenilenir</div>
+
+<h2 class="section">🔥 CANLI MAÇLAR ({{ d.canli|length }})</h2>
+{% for c in d.canli %}
+<div class="kc {{ 's' if c.S else '' }}">
+  <div class="ust"><span class="dk">{{ c.dk }}{{ "'" if c.dk[:1].isdigit() else '' }}</span><span class="tk">{{ c.ev }}<br>{{ c.dep }}</span><span class="sk">{{ c.skor }}</span></div>
+  <div class="meta">{{ c.lig or '' }} · maç önü {{ c.oz.p|join(' / ') }} · {{ c.oz.fav_ad }} · para {{ c.oz.para }} ({{ '%+.1f'|format(c.oz.dd) }}p) · gol çizgisi {{ c.oz.L or '-' }}</div>
+  {% if c.ah or c.ou %}<div class="meta">canlı: {% if c.ah %}AH {{ c.ah.cizgi }} ({{ c.ah.p1 }}/{{ c.ah.p2 }}){% if c.kay %} · kayma {{ '%+.2f'|format(c.kay) }}{% endif %}{% endif %}{% if c.ou %} · AÜ {{ c.ou.cizgi }} (üst {{ c.ou.p1 }} / alt {{ c.ou.p2 }}){% endif %}</div>{% endif %}
+  {% for n in c.oz.not %}<div class="meta">⚡ {{ n }}</div>{% endfor %}
+  {% for s in c.S %}<div class="sg {{ 'g' if s.guclu else '' }}"><span class="tip">{{ s.tip }}</span><b>{{ s.sec }}</b>{% if s.p %} · arşiv %{{ s.p }} · adil {{ s.adil }} · {{ s.n }} maç{% endif %}<div class="meta">{{ s.acik }}</div></div>{% endfor %}
+</div>
+{% else %}<div class="section-sub">Şu an Oto listesinde oynanan maç yok.</div>{% endfor %}
+
+<h2 class="section">📒 SİNYAL KAYDI</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/canli-ajan?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+{% if d.ozet %}<table class="tt"><tr><th>sinyal</th><th>biten</th><th>tuttu</th></tr>
+{% for k, n, w, p in d.ozet %}<tr><td><b>{{ k }}</b></td><td>{{ n }}</td><td><b>{{ w }} · %{{ p }}</b></td></tr>{% endfor %}</table>{% endif %}
+{% if d.log %}<table class="tt"><tr><th>saat</th><th>maç</th><th>sinyal</th><th>sonuç</th></tr>
+{% for s in d.log %}<tr class="{{ 'ok' if s.sonuc else 'ko' if s.sonuc is not none else '' }}"><td>{{ s.saat }}<br><span class="meta">{{ s.dk }}' {{ s.skor }}</span></td>
+<td><b>{{ s.ev }} – {{ s.dep }}</b><br><span class="meta">{{ s.lig or '' }}</span></td>
+<td><span class="tip">{{ s.tip }}</span><b>{{ s.sec }}</b>{% if s.p %}<br><span class="meta">%{{ s.p }} · adil {{ s.adil }}</span>{% endif %}</td>
+<td>{% if s.ft %}<b>{{ s.ft }}</b> {{ '✓' if s.sonuc else '✗' if s.sonuc is not none else '' }}{% else %}<span class="meta">bekliyor</span>{% endif %}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Bu gün için sinyal yok.</div>{% endif %}
+{% endblock %}

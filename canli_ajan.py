@@ -1,0 +1,312 @@
+"""CANLI AJAN — oynanan maclari dakikada bir izler, arsivde kanitlanmis kurallar tetiklenince sinyal uretir.
+Sayfa: /canli-ajan   (bildirim yok, sadece sayfa)
+Kaynaklar (hepsi izinli): 7M sxl.js (canli program: dakika/skor), 7M DataByLive2 _ah/_ou (canli oran),
+Oto Tahmin gun dosyalari (mac onu yuzde, son 5 dk para yonu, notlar), 7M arsivi (kural tablolari, gunde bir hesaplanir).
+Sinyal turleri:
+  ARŞİV   : X. dakikada skor S + mac onu para yonu + favori gucu -> arsivde henuz gerceklesmemis bir sonuc %45+ (guclu %55+)
+  GOL     : arsivde 'macta bir gol daha' %70+
+  KAYMA   : canli Asya handikabi ayni skorda 10+ dk icinde bir takima 0.25+ gol gucu kaydi, o takim kazanmiyor -> o takim gol atar
+Sonuclar: Oto'nun skor kaynagi (NowGoal + 7M yedek) ile mac bitince isaretlenir."""
+import json
+import os
+import re
+import threading
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+
+import m7
+import oto_tahmin as O
+
+KOK = os.path.dirname(os.path.abspath(__file__))
+KLASOR = os.path.join(KOK, "data", "canli_ajan")
+TABLO = os.path.join(KLASOR, "tablo.json")
+TR = timezone(timedelta(hours=3))
+DAKIKALAR = (60, 70, 80)
+MIN_N = 40
+ORAN_SN = 180                 # bir macin canli oranini en sik bu aralikla cek
+ORAN_MAX = 25                 # tur basina en fazla bu kadar macin oranini cek
+BUL_MAX = 15                  # tur basina en fazla bu kadar mac icin 7M numarasi ara
+_kilit = threading.Lock()
+_last = {"at": None, "log": "", "hata": None, "canli": []}
+_oran = {}                    # i7 -> {"t", "ah", "ou"}
+_baz = {}                     # (i7, skor) -> (t, guc)
+
+
+# ---------------------------------------------------------------- arsiv kural tablosu
+def tablo_hesapla():
+    import m7_arsiv as A
+    import m7_canli_kural as K
+    import m7_desen as D
+    c = A.db()
+    rows = c.execute("SELECT ou, ah, skor, goller, ko FROM mac WHERE goller IS NOT NULL AND ah IS NOT NULL").fetchall()
+    c.close()
+    tum = tuple(set(D.ASYA) | set(D.AVRUPA) | {D.PIN, "s2"})
+    S = defaultdict(lambda: [0, 0, 0, 0, 0])
+    for ou, ah, sk, gl, ko in rows:
+        skor = A.skor_al(sk, gl, A._ko_tahmin(ko, ou))
+        if not skor:
+            continue
+        try:
+            G = json.loads(gl)
+            h = D.ozet(json.loads(ah), D.ah_g, tum)
+        except (ValueError, TypeError, KeyError, IndexError):
+            continue
+        if not h:
+            continue
+        fh, fa = (int(x) for x in skor.split("-"))
+        if G and tuple(K.skor_an(G, 200)) != (fh, fa):
+            continue
+        P, F = K.kova_para(h[1] - h[0]).split(" ")[1], K.kova_fav(h[1])
+        son = 1 if fh > fa else 2 if fa > fh else 0
+        for t in DAKIKALAR:
+            sh, sa = K.skor_an(G, t)
+            if sh + sa > 5:
+                continue
+            res = (son == 1, son == 0, son == 2, fh + fa > sh + sa)
+            for k in ((t, f"{sh}-{sa}", P, F), (t, f"{sh}-{sa}", "*", F), (t, f"{sh}-{sa}", P, "*"), (t, f"{sh}-{sa}", "*", "*")):
+                x = S["|".join(map(str, k))]
+                x[0] += 1
+                for i, v in enumerate(res):
+                    x[i + 1] += v
+    out = {"at": datetime.now(timezone.utc).isoformat(), "t": {k: v for k, v in S.items()}}
+    os.makedirs(KLASOR, exist_ok=True)
+    json.dump(out, open(TABLO, "w"))
+    return out
+
+
+def tablo():
+    try:
+        T = json.load(open(TABLO))
+        if datetime.fromisoformat(T["at"]) > datetime.now(timezone.utc) - timedelta(days=1):
+            return T["t"]
+    except (OSError, ValueError, KeyError):
+        pass
+    return tablo_hesapla()["t"]
+
+
+def kural(T, dk, skor, para, fav):
+    t = 60 if dk < 65 else 70 if dk < 78 else 80
+    for p, f in ((para, fav), ("*", fav), (para, "*"), ("*", "*")):
+        x = T.get(f"{t}|{skor}|{p}|{f}")
+        if x and x[0] >= MIN_N:
+            n = x[0]
+            return {"t": t, "kova": f"{t}' {skor} · {'para ' + p if p != '*' else 'para —'} · {f if f != '*' else 'favori —'}", "n": n,
+                    "ev": x[1] / n, "x": x[2] / n, "dep": x[3] / n, "gol": x[4] / n}
+    return None
+
+
+# ---------------------------------------------------------------- canli oran (7M)
+def _canli_son(i7, ek):
+    import m7_kesif as MK
+    st, b = MK.get(f"https://px-odds.7mdt.com/DataByLive2/{i7}_{ek}.js")
+    if st != 200:
+        return None
+    best = {}
+    for blk in re.split(r"p\['\d+'\]\s*=\s*", b)[1:]:
+        nm = re.search(r"'name':'([^']*)'", blk)
+        if not nm:
+            continue
+        L = []
+        for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
+            g = dict(re.findall(r"'(\w+)':'([^']*)'", e))
+            if g.get("score"):
+                L.append((m7.t8(g.get("dt")), g))
+        L = [x for x in L if x[0]]
+        if L:
+            best[nm.group(1)] = max(L, key=lambda x: x[0])[1]
+    g = best.get("Pinnacle Sports") or best.get("SBOBET") or next(iter(best.values()), None)
+    try:
+        return {"cizgi": float(g["p3"]), "p1": float(g["p1"]), "p2": float(g["p2"]), "skor": g["score"]} if g else None
+    except (KeyError, ValueError):
+        return None
+
+
+def ah_guc(a):
+    """ev lehine gol gucu (7M AH: cizgi = ev handikabi, eksi = ev veriyor)"""
+    try:
+        p = (1 / a["p1"]) / (1 / a["p1"] + 1 / a["p2"])
+        return -a["cizgi"] + (p - 0.5) * 4
+    except (TypeError, ZeroDivisionError, KeyError):
+        return None
+
+
+# ---------------------------------------------------------------- mac onu ozellikleri (Oto)
+def ozellik(x, s5):
+    F = (s5 or {}).get("F") or x["F"]
+    d = (s5 or {}).get("d") or [0, 0, 0]
+    fav = F.get("fav", 0)
+    ah = F.get("ah")
+    pf = F.get("pf") or max(F.get("p", [0.4, 0, 0.4])[0], F.get("p", [0.4, 0, 0.4])[2])
+    if ah is not None:
+        s = abs(ah)
+        guc = "güçlü" if s >= 1.0 else "orta" if s >= 0.5 else "denk"
+    else:
+        guc = "güçlü" if pf >= 0.58 else "orta" if pf >= 0.45 else "denk"
+    dd = (d[0] - d[2]) if len(d) == 3 else 0
+    para = "EVE" if dd >= 5 else "DEPE" if dd <= -5 else "sabit"
+    return {"fav": fav, "fav_ad": f"fav {'ev' if fav == 0 else 'dep'} {guc}", "pf": round(100 * pf), "para": para, "dd": round(dd, 1),
+            "L": F.get("L"), "ah": ah, "p": [round(100 * q) for q in F.get("p", [])], "not": (s5 or {}).get("not") or []}
+
+
+# ---------------------------------------------------------------- dongu
+def _gunler():
+    now = datetime.now(TR)
+    g = [(now - timedelta(hours=O.SAAT)).date().isoformat()]
+    if now.hour < O.SAAT + 3:
+        g.append((now - timedelta(hours=O.SAAT) - timedelta(days=1)).date().isoformat())
+    return g
+
+
+def _log_dosya(g):
+    return os.path.join(KLASOR, f"{g}.json")
+
+
+def _log_oku(g):
+    try:
+        return json.load(open(_log_dosya(g), encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def run_cycle():
+    import kelly_tab as K
+    now = datetime.now(timezone.utc)
+    P = m7.program()
+    C = O._cache_oku()
+    T = tablo()
+    canli, yeni_sinyal, n_bul, n_oran = [], 0, 0, 0
+    for g in _gunler():
+        v = O._oku(g) or {}
+        R5 = O._son5_oku(g) or {}
+        LOG = _log_oku(g)
+        var = {(s["mid"], s["tip"], s["sec"]) for s in LOG}
+        for mid, x in (v.get("maclar") or {}).items():
+            ko = datetime.fromisoformat(x["ko"])
+            if not (now - timedelta(minutes=125) < ko < now + timedelta(minutes=3)):
+                continue
+            i7 = C["id"].get(mid)
+            if not i7 and n_bul < BUL_MAX:
+                n_bul += 1
+                try:
+                    b = K.m7_bul(x["ev"], x["dep"], ko)
+                    i7 = b[1] if b else 0
+                except Exception:
+                    i7 = 0
+                C["id"][mid] = i7 or 0
+            p = P.get(int(i7)) if i7 else None
+            if not p or p["durum"] not in (1, 2, 3):
+                continue
+            dks = m7.dakika(p, now)
+            dk = 45 if p["durum"] == 2 else int(re.sub(r"\D", "", dks) or 0) + (2 if "+" in dks else 0)
+            h, a = p["kev"], p["kdep"]
+            oz = ozellik(x, R5.get(mid))
+            S = []
+            # canli oran (2. yari ve devre arasi, ya da sinyal adayi)
+            o = _oran.get(i7)
+            if (dk >= 40) and (not o or time.time() - o["t"] > ORAN_SN) and n_oran < ORAN_MAX:
+                n_oran += 1
+                try:
+                    o = {"t": time.time(), "ah": _canli_son(i7, "ah"), "ou": _canli_son(i7, "ou")}
+                    _oran[i7] = o
+                except Exception:
+                    pass
+            ah = (o or {}).get("ah")
+            gnow = ah_guc(ah) if ah else None
+            if gnow is not None:
+                k = (i7, f"{h}-{a}")
+                if k not in _baz:
+                    _baz[k] = (time.time(), gnow)
+                t0, g0 = _baz[k]
+                kay = gnow - g0
+                if time.time() - t0 >= 600 and abs(kay) >= 0.25:
+                    taraf = 1 if kay > 0 else 2
+                    if not ((taraf == 1 and h > a) or (taraf == 2 and a > h)):
+                        S.append({"tip": "KAYMA", "sec": f"{'Ev' if taraf == 1 else 'Dep'} gol atar",
+                                  "acik": f"canlı handikap aynı skorda {kay:+.2f} gol gücü {'eve' if taraf == 1 else 'deplasmana'} kaydı", "p": None, "n": None})
+            # arsiv kurali
+            if dk >= 55 and (h + a) <= 5:
+                r = kural(T, dk, f"{h}-{a}", oz["para"], oz["fav_ad"])
+                if r:
+                    cur = "ev" if h > a else "dep" if a > h else "x"
+                    for kk, ad in (("ev", "MS 1"), ("x", "MS X"), ("dep", "MS 2")):
+                        if kk != cur and r[kk] >= 0.45:
+                            S.append({"tip": "ARŞİV", "sec": ad, "acik": r["kova"], "p": round(100 * r[kk], 1), "n": r["n"],
+                                      "adil": round(1 / r[kk], 2), "guclu": r[kk] >= 0.55})
+                    if r["gol"] >= 0.70:
+                        S.append({"tip": "GOL", "sec": "Maçta gol olur", "acik": r["kova"], "p": round(100 * r["gol"], 1), "n": r["n"],
+                                  "adil": round(1 / r["gol"], 2), "guclu": r["gol"] >= 0.80})
+            for s in S:
+                key = (mid, s["tip"], s["sec"])
+                if key not in var:
+                    var.add(key)
+                    LOG.append(dict(s, mid=mid, ev=x["ev"], dep=x["dep"], lig=x.get("lig"), dk=dk, skor=f"{h}-{a}",
+                                    at=now.isoformat(), saat=datetime.now(TR).strftime("%H:%M")))
+                    yeni_sinyal += 1
+            canli.append({"mid": mid, "i7": i7, "ev": x["ev"], "dep": x["dep"], "lig": x.get("lig"), "dk": dks or str(dk),
+                          "dkn": dk, "skor": f"{h}-{a}", "iy": p.get("iy"), "oz": oz, "S": S,
+                          "ah": ah, "ou": (o or {}).get("ou"), "kay": round(gnow - _baz[(i7, f'{h}-{a}')][1], 2) if gnow is not None else None})
+        if LOG:
+            os.makedirs(KLASOR, exist_ok=True)
+            with _kilit:
+                json.dump(LOG, open(_log_dosya(g), "w", encoding="utf-8"), ensure_ascii=False)
+    with O._kilit:
+        json.dump(C, open(O.LIG_DOSYA, "w", encoding="utf-8"), ensure_ascii=False)
+    canli.sort(key=lambda c: (-len(c["S"]), -c["dkn"]))
+    _last.update(at=now.isoformat(), canli=canli, hata=None,
+                 log=f"{len(canli)} canlı maç · {yeni_sinyal} yeni sinyal · {n_oran} oran çekildi")
+
+
+def _loop():
+    time.sleep(90)
+    while True:
+        try:
+            run_cycle()
+        except Exception as e:
+            _last["hata"] = str(e)[:200]
+        time.sleep(60)
+
+
+def start_background():
+    threading.Thread(target=_loop, daemon=True, name="canli_ajan").start()
+
+
+# ---------------------------------------------------------------- sayfa
+def _degerlendir(s, r):
+    if not r or r[0] is None:
+        return None
+    fh, fa = r[0], r[1]
+    h, a = (int(v) for v in s["skor"].split("-"))
+    sec = s["sec"]
+    if sec == "MS 1":
+        return fh > fa
+    if sec == "MS X":
+        return fh == fa
+    if sec == "MS 2":
+        return fa > fh
+    if sec == "Maçta gol olur":
+        return fh + fa > h + a
+    if sec == "Ev gol atar":
+        return fh > h
+    if sec == "Dep gol atar":
+        return fa > a
+    return None
+
+
+def get_page_data(gun=None):
+    G = sorted({*_gunler(), *[f[:10] for f in os.listdir(KLASOR) if re.match(r"\d{4}-\d\d-\d\d\.json$", f)]} if os.path.isdir(KLASOR) else set(_gunler()), reverse=True)[:10]
+    gun = gun if gun in G else (G[0] if G else None)
+    LOG = _log_oku(gun) if gun else []
+    R = O._sonuclar(list({s["mid"] for s in LOG}))
+    ozet = defaultdict(lambda: [0, 0])
+    for s in LOG:
+        r = R.get(s["mid"])
+        s["sonuc"] = _degerlendir(s, r)
+        s["ft"] = f"{r[0]}-{r[1]}" if r and r[0] is not None else None
+        if s["sonuc"] is not None:
+            k = s["tip"] + (" · güçlü" if s.get("guclu") else "")
+            ozet[k][0] += 1
+            ozet[k][1] += s["sonuc"]
+    LOG.sort(key=lambda s: s["at"], reverse=True)
+    return {"last": _last, "canli": _last.get("canli") or [], "gunler": G, "gun": gun, "log": LOG,
+            "ozet": sorted(([k, n, w, round(100 * w / n, 1)] for k, (n, w) in ozet.items()), key=lambda z: z[0])}
