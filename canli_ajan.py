@@ -244,6 +244,14 @@ def run_cycle():
                     st = IS.ozet(IS.idd_istat(bgi))
                 except Exception:
                     st = IS.ozet(IS._d["istat"].get(f"bg:{bgi}"))
+            if not st and dk >= 20 and n_ist < IS.ISTAT_MAX:
+                try:
+                    x0 = IS._d["istat"].get(f"ng:{mid}")
+                    if not x0 or time.time() - x0["t"] >= IS.ISTAT_SN:
+                        n_ist += 1
+                    st = IS.ozet(IS.ng_istat(mid))
+                except Exception:
+                    st = IS.ozet(IS._d["istat"].get(f"ng:{mid}"))
             if not st:
                 if mid not in _eid and LS:
                     m_ = IS.esle(x["ev"], x["dep"], LS)

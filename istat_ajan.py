@@ -118,6 +118,46 @@ def idd_istat(bgi, zorla=False):
     return x
 
 
+NG_STAT = {"Corner Kicks": "korner", "Shots": "sut", "Shots on Goal": "isabetli", "Possession": "top",
+           "Attacks": "atak", "Dangerous Attacks": "tatak", "Fouls": "faul", "Offsides": "ofsayt", "Yellow Cards": "sari", "Red Cards": "kirmizi"}
+
+
+def ng_istat(mid, zorla=False):
+    """NowGoal mac sayfasi /match/live-{mid} (robots izinli; istatistik HTML icinde, ul#ftstat) -> {"t","ev","dep","kaynak"}"""
+    import html as _h
+    import nowgoal as ng
+    key = f"ng:{mid}"
+    x = _d["istat"].get(key)
+    if x and not zorla and time.time() - x["t"] < ISTAT_SN:
+        return x
+    r = urllib.request.Request(f"https://www.nowgoal.net/match/live-{mid}", headers=dict(ng.HEADERS, Referer="https://www.nowgoal.net/"))
+    with urllib.request.urlopen(r, timeout=25) as f:
+        h = f.read().decode("utf-8", "replace")
+    m = re.search(r'<ul[^>]*id="ftstat"[^>]*>(.*?)</ul>', h, re.S)
+    if not m:
+        return x
+    ev = {k: 0 for k in ("isabetli", "sut", "korner", "top", "sari", "kirmizi", "faul", "ofsayt", "atak", "tatak")}
+    dep = dict(ev)
+    var = False
+    for li in re.findall(r"<li>(.*?)</li>", m.group(1), re.S):
+        c = re.findall(r'class="stat-c"[^>]*>\s*([^<]*?)\s*<', li)
+        t = re.search(r'class="stat-title"[^>]*>\s*([^<]*?)\s*<', li)
+        if len(c) != 2 or not t or _h.unescape(t.group(1)) not in NG_STAT:
+            continue
+        k = NG_STAT[_h.unescape(t.group(1))]
+        try:
+            ev[k], dep[k] = int(c[0].strip().rstrip("%") or 0), int(c[1].strip().rstrip("%") or 0)
+            var = True
+        except ValueError:
+            continue
+    if not var:
+        return x
+    x = {"t": time.time(), "ev": ev, "dep": dep, "kaynak": "NowGoal"}
+    with _kilit:
+        _d["istat"][key] = x
+    return x
+
+
 def ozet(x):
     """istatistikten okunan durum: baski tarafi, tempo, kirmizi kart (iddaa verisinde tehlikeli atak da baskiya girer)"""
     if not x:
