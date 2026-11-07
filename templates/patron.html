@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}SAHA — PATRON{% endblock %}
+{% block page_tag %}👑 PATRON{% endblock %}
+{% block subtitle %}Tüm sekmeleri gezen uzman ajanların ortak kararı. Öncelik oran değil, <b>doğru sonuç</b>: her sistemin her pazardaki gerçek tutma oranı (son {{ 45 }} gün) ölçülür, PATRON en güvenilir sistemlerin aynı dediği sonucu öne çıkarır. Güven = destekleyen en iyi sistemin tutma oranı + aynı diyen her ek sistem için +3 puan (en fazla +9) − karşı çıkan güvenilir (%50+) her sistem için −5 puan.{% endblock %}
+{% block extra_style %}
+<style>
+  .tabs{ display:flex; gap:8px; margin:0 16px 14px; }
+  .tab{ flex:1; text-align:center; padding:10px; border-radius:12px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-weight:800; font-size:14px; }
+  .tab.on{ border-color:#e0a030; color:#e0a030; background:#e0a03014; }
+  .kc{ margin:0 16px 12px; padding:11px 13px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .ust{ display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .tk{ font-weight:700; font-size:15px; line-height:1.3; flex:1; }
+  .sa{ font-family:'Space Grotesk',sans-serif; font-weight:800; color:#e0a030; min-width:48px; }
+  .sk{ font-family:'Space Grotesk',sans-serif; font-size:21px; font-weight:800; }
+  .meta{ color:var(--chalk-faint); font-size:12px; margin-top:3px; }
+  .pk{ margin-top:7px; padding:7px 9px; border-radius:10px; background:var(--navy-deep); border-left:3px solid var(--navy-line); font-size:13.5px; }
+  .pk.g1{ border-left-color:#3ccf7a; } .pk.g2{ border-left-color:#e0a030; }
+  .gv{ float:right; font-family:'Space Grotesk',sans-serif; font-weight:800; }
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:left; } .tt td{ padding:5px 3px; border-top:1px solid var(--navy-line); }
+  details{ margin:0 16px 12px; } summary{ cursor:pointer; color:var(--chalk-faint); font-size:13px; }
+</style>
+<meta http-equiv="refresh" content="{{ 60 if d.sekme == 'canli' else 300 }}">
+{% endblock %}
+{% block content %}
+<div class="tabs"><a class="tab {{ 'on' if d.sekme == 'canli' else '' }}" href="/patron?sekme=canli">🔴 CANLI MAÇLAR</a><a class="tab {{ 'on' if d.sekme != 'canli' else '' }}" href="/patron">⏳ BAŞLAMAK ÜZERE</a></div>
+<div class="section-sub">Son hesap: {{ (d.at[:19] ~ '+00:00') | localdatetime if d.at else '-' }} ({{ d.sure }} sn) · ajanlar: {% for a in d.ajanlar or [] %}{{ a.ad }} {{ a.mac }} maç{% if a.hata %} <span style="color:#ff5a4f">⚠</span>{% endif %}{{ ' · ' if not loop.last else '' }}{% endfor %}{% if d.hata %} · ⚠ {{ d.hata }}{% endif %}</div>
+
+{% if d.sekme == 'canli' %}
+{% set cv = d.canli or {} %}
+{% if cv.hata %}<div class="section-sub">⚠ {{ cv.hata }}</div>{% endif %}
+{% for m in cv.maclar or [] %}
+<div class="kc">
+  <div class="ust"><span class="sa" style="color:#ff5a4f">{{ m.dk }}{{ "'" if (m.dk|string)[:1].isdigit() else '' }}</span><span class="tk">{{ m.ev }}<br>{{ m.dep }}</span><span class="sk">{{ m.skor }}</span></div>
+  <div class="meta">{{ m.lig or '' }}{% if m.st %} · 📊 {% if m.st.tatak %}tehlikeli atak {{ m.st.tatak }} · {% endif %}korner {{ m.st.korner }} · isabetli {{ m.st.isabetli }}{% if m.st.baski %} · <b style="color:#e0a030">baskı {{ 'EV' if m.st.baski == 1 else 'DEP' }}</b>{% endif %}{% endif %}{% if m.kirmizi %} · <b style="color:#ff5a4f">🟥 kırmızı kart</b>{% endif %}</div>
+  {% for o in m.oner[:5] %}<div class="pk {{ 'g1' if (o.p or 0) >= 65 and not o.simdi else 'g2' if (o.p or 0) >= 50 and not o.simdi else '' }}"><span class="gv">%{{ o.p }}</span><b>{{ o.sec }}</b>{% if o.iddaa %} · iddaa {{ o.iddaa }}{% endif %}<div class="meta">{{ o.kaynak }}{% if o.n %} · {{ o.n }} benzer maç{% endif %} · {{ o.acik or '' }}</div></div>{% else %}<div class="meta">Bu maç için henüz öneri yok.</div>{% endfor %}
+</div>
+{% else %}<div class="section-sub">Şu an canlı maç yok (Canlı Ajan listesi boş).</div>{% endfor %}
+
+{% else %}
+{% for x in d.yakin or [] %}
+<div class="kc">
+  <div class="ust"><span class="sa">{{ x.saat }}</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span><span class="meta">{{ x.gun }}{% if x.basladi %} · başladı{% endif %}</span></div>
+  <div class="meta">{{ x.lig or '' }} · {{ x.n_oy }} oy</div>
+  {% for p in x.P[:4] %}<div class="pk {{ 'g1' if p.guven >= 70 else 'g2' if p.guven >= 58 else '' }}"><span class="gv">%{{ p.guven }}</span><b>{{ {'MS':'Maç sonucu','ÇŞ':'Çifte şans','2.5':'2.5','İY0.5':'İY 0.5','İY1.5':'İY 1.5','İY/MS':'İY/MS'}.get(p.pazar, p.pazar) }} {{ p.sec }}</b>
+    <div class="meta">✔ {% for s in p.destek[:5] %}{{ s.kaynak }} %{{ s.h }}{{ ', ' if not loop.last else '' }}{% endfor %}{% if p.karsi %} · ✖ karşı: {% for s in p.karsi[:3] %}{{ s.kaynak }} ({{ s.sec }}){{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}</div></div>{% endfor %}
+</div>
+{% else %}<div class="section-sub">Önümüzdeki {{ 12 }} saatte ajanların oy verdiği maç yok.</div>{% endfor %}
+{% endif %}
+
+<h2 class="section">📊 PATRON KARNESİ</h2>
+<div class="section-sub">Son 45 günde biten {{ d.gecmis_n or 0 }} maçta, her pazarda PATRON'un en güvendiği seçim. (Aynı dönemin karnesiyle hesaplandığı için biraz iyimser olabilir; zamanla ileriye dönük sayılar oturur.)</div>
+<table class="tt"><tr><th>güven bandı</th><th>seçim</th><th>tuttu</th></tr>{% for b in d.band or [] %}{% if b.n %}<tr><td><b>%{{ b.ad }}</b></td><td>{{ b.n }}</td><td><b>%{{ b.h }}</b></td></tr>{% endif %}{% endfor %}</table>
+<table class="tt"><tr><th>pazar</th><th>seçim</th><th>tuttu</th></tr>{% for b in d.pazar or [] %}<tr><td>{{ b.ad }}</td><td>{{ b.n }}</td><td><b>%{{ b.h }}</b></td></tr>{% endfor %}</table>
+<details><summary>🧑‍💼 Uzman ajanların karnesi (hangi sistem nerede doğru buluyor)</summary>
+<table class="tt" style="margin:8px 0"><tr><th>ajan</th><th>pazar</th><th>seçim</th><th>tuttu</th></tr>{% for k in d.karne or [] %}<tr style="{{ '' if k.n >= 15 else 'opacity:.45' }}"><td>{{ k.kaynak }}</td><td>{{ k.pazar }}</td><td>{{ k.n }}</td><td><b>%{{ k.h }}</b></td></tr>{% endfor %}</table>
+<div class="meta">Soluk satırlar: 15'ten az biten seçim, PATRON henüz kullanmıyor.</div></details>
+{% endblock %}
