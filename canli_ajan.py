@@ -165,9 +165,12 @@ def _log_dosya(g):
     return os.path.join(KLASOR, f"{g}.json")
 
 
+LOG_V = 2                     # v1 kayitlari skoru yanlis okuyordu (7M kirmizi kart alani) -> atilir
+
+
 def _log_oku(g):
     try:
-        return json.load(open(_log_dosya(g), encoding="utf-8"))
+        return [s for s in json.load(open(_log_dosya(g), encoding="utf-8")) if s.get("v") == LOG_V]
     except (OSError, ValueError):
         return []
 
@@ -207,7 +210,7 @@ def run_cycle():
                 continue
             dks = m7.dakika(p, now)
             dk = 45 if p["durum"] == 2 else int(re.sub(r"\D", "", dks) or 0) + (2 if "+" in dks else 0)
-            h, a = p["kev"], p["kdep"]
+            h, a = p["ev"], p["dep"]          # 7M: ev/dep = skor, kev/kdep = kirmizi kart
             oz = ozellik(x, R5.get(mid))
             S = []
             # istatistik ajani (LiveScore)
@@ -223,7 +226,8 @@ def run_cycle():
                     st = IS.ozet(IS.istat(_eid[mid]))
                 except Exception:
                     st = IS.ozet(IS._d["istat"].get(_eid[mid]))
-            kirmizi = bool(st and (st["kirmizi"][0] or st["kirmizi"][1]))
+            kirmizi = bool((p.get("kev") or p.get("kdep")) or (st and (st["kirmizi"][0] or st["kirmizi"][1])))
+            kk7 = (p.get("kev") or 0, p.get("kdep") or 0)
             dusuk_tempo = bool(st and dk >= 65 and h + a <= 1 and st["sut_top"] / max(dk, 1) < 0.13 and st["isabetli_top"] <= 4)
             # canli oran (2. yari ve devre arasi, ya da sinyal adayi)
             o = _oran.get(i7)
@@ -286,12 +290,12 @@ def run_cycle():
                 key = (mid, s["tip"], s["sec"])
                 if key not in var:
                     var.add(key)
-                    LOG.append(dict(s, mid=mid, ev=x["ev"], dep=x["dep"], lig=x.get("lig"), dk=dk, skor=f"{h}-{a}",
+                    LOG.append(dict(s, v=LOG_V, mid=mid, ev=x["ev"], dep=x["dep"], lig=x.get("lig"), dk=dk, skor=f"{h}-{a}",
                                     at=now.isoformat(), saat=datetime.now(TR).strftime("%H:%M")))
                     yeni_sinyal += 1
             canli.append({"mid": mid, "i7": i7, "ev": x["ev"], "dep": x["dep"], "lig": x.get("lig"), "dk": dks or str(dk),
                           "dkn": dk, "skor": f"{h}-{a}", "iy": p.get("iy"), "oz": oz, "S": S,
-                          "st": st, "kirmizi": kirmizi, "ah": ah, "ou": (o or {}).get("ou"), "kay": round(gnow - _baz[(i7, f'{h}-{a}')][1], 2) if gnow is not None else None})
+                          "st": st, "kirmizi": kirmizi, "kk": kk7, "ah": ah, "ou": (o or {}).get("ou"), "kay": round(gnow - _baz[(i7, f'{h}-{a}')][1], 2) if gnow is not None else None})
         if LOG:
             os.makedirs(KLASOR, exist_ok=True)
             with _kilit:
@@ -373,7 +377,7 @@ def _test():
         F = c["oz"]
         py = KA.piyasa(ah, ou, c["dkn"], h, a) if ah and ou else None
         print(f"{c['dk']:>4} {c['skor']:5} {(c['ev'] + ' - ' + c['dep'])[:38]:38} | ✓  | "
-              f"{('✓ k' + st['korner'] + ' i' + st['isabetli'] + (' B' + str(st['baski']) if st['baski'] else '')) if st else ('eşleşmedi' if not _eid.get(c['mid']) else '25dk altı/yok'):16} | "
+              f"{('✓ k' + st['korner'] + ' i' + st['isabetli'] + (' B' + str(st['baski']) if st['baski'] else '')) if st else ('eşleşmedi' if not _eid.get(c['mid']) else 'istat yok'):16} | "
               f"{'✓' if ah else '-'}/{'✓' if ou else '-'} | {'evet' if c['dkn'] >= 55 else '55dk altı':9} | "
               f"{(str(round(100 * py['ev'])) + '/' + str(round(100 * py['x'])) + '/' + str(round(100 * py['dep']))) if py else '-':9} | "
               + ", ".join(f"{s['tip']}:{s['sec']}" for s in c["S"]))

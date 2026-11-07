@@ -47,7 +47,7 @@ def main(q):
         print("7M programında bulunamadı:", q)
         return
     for i, ta, tb, mn, x in bul[:2]:
-        print(f"=== 7M {i} | {ta} - {tb} | {mn} | durum {x['durum']} {m7.dakika(x)}' skor {x['kev']}-{x['kdep']} İY {x['iy']}")
+        print(f"=== 7M {i} | {ta} - {tb} | {mn} | durum {x['durum']} {m7.dakika(x)}' skor {x['ev']}-{x['dep']} kırmızı {x['kev']}-{x['kdep']} İY {x['iy']}")
         for ek, ad, k in (("ah", "ASYA HANDİKAP (çizgi = ev handikabı, eksi = ev veriyor) ev/dep", 1), ("ou", "ALT/ÜST çizgi  üst/alt", 1)):
             S = seri(i, ek)
             print(f"--- {ad}")

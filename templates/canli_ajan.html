@@ -39,7 +39,7 @@
   <div class="meta">{{ c.lig or '' }} · maç önü {{ c.oz.p|join(' / ') }} · {{ c.oz.fav_ad }} · para {{ c.oz.para }} ({{ '%+.1f'|format(c.oz.dd) }}p) · gol çizgisi {{ c.oz.L or '-' }}</div>
   {% if c.ah or c.ou %}<div class="meta">canlı: {% if c.ah %}AH {{ c.ah.cizgi }} ({{ c.ah.p1 }}/{{ c.ah.p2 }}){% if c.kay %} · kayma {{ '%+.2f'|format(c.kay) }}{% endif %}{% endif %}{% if c.ou %} · AÜ {{ c.ou.cizgi }} (üst {{ c.ou.p1 }} / alt {{ c.ou.p2 }}){% endif %}</div>{% endif %}
   {% if c.st %}<div class="meta">📊 korner {{ c.st.korner }} · isabetli {{ c.st.isabetli }} · şut {{ c.st.sut }} · top {{ c.st.top }}{% if c.st.baski %} · <b style="color:#e0a030">baskı {{ 'EV' if c.st.baski == 1 else 'DEP' }}</b>{% endif %}</div>{% endif %}
-  {% if c.kirmizi %}<div class="meta" style="color:#ff5a4f"><b>🟥 kırmızı kart ({{ c.st.kirmizi[0] }}-{{ c.st.kirmizi[1] }}) — arşiv sinyalleri kapatıldı</b></div>{% endif %}
+  {% if c.kirmizi %}<div class="meta" style="color:#ff5a4f"><b>🟥 kırmızı kart ({{ c.kk[0] }}-{{ c.kk[1] }}) — arşiv ve karar sinyalleri kapatıldı</b></div>{% endif %}
   {% for n in c.oz.not %}<div class="meta">⚡ {{ n }}</div>{% endfor %}
   {% for s in c.S %}<div class="sg {{ 'g' if s.guclu else '' }}"><span class="tip">{{ s.tip }}</span><b>{{ s.sec }}</b>{% if s.p %} · arşiv %{{ s.p }} · adil {{ s.adil }} · {{ s.n }} maç{% endif %}<div class="meta">{{ s.acik }}</div></div>{% endfor %}
 </div>

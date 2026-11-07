@@ -93,6 +93,8 @@ def ozet(x):
     if not x:
         return None
     e, d = x["ev"], x["dep"]
+    if sum(e.values()) + sum(d.values()) == 0:
+        return None                       # LiveScore bu lige istatistik vermiyor (hepsi 0)
     ks, ss = e["korner"] - d["korner"], e["isabetli"] - d["isabetli"]
     sut_e, sut_d = e["sut"], d["sut"]
     pay = sut_e / (sut_e + sut_d) if sut_e + sut_d else 0.5
