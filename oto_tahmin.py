@@ -670,14 +670,52 @@ def vk_seri_kaydet():
     return n
 
 
+SON_DK = (8, 12)          # mactan 8-12 dk once: Volkano'dan ANLIK son kayit (iyv.db 15 dk kala kilitliyor)
+
+
+def vk_son_kaydet():
+    """baslamasina 8-12 dk kalan maclarin Volkano oranlarini anlik ceker, 'son' tablosuna bir kez yazar"""
+    now = datetime.now(timezone.utc)
+    c = _ng()
+    rows = c.execute("SELECT mid, kickoff_utc FROM ng_match WHERE volkano_json IS NOT NULL AND kickoff_utc > ? AND kickoff_utc <= ?",
+                     ((now + timedelta(minutes=SON_DK[0])).isoformat(), (now + timedelta(minutes=SON_DK[1])).isoformat())).fetchall()
+    c.close()
+    if not rows:
+        return 0
+    os.makedirs(KLASOR, exist_ok=True)
+    s = sqlite3.connect(SERI_DB, timeout=30)
+    s.execute("CREATE TABLE IF NOT EXISTS son (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, vk TEXT)")
+    var = {r[0] for r in s.execute("SELECT mid FROM son")}
+    yeni = [str(m) for m, _ in rows if m not in var]
+    ko = {str(m): k for m, k in rows}
+    n = 0
+    if yeni:
+        V = vk_taze(yeni)
+        for m, vk in V.items():
+            s.execute("INSERT OR IGNORE INTO son VALUES (?,?,?,?)", (int(m), now.isoformat(), ko.get(m), json.dumps(vk)))
+            n += 1
+        s.commit()
+    s.close()
+    return n
+
+
 def _seri_loop():
     time.sleep(120)
+    t_seri = 0
     while True:
+        if time.time() - t_seri > SERI_SN:
+            t_seri = time.time()
+            try:
+                _last["vk_seri"] = f"{datetime.now(TR):%H:%M} +{vk_seri_kaydet()} değişim"
+            except Exception as e:
+                _last["vk_seri"] = "HATA " + str(e)[:150]
         try:
-            _last["vk_seri"] = f"{datetime.now(TR):%H:%M} +{vk_seri_kaydet()} değişim"
+            n = vk_son_kaydet()
+            if n:
+                _last["vk_son"] = f"{datetime.now(TR):%H:%M} +{n} son kayıt"
         except Exception as e:
-            _last["vk_seri"] = "HATA " + str(e)[:150]
-        time.sleep(SERI_SN)
+            _last["vk_son"] = "HATA " + str(e)[:150]
+        time.sleep(60)
 
 
 def start_background():
@@ -1064,6 +1102,10 @@ if __name__ == "__main__":
         print("yeni kayıt:", vk_seri_kaydet())
         s = sqlite3.connect(SERI_DB)
         print("toplam:", s.execute("SELECT COUNT(*), COUNT(DISTINCT mid) FROM s").fetchone(), "(satır, maç)")
+        try:
+            print("maç önü son kayıt (10 dk kala):", s.execute("SELECT COUNT(*) FROM son").fetchone()[0], "maç")
+        except sqlite3.OperationalError:
+            print("maç önü son kayıt: henüz yok")
         s.close()
     elif a[:1] == ["yayin"]:
         print("GitHub'a yüklendi:", yayin())
