@@ -1,6 +1,7 @@
-"""iddaa.com CANLI oran kesfi (sadece okur; veri adresi sportsbookv2, robots engeli yok).
+"""iddaa.com CANLI oran kesfi (sadece okur): type=1 = canli bulten. Baslamis futbol maclarinin pazarlarini acar.
   python3 iddaa_canli_kesif.py"""
 import json
+import time
 import urllib.request
 
 B = "https://sportsbookv2.iddaa.com/sportsbook"
@@ -8,23 +9,15 @@ B = "https://sportsbookv2.iddaa.com/sportsbook"
 
 def get(u):
     r = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
-    try:
-        with urllib.request.urlopen(r, timeout=30) as f:
-            return f.status, json.loads(f.read().decode("utf-8"))
-    except Exception as e:
-        return getattr(e, "code", 0), None
+    with urllib.request.urlopen(r, timeout=30) as f:
+        return json.loads(f.read().decode("utf-8"))
 
 
-import time
+E = get(f"{B}/events?st=1&type=1&version=0")["data"]["events"]
 now = time.time()
-for q in ("events?st=1&type=1&version=0", "events?st=1&type=2&version=0", "events?st=1&type=3&version=0", "events?st=1&type=0&version=0&live=1",
-          "live/events?st=1", "events?st=1&type=0&version=0"):
-    s, D = get(f"{B}/{q}")
-    E = ((D or {}).get("data") or {}).get("events") or []
-    bas = [e for e in E if e.get("d") and e["d"] < now]
-    print(f"{s} {q}: {len(E)} maç, başlamış {len(bas)}")
-    if bas:
-        e = bas[0]
-        print("   ornek:", e.get("hn"), "-", e.get("an"), "| anahtarlar:", sorted(k for k in e if k != "m"))
-        print("   pazar st:", sorted({(m.get("st"), m.get("sov")) for m in e.get("m", [])}, key=lambda t: (t[0] or 0, str(t[1])))[:20])
-        print("   ham (pazarsiz):", json.dumps({k: v for k, v in e.items() if k != "m"}, ensure_ascii=False)[:600])
+bas = [e for e in E if e.get("sid") == 1 and e.get("d") and e["d"] < now]
+print(f"canli bulten {len(E)} | futbol baslamis {len(bas)} | s dagilimi:", {s: sum(1 for e in bas if e.get('s') == s) for s in {e.get('s') for e in bas}})
+for e in bas[:3]:
+    print(f"\n== {e['hn']} - {e['an']} | s={e.get('s')} bp={e.get('bp')} hs={e.get('hs')} hc={e.get('hc')} | pazar {len(e.get('m', []))}")
+    for m in e.get("m", []):
+        print(f"   st={m.get('st')} t={m.get('t')} sov={m.get('sov')} s={m.get('s')} : " + " | ".join(f"{o.get('n')} {o.get('odd')}" for o in m.get("o", [])))
