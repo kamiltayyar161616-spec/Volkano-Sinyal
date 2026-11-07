@@ -70,6 +70,7 @@ for mid, (at0, v0) in ilk.items():
                  f"sonuç oranı {o0[sonuc]:>6} → {o1[sonuc]:>6} ({deg[sonuc]:+.0f}%) | en çok kısalan {kmax} ({deg[kmax]:+.0f}%) "
                  f"{'✓' if kmax == sonuc else ''} | son={kaynak}")
 
+print(f"son kayıt: {len(son)} maç · İY/MS (47) içeren: {sum(1 for _, v in son.values() if v.get('47'))}")
 print(f"seri: {len(ilk)} maç kayıtlı · biten ve 9 oranı tam: {n_mac} · bunların {n_son}'inde maçtan ~10 dk önceki son kayıt var\n")
 if not n_mac:
     print("henüz biten maç yok")
