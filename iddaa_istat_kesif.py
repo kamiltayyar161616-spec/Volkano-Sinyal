@@ -23,13 +23,15 @@ ev.sort(key=lambda e: (not e.get("hs"), e["d"]))
 e = ev[0]
 i, bri = e["i"], e.get("bri")
 print(f"ornek: {e['hn']} - {e['an']} | i={i} bri={bri} hs={e.get('hs')} hc={e.get('hc')}")
-S = "https://sportsbookv2.iddaa.com/sportsbook"
-for u in (f"{S}/event/{i}", f"{S}/events/{i}", f"{S}/statistics/{i}", f"{S}/event-statistics/{i}", f"{S}/live-statistics/{i}",
-          f"{S}/match-statistics/{i}", f"{S}/eventdetail/{i}", f"{S}/scoreboard/{i}", f"{S}/livescore/{i}",
-          f"https://statistics.iddaa.com/api/match/{bri}", f"https://statistics.iddaa.com/match/{bri}",
-          f"https://statisticsv2.iddaa.com/statistics/eventsummary/1/{bri}", f"https://statisticsv2.iddaa.com/statistics/matchstatistics/1/{bri}",
-          f"https://sportsbookv2.iddaa.com/sportsbook/livescore?eventIds={i}", f"https://livescore.iddaa.com/api/livescore/{i}"):
-    s, b = get(u)
-    print(f"{s} {u} | {b[:300]!r}" if s == 200 else f"{s} {u}")
-for u in ("https://www.iddaa.com/robots.txt",):
-    pass
+s, b = get("https://statisticsv2.iddaa.com/robots.txt")
+print("statisticsv2 robots:", s, b[:200].replace("\n", " | "))
+hs = [e for e in ev if e.get("hs")]
+print("istatistikli (hs) canli futbol:", len(hs), [f"{e['hn']}-{e['an']}" for e in hs[:5]])
+e = hs[0] if hs else e
+bri = e.get("bri")
+print(f"deneme maci: {e['hn']} - {e['an']} bri={bri}")
+V = "https://statisticsv2.iddaa.com/statistics"
+for p in ("eventsummary", "eventstatistics", "eventstats", "matchstats", "statistics", "eventdetail", "eventtimeline", "eventincidents",
+          "livestatistics", "liveevent", "event", "matchdetail", "teamstatistics", "eventmomentum", "eventlivedata", "lastevents", "eventinfo"):
+    s, b = get(f"{V}/{p}/1/{bri}")
+    print(f"{s} {p} | {b[:350]!r}" if s == 200 else f"{s} {p}")
