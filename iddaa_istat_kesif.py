@@ -27,11 +27,19 @@ s, b = get("https://statisticsv2.iddaa.com/robots.txt")
 print("statisticsv2 robots:", s, b[:200].replace("\n", " | "))
 hs = [e for e in ev if e.get("hs")]
 print("istatistikli (hs) canli futbol:", len(hs), [f"{e['hn']}-{e['an']}" for e in hs[:5]])
-e = hs[0] if hs else e
+if not hs:
+    s, b = get("https://sportsbookv2.iddaa.com/sportsbook/events?st=1&type=0&version=0")
+    E0 = json.loads(b)["data"]["events"]
+    hs0 = [x for x in E0 if x.get("sid") == 1 and x.get("hs")]
+    print("canli istatistikli yok; mac oncesi istatistikli:", len(hs0))
+    if hs0:
+        e = hs0[0]
+else:
+    e = hs[0]
 bri = e.get("bri")
 print(f"deneme maci: {e['hn']} - {e['an']} bri={bri}")
 V = "https://statisticsv2.iddaa.com/statistics"
 for p in ("eventsummary", "eventstatistics", "eventstats", "matchstats", "statistics", "eventdetail", "eventtimeline", "eventincidents",
           "livestatistics", "liveevent", "event", "matchdetail", "teamstatistics", "eventmomentum", "eventlivedata", "lastevents", "eventinfo"):
     s, b = get(f"{V}/{p}/1/{bri}")
-    print(f"{s} {p} | {b[:350]!r}" if s == 200 else f"{s} {p}")
+    print(f"{s} {p} | {b[:1500]!r}" if s == 200 else f"{s} {p}")
