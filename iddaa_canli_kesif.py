@@ -15,14 +15,16 @@ def get(u):
         return getattr(e, "code", 0), None
 
 
-for q in ("events?st=1&type=0&version=0", "events?st=1&type=1&version=0", "events?st=1&type=2&version=0", "live-events?st=1", "events/live?st=1"):
+import time
+now = time.time()
+for q in ("events?st=1&type=1&version=0", "events?st=1&type=2&version=0", "events?st=1&type=3&version=0", "events?st=1&type=0&version=0&live=1",
+          "live/events?st=1", "events?st=1&type=0&version=0"):
     s, D = get(f"{B}/{q}")
     E = ((D or {}).get("data") or {}).get("events") or []
-    canli = [e for e in E if e.get("il")]
-    print(f"{s} {q}: {len(E)} maç, il=true {len(canli)}")
-    if canli:
-        e = canli[0]
+    bas = [e for e in E if e.get("d") and e["d"] < now]
+    print(f"{s} {q}: {len(E)} maç, başlamış {len(bas)}")
+    if bas:
+        e = bas[0]
         print("   ornek:", e.get("hn"), "-", e.get("an"), "| anahtarlar:", sorted(k for k in e if k != "m"))
         print("   pazar st:", sorted({(m.get("st"), m.get("sov")) for m in e.get("m", [])}, key=lambda t: (t[0] or 0, str(t[1])))[:20])
         print("   ham (pazarsiz):", json.dumps({k: v for k, v in e.items() if k != "m"}, ensure_ascii=False)[:600])
-        break
