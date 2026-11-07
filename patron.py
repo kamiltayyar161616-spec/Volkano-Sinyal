@@ -13,7 +13,8 @@ Uzman ajanlar (hepsi NowGoal mac numarasi = mid uzerinden, gecmisi de okuyabildi
   TOTO-*     : Toto sekmesi (favori / en kucuk fark / ikisi ayni)
   SD-*       : SD Oran son dakika sinyalleri (limitsiz sirketler, borsalar, toplu dusus...)
   ORACLE-*   : Oracle / Oracle-3 / Oracle-9 kayitlari (picks tablosu)
-Canli: Canli Ajan sinyalleri (arsiv, gol, kayma, istatistik, karar) + bu macin mac onu PATRON secimi (henuz gerceklesmediyse)."""
+Canli (CANLI KÖPRÜ AJANI): Canli Ajan'in sinyalleri + istatistik/baski + iddaa canli ihtimalleri + sinyal karnesi,
+  ve bu macin mac onu PATRON secimi su anki piyasa ihtimaliyle yeniden puanlanir."""
 import json
 import os
 import sqlite3
@@ -337,34 +338,133 @@ def _guncelle():
         _cache["hata"] = str(e)[:300]
 
 
+def _canli_karne():
+    """Canli Ajan sinyal turlerinin gercek tutma orani (guncel kayit surumu) -> {tip: (n, oran)}"""
+    import canli_ajan as C
+    import oto_tahmin as O
+    say = defaultdict(lambda: [0, 0])
+    if os.path.isdir(C.KLASOR):
+        for f in sorted(os.listdir(C.KLASOR))[-30:]:
+            if not (f[:4].isdigit() and f.endswith(".json")):
+                continue
+            try:
+                L = [x for x in json.load(open(os.path.join(C.KLASOR, f), encoding="utf-8")) if x.get("v") == C.LOG_V]
+            except (OSError, ValueError):
+                continue
+            R = O._sonuclar(list({x["mid"] for x in L})) if L else {}
+            for x in L:
+                v = C._degerlendir(x, R.get(x["mid"]))
+                if v is not None:
+                    say[x["tip"]][0] += 1
+                    say[x["tip"]][1] += v
+    return {t: (n, w / n) for t, (n, w) in say.items() if n}
+
+
+def _piyasa_p(sec, idd, h, a):
+    """iddaa canli marjsiz ihtimal -> secimin su anki piyasa ihtimali (0-1) ya da None"""
+    if not idd:
+        return None
+    s = sec.replace("Maç sonucu ", "MS ").replace("Çifte şans ", "ÇŞ ")
+    g = {"MS 1": idd.get("ev"), "MS X": idd.get("x"), "MS 2": idd.get("dep"), "Maçta gol olur": idd.get("gol"),
+         "Ev gol atar": idd.get("evgol"), "Dep gol atar": idd.get("depgol")}
+    if s in g:
+        return g[s]
+    if s == "Maçta gol olmaz" and idd.get("gol") is not None:
+        return 1 - idd["gol"]
+    if s.startswith("ÇŞ ") and all(idd.get(k) is not None for k in ("ev", "x", "dep")):
+        return sum(idd[k] for k, c in (("ev", "1"), ("x", "X"), ("dep", "2")) if c in s[3:])
+    if s == "2.5 ÜST" and h + a == 2:
+        return idd.get("gol")
+    if s == "2.5 ALT" and h + a == 2 and idd.get("gol") is not None:
+        return 1 - idd["gol"]
+    return None
+
+
+def _baski_etki(sec, st):
+    """istatistik baskisi secimle ayni yondeyse +, tersse - (puan)"""
+    if not st or not st.get("baski"):
+        return 0, None
+    ev = st["baski"] == 1
+    if sec in ("MS 1", "ÇŞ 1X", "Maç sonucu 1", "Çifte şans 1X", "Ev gol atar"):
+        return (4, "baskı destekliyor") if ev else (-4, "baskı ters tarafta")
+    if sec in ("MS 2", "ÇŞ X2", "Maç sonucu 2", "Çifte şans X2", "Dep gol atar"):
+        return (4, "baskı destekliyor") if not ev else (-4, "baskı ters tarafta")
+    if sec in ("Maçta gol olur", "2.5 ÜST"):
+        return 3, "baskı var, gol ihtimali"
+    if sec in ("Maçta gol olmaz", "2.5 ALT"):
+        return -3, "baskı var, gol gelebilir"
+    return 0, None
+
+
 def canli():
-    """canli maclar: Canli Ajan sinyalleri + mac onu PATRON secimi (henuz gerceklesmediyse). Ihtimale gore sirali."""
+    """CANLI KÖPRÜ AJANI: Canli Ajan'in TUM verisini (sinyaller, istatistik/baski, iddaa canli ihtimalleri, kirmizi kart)
+    PATRON'a tasir. Her oneri icin: arsiv ihtimali (varsa) + iddaa canli piyasa ihtimali + sinyal turunun gercek karnesi
+    -> birlesik ihtimal, istatistik baskisi ±puan. Mac onu PATRON secimi canlida mac onu guveniyle degil, su anki
+    piyasa ihtimaliyle yeniden puanlanir. Henuz gerceklesmemis ve ihtimali yuksek olan one cikar."""
     import canli_ajan as C
     d = C.get_page_data()
     yak = {x["mid"]: x for x in ((_cache["v"] or {}).get("yakin") or [])}
+    try:
+        KR = _canli_karne()
+    except Exception:
+        KR = {}
     out = []
     for c in d.get("canli") or []:
         try:
             h, a = (int(v) for v in str(c.get("skor", "0-0")).split("-"))
         except ValueError:
             h = a = 0
+        idd, st = c.get("idd"), c.get("st")
         oner = []
+
+        def ekle(kaynak, sec, p_arsiv, acik, n=None, iddaa=None, simdi=False, tip=None):
+            pp = _piyasa_p(sec, idd, h, a)
+            kr = KR.get(tip) if tip else None
+            parca, ag = [], []
+            if p_arsiv is not None:
+                parca.append(f"arşiv %{p_arsiv:.0f}")
+                ag.append((p_arsiv, 1.0))
+            if pp is not None:
+                parca.append(f"iddaa canlı %{100 * pp:.0f}")
+                ag.append((100 * pp, 1.0))
+            if kr and kr[0] >= MIN_N:
+                parca.append(f"bu sinyal geçmişte %{100 * kr[1]:.0f} ({kr[0]})")
+                ag.append((100 * kr[1], 0.7))
+            if not ag:
+                return
+            p = sum(v * w for v, w in ag) / sum(w for _, w in ag)
+            be, bn = _baski_etki(sec, st)
+            if c.get("kirmizi"):
+                parca.append("🟥 kırmızı kart: arşiv geçersiz, sadece piyasa")
+                p = 100 * pp if pp is not None else p
+            elif be:
+                p += be
+                parca.append(bn)
+            oner.append({"kaynak": kaynak, "sec": sec, "p": round(max(1.0, min(99.0, p)), 1), "acik": " · ".join(parca) + (f" · {acik}" if acik else ""),
+                         "n": n, "iddaa": iddaa, "simdi": simdi})
+
         for s in c.get("S") or []:
-            if s.get("p"):
-                oner.append({"kaynak": "CANLI-" + s["tip"], "sec": s["sec"], "p": s["p"], "acik": s.get("acik"), "n": s.get("n"),
-                             "iddaa": s.get("iddaa")})
+            ekle("CANLI-" + s["tip"], s["sec"], s.get("p"), s.get("acik"), s.get("n"), s.get("iddaa"), tip=s["tip"])
         y = yak.get(int(c["mid"])) if str(c.get("mid", "")).isdigit() else None
-        for p in (y or {}).get("P", [])[:4]:
-            g = gerceklesti(p["pazar"], p["sec"], h, a)
-            if p["pazar"] in ("MS", "ÇŞ") or g is False:
-                oner.append({"kaynak": "PATRON maç önü", "sec": f"{PAZAR_AD.get(p['pazar'], p['pazar'])} {p['sec']}", "p": p["guven"],
-                             "acik": ("şu an zaten öyle — " if g else "henüz gerçekleşmedi — ") + ", ".join(x["kaynak"] for x in p["destek"][:4]),
-                             "simdi": bool(g)})
-        oner.sort(key=lambda x: (x.get("simdi", False), -(x["p"] or 0)))
+        for pk in (y or {}).get("P", [])[:4]:
+            g = gerceklesti(pk["pazar"], pk["sec"], h, a)
+            if pk["pazar"] in ("MS", "ÇŞ") or g is False:
+                sec = f"{PAZAR_AD.get(pk['pazar'], pk['pazar'])} {pk['sec']}"
+                ekle("PATRON maç önü", sec, None, ("şu an zaten öyle · " if g else "henüz gerçekleşmedi · ") + "maç önü güven %"
+                     + str(pk["guven"]) + " (" + ", ".join(x["kaynak"] for x in pk["destek"][:3]) + ")", simdi=bool(g))
+        gor = {}
+        for o in sorted(oner, key=lambda o: -o["p"]):        # ayni secim birden cok kaynaktan geldiyse tek satir, kaynaklar birlesir
+            k = o["sec"].replace("Maç sonucu ", "MS ").replace("Çifte şans ", "ÇŞ ")
+            if k in gor:
+                gor[k]["kaynak"] += " + " + o["kaynak"]
+                gor[k]["destek"] += 1
+            else:
+                gor[k] = dict(o, destek=1)
+        oner = sorted(gor.values(), key=lambda x: (x.get("simdi", False), -x["p"]))
         out.append({"mid": c.get("mid"), "dk": c.get("dk"), "ev": c.get("ev"), "dep": c.get("dep"), "skor": c.get("skor"), "lig": c.get("lig"),
-                    "st": c.get("st"), "kirmizi": c.get("kirmizi"), "oner": oner})
-    out.sort(key=lambda x: -max((o["p"] or 0 for o in x["oner"] if not o.get("simdi")), default=0))
-    return {"last": d.get("last"), "maclar": out}
+                    "st": st, "kirmizi": c.get("kirmizi"), "idd": idd, "oner": oner})
+    out.sort(key=lambda x: -max((o["p"] for o in x["oner"] if not o.get("simdi")), default=0))
+    return {"last": d.get("last"), "maclar": out, "karne": {t: {"n": n, "h": round(100 * h, 1)} for t, (n, h) in KR.items()}}
 
 
 def get_page_data(sekme="baslamak"):

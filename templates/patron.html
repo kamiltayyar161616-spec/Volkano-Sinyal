@@ -29,11 +29,13 @@
 {% if d.sekme == 'canli' %}
 {% set cv = d.canli or {} %}
 {% if cv.hata %}<div class="section-sub">⚠ {{ cv.hata }}</div>{% endif %}
+<div class="section-sub">Canlı Köprü Ajanı: Canlı Ajan'ın sinyalleri, istatistik baskısı ve iddaa canlı ihtimalleri birleşir. İhtimal = arşiv % + iddaa canlı % + o sinyal türünün gerçek karnesi (15+ biten sinyal varsa) ortalaması, istatistik baskısı ±3-4 puan. Maç önü PATRON seçimi canlıda şu anki iddaa ihtimaliyle yeniden puanlanır. Henüz gerçekleşmemiş olanlar üstte.{% if cv.karne %} · Sinyal karnesi: {% for t, k in cv.karne.items() %}{{ t }} %{{ k.h }} ({{ k.n }}){{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}</div>
 {% for m in cv.maclar or [] %}
 <div class="kc">
   <div class="ust"><span class="sa" style="color:#ff5a4f">{{ m.dk }}{{ "'" if (m.dk|string)[:1].isdigit() else '' }}</span><span class="tk">{{ m.ev }}<br>{{ m.dep }}</span><span class="sk">{{ m.skor }}</span></div>
   <div class="meta">{{ m.lig or '' }}{% if m.st %} · 📊 {% if m.st.tatak %}tehlikeli atak {{ m.st.tatak }} · {% endif %}korner {{ m.st.korner }} · isabetli {{ m.st.isabetli }}{% if m.st.baski %} · <b style="color:#e0a030">baskı {{ 'EV' if m.st.baski == 1 else 'DEP' }}</b>{% endif %}{% endif %}{% if m.kirmizi %} · <b style="color:#ff5a4f">🟥 kırmızı kart</b>{% endif %}</div>
-  {% for o in m.oner[:5] %}<div class="pk {{ 'g1' if (o.p or 0) >= 65 and not o.simdi else 'g2' if (o.p or 0) >= 50 and not o.simdi else '' }}"><span class="gv">%{{ o.p }}</span><b>{{ o.sec }}</b>{% if o.iddaa %} · iddaa {{ o.iddaa }}{% endif %}<div class="meta">{{ o.kaynak }}{% if o.n %} · {{ o.n }} benzer maç{% endif %} · {{ o.acik or '' }}</div></div>{% else %}<div class="meta">Bu maç için henüz öneri yok.</div>{% endfor %}
+  {% if m.idd and m.idd.ev is defined %}<div class="meta">💰 iddaa canlı ihtimal: 1 %{{ (100*m.idd.ev)|round|int }} · X %{{ (100*m.idd.x)|round|int }} · 2 %{{ (100*m.idd.dep)|round|int }}{% if m.idd.gol is defined %} · bir gol daha %{{ (100*m.idd.gol)|round|int }}{% endif %}</div>{% endif %}
+  {% for o in m.oner[:5] %}<div class="pk {{ 'g1' if (o.p or 0) >= 65 and not o.simdi else 'g2' if (o.p or 0) >= 50 and not o.simdi else '' }}"><span class="gv">%{{ o.p }}</span><b>{{ o.sec }}</b>{% if o.iddaa %} · iddaa {{ o.iddaa }}{% endif %}<div class="meta">{{ o.kaynak }}{% if o.destek and o.destek > 1 %} ({{ o.destek }} kaynak){% endif %}{% if o.n %} · {{ o.n }} benzer maç{% endif %} · {{ o.acik or '' }}</div></div>{% else %}<div class="meta">Bu maç için henüz öneri yok.</div>{% endfor %}
 </div>
 {% else %}<div class="section-sub">Şu an canlı maç yok (Canlı Ajan listesi boş).</div>{% endfor %}
 
