@@ -26,11 +26,14 @@
 {% block content %}
 <div class="section-sub">Son tur: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~2 dk sonra)' }} · {{ d.last.log }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %} · sayfa dakikada bir yenilenir</div>
 
-{% set kr = [] %}{% for c in d.canli %}{% for s in c.S %}{% if s.tip == 'KARAR' %}{% set _ = kr.append((c, s)) %}{% endif %}{% endfor %}{% endfor %}
-<h2 class="section">🧠 KARAR AJANI <span style="font-size:11px;color:var(--chalk-faint)">gölge mod · en az 3 kaynak aynı yönde + Pinnacle'dan 5+ puan yüksek</span></h2>
-{% for c, s in kr %}<div class="kc s"><div class="ust"><span class="dk">{{ c.dk }}{{ "'" if c.dk[:1].isdigit() else '' }}</span><span class="tk">{{ c.ev }} – {{ c.dep }}</span><span class="sk">{{ c.skor }}</span></div>
-<div class="sg g"><span class="tip">KARAR</span><b>{{ s.sec }}</b> · bizim %{{ s.p }} · {{ s.kaynak or 'piyasa' }} %{{ s.piyasa }}{% if s.iddaa %} · iddaa şu an <b>{{ s.iddaa }}</b>{% endif %} · <b>{{ s.adil }} üstüyse oyna</b><div class="meta">{{ s.acik }}</div></div></div>
-{% else %}<div class="section-sub">Şu an karar ajanının şartlarını sağlayan maç yok.</div>{% endfor %}
+{% set ks = d.kasa %}
+<h2 class="section">🧠 KARAR AJANI · SANAL KASA <span style="font-size:11px;color:var(--chalk-faint)">gerçek bahis yok · 100 ₺ başlangıç · kupon 1-5 ₺ · sadece iddaa oranı × bizim ihtimal ≥ 1.10 ise · maç başı tek kupon</span></h2>
+{% if ks %}<div class="kc s"><div class="ust"><span class="tk">Bakiye <b style="font-size:20px">{{ '%.2f'|format(ks.bakiye) }} ₺</b></span><span class="sk" style="font-size:16px;color:{{ '#3ccf7a' if ks.net >= 0 else '#ff5a4f' }}">{{ '%+.2f'|format(ks.net) }} ₺</span></div>
+<div class="meta">ROI <b>{{ ('%+.1f'|format(ks.roi)) ~ '%' if ks.roi is not none else '-' }}</b> · biten {{ ks.kazanan + ks.kaybeden }} kupon ({{ ks.kazanan }} ✓ / {{ ks.kaybeden }} ✗) · oynanan {{ '%.2f'|format(ks.yatirilan) }} ₺ · açık {{ ks.acik_n }} kupon {{ '%.2f'|format(ks.acik) }} ₺ · serbest {{ '%.2f'|format(ks.serbest) }} ₺</div></div>{% endif %}
+{% set kr = [] %}{% for s in d.log %}{% if s.tip == 'KARAR' and s.bahis %}{% set _ = kr.append(s) %}{% endif %}{% endfor %}
+{% for s in kr %}<div class="kc"><div class="ust"><span class="dk">{{ s.dk }}'</span><span class="tk">{{ s.ev }} – {{ s.dep }}<br><span class="meta">{{ s.saat }} · o an {{ s.skor }}</span></span><span class="sk" style="font-size:15px">{% if s.pnl is not none %}<span style="color:{{ '#3ccf7a' if s.pnl > 0 else '#ff5a4f' }}">{{ '%+.2f'|format(s.pnl) }} ₺</span>{% else %}açık{% endif %}</span></div>
+<div class="sg g"><span class="tip">KUPON</span><b>{{ s.sec }}</b> · <b>{{ s.bahis|round(1) }} ₺ @ {{ s.oran }}</b> · bizim %{{ s.p }} · iddaa %{{ s.piyasa }} · değer {{ s.deger }}{% if s.ft %} · bitti <b>{{ s.ft }}</b> {{ '✓' if s.sonuc else '✗' }}{% endif %}<div class="meta">{{ s.acik }}</div></div></div>
+{% else %}<div class="section-sub">Bu gün henüz kupon yok — şartlar (3 kaynak aynı yönde + değer ≥ 1.10) sağlanınca açılır.</div>{% endfor %}
 
 <h2 class="section">🔥 CANLI MAÇLAR ({{ d.canli|length }})</h2>
 {% for c in d.canli %}
@@ -53,7 +56,7 @@
 {% if d.log %}<table class="tt"><tr><th>saat</th><th>maç</th><th>sinyal</th><th>sonuç</th></tr>
 {% for s in d.log %}<tr class="{{ 'ok' if s.sonuc else 'ko' if s.sonuc is not none else '' }}"><td>{{ s.saat }}<br><span class="meta">{{ s.dk }}' {{ s.skor }}</span></td>
 <td><b>{{ s.ev }} – {{ s.dep }}</b><br><span class="meta">{{ s.lig or '' }}</span></td>
-<td><span class="tip">{{ s.tip }}</span><b>{{ s.sec }}</b>{% if s.p %}<br><span class="meta">%{{ s.p }} · adil {{ s.adil }}</span>{% endif %}</td>
+<td><span class="tip">{{ s.tip }}</span><b>{{ s.sec }}</b>{% if s.p %}<br><span class="meta">%{{ s.p }} · adil {{ s.adil }}{% if s.bahis %} · {{ s.bahis|round(1) }} ₺ @ {{ s.oran }}{% if s.pnl is not none %} → {{ '%+.2f'|format(s.pnl) }} ₺{% endif %}{% endif %}</span>{% endif %}</td>
 <td>{% if s.ft %}<b>{{ s.ft }}</b> {{ '✓' if s.sonuc else '✗' if s.sonuc is not none else '' }}{% else %}<span class="meta">bekliyor</span>{% endif %}</td></tr>{% endfor %}</table>
 {% else %}<div class="section-sub">Bu gün için sinyal yok.</div>{% endif %}
 {% endblock %}

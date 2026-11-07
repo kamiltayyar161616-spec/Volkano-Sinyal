@@ -170,7 +170,7 @@ def _log_dosya(g):
     return os.path.join(KLASOR, f"{g}.json")
 
 
-LOG_V = 2                     # v1 kayitlari skoru yanlis okuyordu (7M kirmizi kart alani) -> atilir
+LOG_V = 3                     # 3: 7 Kasim sifirlama (iddaa istatistik + iddaa canli oran, sanal kasa); eski surum kayitlari okunmaz
 
 
 def _log_oku(g):
@@ -187,6 +187,11 @@ def run_cycle():
     C = O._cache_oku()
     T = tablo()
     canli, yeni_sinyal, n_bul, n_oran, n_ist = [], 0, 0, 0, 0
+    try:
+        serbest = KA.kasa()["serbest"]
+    except Exception as e:
+        serbest = 0.0
+        _last["karar_hata"] = "kasa: " + str(e)[:120]
     try:
         LS = IS.liste()
     except Exception as e:
@@ -311,7 +316,9 @@ def run_cycle():
             kay_now = round(gnow - _baz[(i7, f"{h}-{a}")][1], 2) if gnow is not None else None
             try:
                 F5 = (R5.get(mid) or {}).get("F") or x["F"]
-                S += KA.karar(dk, h, a, F5, r, st, ah, (o or {}).get("ou"), kay_now, kirmizi, idd)
+                kupon_var = any(z["mid"] == mid and z["tip"] == "KARAR" for z in LOG)      # mac basina tek kupon
+                if not kupon_var:
+                    S += KA.karar(dk, h, a, F5, r, st, ah, (o or {}).get("ou"), kay_now, kirmizi, idd, serbest)
             except Exception as e:
                 _last["karar_hata"] = str(e)[:150]
             if idd:
@@ -326,6 +333,11 @@ def run_cycle():
             for s in S:
                 key = (mid, s["tip"], s["sec"])
                 if key not in var:
+                    if s["tip"] == "KARAR":
+                        if not s.get("bahis") or s["bahis"] > serbest:
+                            continue
+                        serbest -= s["bahis"]
+                        KA._kasa["t"] = 0
                     var.add(key)
                     LOG.append(dict(s, v=LOG_V, mid=mid, ev=x["ev"], dep=x["dep"], lig=x.get("lig"), dk=dk, skor=f"{h}-{a}",
                                     at=now.isoformat(), saat=datetime.now(TR).strftime("%H:%M")))
@@ -397,8 +409,14 @@ def get_page_data(gun=None):
             k = s["tip"] + (" · güçlü" if s.get("guclu") else "")
             ozet[k][0] += 1
             ozet[k][1] += s["sonuc"]
+        if s.get("tip") == "KARAR" and s.get("bahis"):
+            s["pnl"] = None if s["sonuc"] is None else round(s["bahis"] * (s["oran"] - 1) if s["sonuc"] else -s["bahis"], 2)
     LOG.sort(key=lambda s: s["at"], reverse=True)
-    return {"last": _last, "canli": _last.get("canli") or [], "gunler": G, "gun": gun, "log": LOG,
+    try:
+        ks = KA.kasa()
+    except Exception:
+        ks = None
+    return {"last": _last, "kasa": ks, "canli": _last.get("canli") or [], "gunler": G, "gun": gun, "log": LOG,
             "ozet": sorted(([k, n, w, round(100 * w / n, 1)] for k, (n, w) in ozet.items()), key=lambda z: z[0])}
 
 

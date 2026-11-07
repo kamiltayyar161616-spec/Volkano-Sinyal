@@ -6,7 +6,9 @@ Kaynaklar (birbirini tekrar saymayan 4 bilgi grubu):
   PİYASA : Pinnacle (yoksa SBOBET) canli handikap + alt/ust -> kalan sure Poisson = piyasanin ihtimali; ayrica handikap kaymasi
 Birlesik ihtimal = TARİH ve MODEL'in karne agirlikli ortalamasi + SAHA/PİYASA kayma duzeltmesi (karne agirlikli, ±puan).
 Sinyal sarti: en az 3 grup ayni yonu destekliyor + birlesik ihtimal piyasadan >= 5 puan yuksek + birlesik >= %40.
-Karne: gecmis gunlerin sinyal kayitlarindan her sinyal turunun gercek tutma orani (20+ biten sinyal varsa agirlik 0.5-1.5)."""
+Karne: gecmis gunlerin sinyal kayitlarindan her sinyal turunun gercek tutma orani (20+ biten sinyal varsa agirlik 0.5-1.5).
+SANAL KASA (gercek bahis YOK): 100 TL ile baslar, kupon basi en fazla 5 TL, en az 1 TL. Sadece iddaa canli orani varken ve
+deger = iddaa orani x bizim ihtimal >= 1.10 ise oynar; tutar = ceyrek Kelly (serbest kasa x f/4), 0.5 TL'ye yuvarli. Mac basina tek kupon."""
 import json
 import os
 import re
@@ -15,8 +17,10 @@ from math import exp, factorial
 
 KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "canli_ajan")
 _karne = {"t": 0, "w": {}}
-ESIK_FARK = 5.0
-ESIK_P = 40.0
+ESIK_P = 30.0
+DEGER_ESIK = 1.10
+KASA0, MAX_BAHIS, MIN_BAHIS, KELLY = 100.0, 5.0, 1.0, 0.25
+_kasa = {"t": 0, "v": None}
 
 
 def pois(l, k):
@@ -80,6 +84,7 @@ def karne():
                 L = json.load(open(os.path.join(KLASOR, f), encoding="utf-8"))
             except (OSError, ValueError):
                 continue
+            L = [s for s in L if s.get("v") == C.LOG_V]
             R = O._sonuclar(list({s["mid"] for s in L}))
             for s in L:
                 v = C._degerlendir(s, R.get(s["mid"]))
@@ -97,18 +102,59 @@ def karne():
     return w
 
 
-def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi, idd=None):
-    """-> [sinyal] (gölge mod: KARAR turu). Piyasa: iddaa canli (varsa, marjsiz) yoksa 7M Pinnacle/SBOBET"""
-    if dk < 50 or kirmizi:
+def kasa(zorla=False):
+    """sanal kasa: tum KARAR kuponlari (guncel kayit surumu) -> bakiye, acik, serbest, ROI"""
+    if not zorla and _kasa["v"] and time.time() - _kasa["t"] < 120:
+        return _kasa["v"]
+    import oto_tahmin as O
+    import canli_ajan as C
+    K = []
+    if os.path.isdir(KLASOR):
+        for f in sorted(os.listdir(KLASOR)):
+            if re.match(r"\d{4}-\d\d-\d\d\.json$", f):
+                try:
+                    K += [s for s in json.load(open(os.path.join(KLASOR, f), encoding="utf-8"))
+                          if s.get("v") == C.LOG_V and s.get("tip") == "KARAR" and s.get("bahis")]
+                except (OSError, ValueError):
+                    pass
+    R = O._sonuclar(list({s["mid"] for s in K})) if K else {}
+    yat = net = acik = 0.0
+    w = l = 0
+    for s in K:
+        v = C._degerlendir(s, R.get(s["mid"]))
+        if v is None:
+            acik += s["bahis"]
+            continue
+        yat += s["bahis"]
+        if v:
+            w += 1
+            net += s["bahis"] * (s["oran"] - 1)
+        else:
+            l += 1
+            net -= s["bahis"]
+    bak = KASA0 + net
+    out = {"baslangic": KASA0, "bakiye": round(bak, 2), "acik": round(acik, 2), "serbest": round(bak - acik, 2), "net": round(net, 2),
+           "yatirilan": round(yat, 2), "roi": round(100 * net / yat, 1) if yat else None, "kazanan": w, "kaybeden": l, "acik_n": len(K) - w - l}
+    _kasa.update(t=time.time(), v=out)
+    return out
+
+
+def bahis_tutar(p, io, serbest):
+    """ceyrek Kelly, 1-5 TL arasi, 0.5'e yuvarli; serbest kasa yetmezse 0"""
+    f = (p * io - 1) / (io - 1) if io > 1 else 0
+    t = min(MAX_BAHIS, round(serbest * f * KELLY * 2) / 2)
+    return t if t >= MIN_BAHIS and t <= serbest else 0
+
+
+def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi, idd=None, serbest=None):
+    """-> [sinyal] KARAR = sanal kupon. Piyasa: iddaa canli (marjsiz); iddaa orani yoksa kupon yok"""
+    if dk < 50 or kirmizi or not idd or not all(x in idd for x in ("ev", "x", "dep")):
         return []
     W = karne()
     M = model(F, dk, h, a)
-    if idd and all(x in idd for x in ("ev", "x", "dep")):
-        PY, kaynak_ad = idd, "iddaa"
-    else:
-        PY, kaynak_ad = piyasa(ah, ou, dk, h, a), "Pinnacle"
-    if not PY:
-        return []
+    PY, kaynak_ad = idd, "iddaa"
+    if serbest is None:
+        serbest = kasa()["serbest"]
     ORAN = (idd or {}).get("oran") or {}
     cur = "ev" if h > a else "dep" if a > h else "x"
     out = []
@@ -158,9 +204,16 @@ def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi, idd=None):
         pp = PY[k] * 100
         sec = adlar.get(k, "Maçta gol olur")
         io = ORAN.get(sec)
-        if len(set(destek)) >= 3 and p - pp >= ESIK_FARK and p >= ESIK_P:
-            out.append({"tip": "KARAR", "sec": sec, "p": round(p, 1), "n": None, "adil": round(100 / p, 2),
-                        "guclu": p - pp >= 10, "piyasa": round(pp, 1), "kaynak": kaynak_ad, "iddaa": io,
-                        "acik": f"bizim %{p:.0f} · {kaynak_ad} %{pp:.0f} · destek: {', '.join(sorted(set(destek)))}"
-                                + (f" · iddaa şu an {io}" if io else "") + f" · {100 / p:.2f} üstüyse oyna"})
-    return out
+        if not io or len(set(destek)) < 3 or p < ESIK_P:
+            continue
+        deger = io * p / 100
+        if deger < DEGER_ESIK:
+            continue
+        t = bahis_tutar(p / 100, io, serbest)
+        if not t:
+            continue
+        out.append({"tip": "KARAR", "sec": sec, "p": round(p, 1), "n": None, "adil": round(100 / p, 2), "deger": round(deger, 2),
+                    "guclu": deger >= 1.25, "piyasa": round(pp, 1), "kaynak": kaynak_ad, "iddaa": io, "oran": io, "bahis": t,
+                    "acik": f"sanal kupon {t:g} TL @ {io} · bizim %{p:.0f} · iddaa %{pp:.0f} · değer {deger:.2f} · destek: {', '.join(sorted(set(destek)))}"})
+    out.sort(key=lambda s: -s["deger"])
+    return out[:1]
