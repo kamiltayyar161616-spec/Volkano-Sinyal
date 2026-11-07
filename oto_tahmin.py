@@ -645,6 +645,41 @@ def _yayin_loop():
         time.sleep(YAYIN_SN)
 
 
+SERI_DB = os.path.join(KLASOR, "vk_seri.db")
+SERI_SN = 900
+
+
+def vk_seri_kaydet():
+    """iyv.db'deki Volkano oranlarinin (İY/MS dahil tum pazarlar) zaman serisi: degisen her mac icin yeni satir"""
+    if not os.path.exists(IYV):
+        return 0
+    c = sqlite3.connect(f"file:{IYV}?mode=ro", uri=True, timeout=10)
+    rows = c.execute("SELECT mid, at, ko, home, away, lig, vk FROM iyv_aday WHERE vk IS NOT NULL").fetchall()
+    c.close()
+    os.makedirs(KLASOR, exist_ok=True)
+    s = sqlite3.connect(SERI_DB, timeout=30)
+    s.execute("CREATE TABLE IF NOT EXISTS s (mid INTEGER, at TEXT, ko TEXT, home TEXT, away TEXT, lig TEXT, vk TEXT, PRIMARY KEY (mid, at))")
+    son = {m: v for m, v in s.execute("SELECT mid, vk FROM s WHERE rowid IN (SELECT MAX(rowid) FROM s GROUP BY mid)")}
+    n = 0
+    for mid, at, ko, h, a, lg, vk in rows:
+        if son.get(mid) != vk:
+            s.execute("INSERT OR IGNORE INTO s VALUES (?,?,?,?,?,?,?)", (mid, at, ko, h, a, lg, vk))
+            n += 1
+    s.commit()
+    s.close()
+    return n
+
+
+def _seri_loop():
+    time.sleep(120)
+    while True:
+        try:
+            _last["vk_seri"] = f"{datetime.now(TR):%H:%M} +{vk_seri_kaydet()} değişim"
+        except Exception as e:
+            _last["vk_seri"] = "HATA " + str(e)[:150]
+        time.sleep(SERI_SN)
+
+
 def start_background():
     global _started
     if _started:
@@ -652,6 +687,7 @@ def start_background():
     _started = True
     threading.Thread(target=_loop, daemon=True, name="oto_tahmin").start()
     threading.Thread(target=_yayin_loop, daemon=True, name="oto_yayin").start()
+    threading.Thread(target=_seri_loop, daemon=True, name="oto_vk_seri").start()
 
 
 SONUC_DOSYA = os.path.join(KLASOR, "sonuc7m.json")
@@ -1024,6 +1060,11 @@ if __name__ == "__main__":
         _cli_canli(int(a[1]) if len(a) > 1 else 0)
     elif a[:1] == ["sonuc"]:
         _cli_sonuc()
+    elif a[:1] == ["seri"]:
+        print("yeni kayıt:", vk_seri_kaydet())
+        s = sqlite3.connect(SERI_DB)
+        print("toplam:", s.execute("SELECT COUNT(*), COUNT(DISTINCT mid) FROM s").fetchone(), "(satır, maç)")
+        s.close()
     elif a[:1] == ["yayin"]:
         print("GitHub'a yüklendi:", yayin())
     elif a[:1] == ["vktest"]:
