@@ -47,6 +47,7 @@ import gecpara
 import desen_tab
 import oto_tahmin
 import canli_ajan
+import iyms_kars
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -576,4 +577,5 @@ if __name__ == "__main__":
     desen_tab.start_background()
     oto_tahmin.start_background()
     canli_ajan.start_background()
+    iyms_kars.start_background()
     app.run(host="0.0.0.0", port=8080)
