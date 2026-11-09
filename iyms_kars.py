@@ -86,6 +86,32 @@ def son5_kaydet():
     return n
 
 
+def _dt(x):
+    d = datetime.fromisoformat(str(x).replace("Z", "+00:00"))
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def tani():
+    """bugun neden mac yok: adim adim"""
+    now = datetime.now(timezone.utc)
+    if not os.path.exists(IYV):
+        print("iyv.db YOK")
+        return
+    v = sqlite3.connect(f"file:{IYV}?mode=ro", uri=True, timeout=10)
+    R = v.execute("SELECT mid, ko, vk FROM iyv_aday").fetchall()
+    print("iyv_aday satır:", len(R), "| en yeni at:", v.execute("SELECT MAX(at) FROM iyv_aday").fetchone()[0], "| ko örnek:", R[0][1] if R else None)
+    v.close()
+    gel = [r for r in R if now < _dt(r[1]) < now + timedelta(hours=26)]
+    print("önümüzdeki 26 saat:", len(gel), "| İY/MS (47) olan:", sum('"47"' in (r[2] or "") for r in gel))
+    E = [e for e in _get(f"{B}/events?st=1&type=0&version=0")["data"]["events"] if e.get("sid") == 1 and e.get("d")]
+    print("iddaa maç önü futbol:", len(E), "| önümüzdeki 26 saat:", sum(1 for e in E if now.timestamp() < e["d"] < now.timestamp() + 93600))
+    c = db()
+    print("kars.db toplam:", c.execute("SELECT COUNT(*) FROM k").fetchone()[0], "| en yeni ko:", c.execute("SELECT MAX(ko) FROM k").fetchone()[0],
+          "| son yazım:", c.execute("SELECT MAX(at_son) FROM k").fetchone()[0])
+    c.close()
+    print("kaydet():", kaydet())
+
+
 def kaydet():
     """Volkano'nun İY/MS verdigi yaklasan maclar <-> iddaa bulteni; iddaa İY/MS oranini yaz (ilk bir kez, son her turda, KO-10 dk'ya kadar)"""
     if not os.path.exists(IYV):
@@ -95,13 +121,13 @@ def kaydet():
     V = [(m, ko, h, a, lg) for m, ko, h, a, lg, vk in v.execute("SELECT mid, ko, home, away, lig, vk FROM iyv_aday WHERE vk IS NOT NULL")
          if '"47"' in (vk or "")]
     v.close()
-    V = [x for x in V if now + timedelta(minutes=10) < datetime.fromisoformat(x[1]) < now + timedelta(hours=26)]
+    V = [x for x in V if now + timedelta(minutes=10) < _dt(x[1]) < now + timedelta(hours=26)]
     E = [e for e in _get(f"{B}/events?st=1&type=0&version=0")["data"]["events"] if e.get("sid") == 1 and e.get("d")]
     c = db()
     var = {r[0]: r[1] for r in c.execute("SELECT mid, i FROM k")}
     n_es = n_or = 0
     for mid, ko, h, a, lg in V:
-        t = datetime.fromisoformat(ko).timestamp()
+        t = _dt(ko).timestamp()
         i = var.get(mid)
         if not i:
             best = None
@@ -350,6 +376,9 @@ def start_background():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["tani"]:
+        tani()
+        sys.exit()
     if sys.argv[1:2] != ["rapor"]:
         print(kaydet(), "\n")
     rapor()

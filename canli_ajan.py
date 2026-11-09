@@ -326,7 +326,8 @@ def run_cycle():
                 F5 = (R5.get(mid) or {}).get("F") or x["F"]
                 kupon_var = any(z["mid"] == mid and z["tip"] == "KARAR" for z in LOG)      # mac basina tek kupon
                 if not kupon_var:
-                    S += KA.karar(dk, h, a, F5, r, st, ah, (o or {}).get("ou"), kay_now, kirmizi, idd, serbest)
+                    kr_ = KA.karar(dk, h, a, F5, r, st, ah, (o or {}).get("ou"), kay_now, kirmizi, idd, serbest)
+                    S += kr_ or KA.gol_kupon(S, idd, kirmizi, serbest)
             except Exception as e:
                 _last["karar_hata"] = str(e)[:150]
             if idd:

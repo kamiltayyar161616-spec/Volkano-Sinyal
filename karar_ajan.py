@@ -8,7 +8,7 @@ Birlesik ihtimal = TARİH ve MODEL'in karne agirlikli ortalamasi + SAHA/PİYASA 
 Sinyal sarti: en az 3 grup ayni yonu destekliyor + birlesik ihtimal piyasadan >= 5 puan yuksek + birlesik >= %40.
 Karne: gecmis gunlerin sinyal kayitlarindan her sinyal turunun gercek tutma orani (20+ biten sinyal varsa agirlik 0.5-1.5).
 SANAL KASA (gercek bahis YOK): 5000 TL ile baslar, kupon basi en az 100 TL, en fazla 500 TL. En az 2 kaynak ayni yonde. Sadece iddaa canli orani varken ve
-deger = iddaa orani x bizim ihtimal >= 1.10 ise oynar; tutar = ceyrek Kelly (serbest kasa x f/4), 100-500 TL arasi, 5 TL ye yuvarli. Mac basina tek kupon."""
+deger = iddaa orani x bizim ihtimal >= 1.05 ise oynar; ayrica Canli Ajan GOL sinyalinde iddaa 'gol olur' >= 1.45 ise oynar; tutar = ceyrek Kelly (serbest kasa x f/4), 100-500 TL arasi, 5 TL ye yuvarli. Mac basina tek kupon."""
 import json
 import os
 import re
@@ -18,7 +18,8 @@ from math import exp, factorial
 KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "canli_ajan")
 _karne = {"t": 0, "w": {}}
 ESIK_P = 30.0
-DEGER_ESIK = 1.10
+DEGER_ESIK = 1.05
+GOL_MIN_ORAN = 1.45       # GOL sinyali kuponu: iddaa 'gol olur' orani en az bu (GOL karnesi %72 -> basabas 1.39)
 KASA0, MAX_BAHIS, MIN_BAHIS, KELLY = 5000.0, 500.0, 100.0, 0.25
 MIN_DESTEK = 2
 _kasa = {"t": 0, "v": None}
@@ -147,6 +148,24 @@ def bahis_tutar(p, io, serbest):
         return 0
     t = max(MIN_BAHIS, min(MAX_BAHIS, round(serbest * f * KELLY / 5) * 5))
     return t if t <= serbest else 0
+
+
+def gol_kupon(S, idd, kirmizi, serbest):
+    """Canli Ajan GOL sinyali geldiyse ve iddaa 'Maçta gol olur' orani >= GOL_MIN_ORAN ise sanal kupon (KARAR, kaynak GOL)"""
+    if kirmizi or not idd:
+        return []
+    g = next((s for s in S if s.get("tip") == "GOL" and s.get("p")), None)
+    io = ((idd.get("oran") or {}).get("Maçta gol olur"))
+    if not g or not io or io < GOL_MIN_ORAN:
+        return []
+    p = g["p"]
+    t = bahis_tutar(p / 100, io, serbest)
+    if not t:
+        return []
+    return [{"tip": "KARAR", "sec": "Maçta gol olur", "p": p, "n": g.get("n"), "adil": round(100 / p, 2), "deger": round(io * p / 100, 2),
+             "guclu": p >= 80, "piyasa": round(100 * idd["gol"], 1) if idd.get("gol") is not None else None, "kaynak": "GOL sinyali",
+             "iddaa": io, "oran": io, "bahis": t,
+             "acik": f"sanal kupon {t:g} TL @ {io} · GOL sinyali arşiv %{p:.0f} ({g.get('n')} maç) · iddaa gol olur ≥ {GOL_MIN_ORAN}"}]
 
 
 def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi, idd=None, serbest=None):
