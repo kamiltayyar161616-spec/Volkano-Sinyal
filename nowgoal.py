@@ -875,7 +875,7 @@ def resolve(log):
     with _db_lock:
         c = _conn()
         rows = c.execute("""SELECT mid, kickoff_utc FROM ng_match WHERE status='stats'
-                            AND kickoff_utc < ? ORDER BY kickoff_utc LIMIT ?""",
+                            AND kickoff_utc < ? ORDER BY kickoff_utc DESC LIMIT ?""",      # en yeni bitenler once: eski takilan sirayi tikamaz
                          (_iso(now - timedelta(minutes=RESULT_AFTER_MIN)), MAX_RESULT_PER_CYCLE)).fetchall()
         c.close()
     done = 0
@@ -885,14 +885,23 @@ def resolve(log):
             ko, es, ds = f["ko"], f["h"], f["a"]
         except Exception as e:
             log.append(f"sonuç {r['mid']} hata {e}")
+            if datetime.fromisoformat(r["kickoff_utc"]) < now - timedelta(hours=VOID_AFTER_H):
+                with _db_lock:                          # 30 saattir sonuc alinamiyor -> void (sira tikanmasin)
+                    c = _conn()
+                    c.execute("UPDATE ng_match SET status='void' WHERE mid=? AND status='stats'", (r["mid"],))
+                    c.commit()
+                    c.close()
             time.sleep(BEKLE)
             continue
+        eski = datetime.fromisoformat(r["kickoff_utc"]) < now - timedelta(hours=VOID_AFTER_H)
         with _db_lock:
             c = _conn()
             if ko and ko != r["kickoff_utc"] and datetime.fromisoformat(ko) > now:
                 c.execute("UPDATE ng_match SET kickoff_utc=? WHERE mid=?", (ko, r["mid"]))  # ertelendi
-            elif f["state"] in ("1", "2", "3", "4", "5"):
+            elif f["state"] in ("1", "2", "3", "4", "5") and not eski:
                 pass   # mac hala oynaniyor (gecikmeli baslama / uzatma) -> sonraki turda tekrar sor
+            elif f["state"] in ("1", "2", "3", "4", "5"):
+                c.execute("UPDATE ng_match SET status='void' WHERE mid=?", (r["mid"],))   # 30 saat sonra hala "oynaniyor": eski veri
             elif es and ds and es.isdigit() and ds.isdigit():
                 hth, hta = f["hth"], f["hta"]
                 ht = (int(hth), int(hta)) if hth and hta and hth.isdigit() and hta.isdigit() else (None, None)

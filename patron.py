@@ -312,6 +312,8 @@ def hesapla():
                 PP[p["pazar"]][0] += 1
                 PP[p["pazar"]][1] += t
         elif now - timedelta(hours=3) < ko < now + timedelta(hours=YAKIN_SAAT):
+            if not any(len({d["kaynak"].split("-")[0] for d in p["destek"]}) >= 2 for p in P):
+                continue                                  # en az iki farkli guvenilir sistem (karnesi 15+) ayni secimi demeli
             en = {}
             for p in P:
                 en.setdefault(p["pazar"], p)
@@ -467,10 +469,24 @@ def canli():
     return {"last": d.get("last"), "maclar": out, "karne": {t: {"n": n, "h": round(100 * h, 1)} for t, (n, h) in KR.items()}}
 
 
-def get_page_data(sekme="baslamak"):
-    if not _cache["v"]:
+_hesapta = {"v": False}
+
+
+def _arka_hesap():
+    if _hesapta["v"]:
+        return
+    _hesapta["v"] = True
+    try:
         _guncelle()
+    finally:
+        _hesapta["v"] = False
+
+
+def get_page_data(sekme="baslamak"):
+    if not _cache["v"]:                                   # sayfa beklemesin: hesap arka planda, sayfa "hesaplaniyor" der
+        threading.Thread(target=_arka_hesap, daemon=True).start()
     v = dict(_cache["v"] or {})
+    v["hesaplaniyor"] = not _cache["v"]
     v["hata"] = _cache["hata"]
     v["sekme"] = sekme
     if sekme == "canli":
@@ -482,9 +498,9 @@ def get_page_data(sekme="baslamak"):
 
 
 def _loop():
-    time.sleep(240)
+    time.sleep(45)
     while True:
-        _guncelle()
+        _arka_hesap()
         time.sleep(TUR_SN)
 
 

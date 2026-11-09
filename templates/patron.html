@@ -20,9 +20,10 @@
   .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:left; } .tt td{ padding:5px 3px; border-top:1px solid var(--navy-line); }
   details{ margin:0 16px 12px; } summary{ cursor:pointer; color:var(--chalk-faint); font-size:13px; }
 </style>
-<meta http-equiv="refresh" content="{{ 60 if d.sekme == 'canli' else 300 }}">
+<meta http-equiv="refresh" content="{{ 30 if d.hesaplaniyor else 60 if d.sekme == 'canli' else 300 }}">
 {% endblock %}
 {% block content %}
+{% if d.hesaplaniyor %}<div class="section-sub" style="color:#e0a030">⏳ PATRON şu an hesaplıyor (yaklaşık 1 dakika). Sayfa kendiliğinden yenilenir.</div>{% endif %}
 <div class="tabs"><a class="tab {{ 'on' if d.sekme == 'canli' else '' }}" href="/patron?sekme=canli">🔴 CANLI MAÇLAR</a><a class="tab {{ 'on' if d.sekme != 'canli' else '' }}" href="/patron">⏳ BAŞLAMAK ÜZERE</a></div>
 <div class="section-sub">Son hesap: {{ (d.at[:19] ~ '+00:00') | localdatetime if d.at else '-' }} ({{ d.sure }} sn) · ajanlar: {% for a in d.ajanlar or [] %}{{ a.ad }} {{ a.mac }} maç{% if a.hata %} <span style="color:#ff5a4f">⚠</span>{% endif %}{{ ' · ' if not loop.last else '' }}{% endfor %}{% if d.hata %} · ⚠ {{ d.hata }}{% endif %}</div>
 
@@ -47,7 +48,7 @@
   {% for p in x.P[:4] %}<div class="pk {{ 'g1' if p.guven >= 70 else 'g2' if p.guven >= 58 else '' }}"><span class="gv">%{{ p.guven }}</span><b>{{ {'MS':'Maç sonucu','ÇŞ':'Çifte şans','2.5':'2.5','İY0.5':'İY 0.5','İY1.5':'İY 1.5','İY/MS':'İY/MS'}.get(p.pazar, p.pazar) }} {{ p.sec }}</b>
     <div class="meta">✔ {% for s in p.destek[:5] %}{{ s.kaynak }} %{{ s.h }}{{ ', ' if not loop.last else '' }}{% endfor %}{% if p.karsi %} · ✖ karşı: {% for s in p.karsi[:3] %}{{ s.kaynak }} ({{ s.sec }}){{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}</div></div>{% endfor %}
 </div>
-{% else %}<div class="section-sub">Önümüzdeki {{ 12 }} saatte ajanların oy verdiği maç yok.</div>{% endfor %}
+{% else %}<div class="section-sub">{{ 'Hesaplanıyor…' if d.hesaplaniyor else 'Önümüzdeki 12 saatte en az iki farklı güvenilir sistemin aynı seçimi yaptığı maç yok.' }}</div>{% endfor %}
 {% endif %}
 
 <h2 class="section">📊 PATRON KARNESİ</h2>
