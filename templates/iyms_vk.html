@@ -23,17 +23,19 @@
 {% endblock %}
 {% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
 {% block content %}
-<div class="section-sub">Son 5 dk kayıt turu: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok' }}{% if d.last.log %} · {{ d.last.log }}{% endif %}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %} · seride {{ d.seri or 0 }} maç · son 5 dk kaydı {{ d.son5_n or 0 }}</div>
+<div class="section-sub">Son 5 dk kayıt turu: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok' }}{% if d.last.log %} · {{ d.last.log }}{% endif %}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %} · {{ d.seri or 0 }} maç · açılış kaydı {{ d.acilis_n or 0 }} · son 5 dk kaydı {{ d.son5_n or 0 }}{% if d.last.acilis %} · {{ d.last.acilis }}{% endif %}</div>
 
 <h2 class="section">📈 TÜM ZAMANLAR ({{ d.biten or 0 }} biten maç)</h2>
-{% if d.biten %}
+{% for st in d.setler or [] %}
+<h2 class="section" style="font-size:14px">{{ st.ad }} · {{ st.biten }} maç</h2>
+{% if st.biten %}
 <table class="tt"><tr><th>grup</th><th>seçim</th><th>tuttu</th><th>beklenen</th><th>Volkano ROI</th></tr>
-{% for x in d.gruplar %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
-<h2 class="section">💸 PARA YÖNÜ · Volkano ilk → son 5 dk</h2>
-<table class="tt"><tr><th>seçim</th><th>adet</th><th>tuttu</th><th>beklenen</th><th>Volkano ROI</th></tr>
-{% for x in d.para %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
-<div class="section-sub">Beklenen = Volkano'nun son oranının marjsız ihtimali. "Tuttu" beklenenden belirgin fazlaysa o hareket bilgi taşıyor.</div>
-{% else %}<div class="section-sub">Henüz biten ve iki kaydı da olan maç yok. Son 5 dk kayıtları bugünden itibaren birikiyor.</div>{% endif %}
+{% for x in st.gruplar %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
+<table class="tt"><tr><th>💸 para yönü</th><th>adet</th><th>tuttu</th><th>beklenen</th><th>Volkano ROI</th></tr>
+{% for x in st.para %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten maç yok.</div>{% endif %}
+{% endfor %}
+<div class="section-sub">Beklenen = Volkano'nun son oranının marjsız ihtimali. "Tuttu" beklenenden belirgin fazlaysa o hareket bilgi taşıyor. Açılış kaydı bugünden itibaren birikiyor.</div>
 
 <h2 class="section">📅 GÜN GÜN</h2>
 <div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/iyms-vk?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
@@ -43,7 +45,7 @@
 {% for x in d.L %}
 <div class="kc">
   <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
-  <div class="meta">{{ x.lig or '' }} · Volkano {{ 'son 5 dk kaydı' if x.son5 else 'güncel oran (son 5 dk kaydı bekleniyor)' }}{% if x.son5 and not x.sayilir %} · ilk kayıt maça 2 saatten yakın, sayılmıyor{% endif %} · her satır: seçim · ilk / son · değişim</div>
+  <div class="meta">{{ x.lig or '' }} · ilk: {{ 'bülten açılışı ' ~ ((x.ilk_at[:19] ~ '+00:00') | localdatetime) if x.kaynak == 'açılış' else 'maçtan ~12 saat önce (açılış kaydı yok)' }} · son: {{ '5 dk önce' if x.son5 else 'güncel (son 5 dk bekleniyor)' }}{% if x.son5 and not x.sayilir %} · ilk kayıt maça 2 saatten yakın, sayılmıyor{% endif %} · her satır: seçim · ilk / son · değişim</div>
   {% if x.para %}<div class="meta">💸 en çok düşen (para giren): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
   <div class="g9">{% for g in ('en az değişen 3', 'kalan 3', 'en çok değişen 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
     {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><span>{{ s.sec }}</span><span>{{ s.ilk }}/{{ s.son }}</span><span>{{ '%+d'|format(s.d) }}%</span></div>{% endfor %}

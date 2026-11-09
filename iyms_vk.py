@@ -1,5 +1,6 @@
 """İY/MS VOLKANO PARA — sadece Volkano: ilk kayit -> mactan 3-7 dk once son kayit. iddaa karismaz. Sadece okur, bahis yok.
-ilk : data/oto_tahmin/vk_seri.db tablo s, macin ilk satiri (iyv.db'den 15 dk'da bir kopyalanan Volkano oranlari)
+ilk : once AÇILIŞ kaydi (tablo acilis: Volkano'da İY/MS pazari ilk gorundugu an, 30 dk'lik tarama; NowGoal-Volkano eslesmesi
+      olan maclar, 5 gun ileriye kadar). Acilis kaydi yoksa vk_seri.db tablo s'nin ilk satiri (iyv: mactan ~12 saat once).
 son5: mactan 3-7 dk once Volkano'dan anlik İY/MS (pazar 47) -> vk_seri.db tablo son5 (bu modul yazar)
 Test: her macta 9 secenek ilk->son5 degisim buyuklugune gore: en az degisen 3 / kalan 3 / en cok degisen 3;
       para yonu: en cok para giren / cikan secim + kovalar. ROI Volkano'nun son5 oraniyla.
@@ -17,7 +18,11 @@ import oto_tahmin as O
 
 TR = ZoneInfo("Europe/Istanbul")
 S9 = ["1/1", "1/X", "1/2", "X/1", "X/X", "X/2", "2/1", "2/X", "2/2"]
-SON5 = (3, 7)
+SON5 = (1, 8)
+ACILIS_SN = 1800                # acilis taramasi
+ACILIS_GUN = 5
+YOK47_TEKRAR = 7200             # Volkano'da mac var ama İY/MS yok -> 2 saatte bir tekrar bak
+YOKVK_TEKRAR = 1800
 MIN_ONCE_SN = 7200              # ilk kayit mactan en az 2 saat once olmali
 GRUPLAR = ("en az değişen 3", "kalan 3", "en çok değişen 3")
 PARA_KOVA = ("para girdi ≥%15", "para girdi %5-15", "sabit (±%5)", "para çıktı %5-15", "para çıktı ≥%15")
@@ -32,7 +37,46 @@ def _dt(x):
 def db():
     c = sqlite3.connect(O.SERI_DB, timeout=30)
     c.execute("CREATE TABLE IF NOT EXISTS son5 (mid INTEGER PRIMARY KEY, at TEXT, vk TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS acilis (mid INTEGER PRIMARY KEY, at TEXT, ko TEXT, home TEXT, away TEXT, lig TEXT, vk TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS acilis_kontrol (mid INTEGER PRIMARY KEY, at TEXT, durum TEXT)")
     return c
+
+
+def acilis_tara():
+    """Volkano eslesmesi olan yaklasan maclar: İY/MS pazari ilk gorundugu an 9 orani kaydet (bir kez)"""
+    now = datetime.now(timezone.utc)
+    n = O._ng()
+    R = n.execute("""SELECT mid, kickoff_utc, home, away, COALESCE(NULLIF(league_vk,''), league_ng) FROM ng_match
+                     WHERE volkano_json IS NOT NULL AND kickoff_utc > ? AND kickoff_utc < ?""",
+                  ((now + timedelta(minutes=15)).isoformat(), (now + timedelta(days=ACILIS_GUN)).isoformat())).fetchall()
+    n.close()
+    c = db()
+    var = {m for (m,) in c.execute("SELECT mid FROM acilis")}
+    K = {m: (at, d) for m, at, d in c.execute("SELECT mid, at, durum FROM acilis_kontrol")}
+    L = []
+    for m, ko, h, a, lg in R:
+        if m in var:
+            continue
+        k = K.get(m)
+        if k and (now - _dt(k[0])).total_seconds() < (YOK47_TEKRAR if k[1] == "yok47" else YOKVK_TEKRAR):
+            continue
+        L.append((m, ko, h, a, lg))
+    yeni = 0
+    for i in range(0, len(L), 25):
+        P = L[i:i + 25]
+        V = O.vk_taze([str(x[0]) for x in P])
+        for m, ko, h, a, lg in P:
+            v = V.get(str(m))
+            o = (v or {}).get("47")
+            if o and all(k in o for k in S9):
+                c.execute("INSERT OR IGNORE INTO acilis VALUES (?,?,?,?,?,?,?)", (m, now.isoformat(), ko, h, a, lg, json.dumps(o)))
+                yeni += 1
+            else:
+                c.execute("INSERT OR REPLACE INTO acilis_kontrol VALUES (?,?,?)", (m, now.isoformat(), "yok47" if v else "yokvk"))
+        c.commit()
+        time.sleep(1)
+    c.close()
+    return f"açılış taraması: {len(R)} Volkano maçı, {len(L)} bakıldı, {yeni} yeni açılış kaydı"
 
 
 def son5_kaydet():
@@ -42,10 +86,10 @@ def son5_kaydet():
     now = datetime.now(timezone.utc)
     c = db()
     var = {m for (m,) in c.execute("SELECT mid FROM son5")}
-    L = []
-    for m, ko in c.execute("SELECT mid, MAX(ko) FROM s GROUP BY mid"):
-        if m not in var and ko and now + timedelta(minutes=SON5[0]) <= _dt(ko) <= now + timedelta(minutes=SON5[1]):
-            L.append(m)
+    KO = {m: ko for m, ko in c.execute("SELECT mid, MAX(ko) FROM s GROUP BY mid")}
+    KO.update({m: ko for m, ko in c.execute("SELECT mid, ko FROM acilis")})
+    L = [m for m, ko in KO.items()
+         if m not in var and ko and now + timedelta(minutes=SON5[0]) <= _dt(ko) <= now + timedelta(minutes=SON5[1])]
     n = 0
     if L:
         V = O.vk_taze([str(m) for m in L])
@@ -71,7 +115,7 @@ def _pk(d):
 
 def hesap():
     c = sqlite3.connect(f"file:{O.SERI_DB}?mode=ro", uri=True, timeout=20)
-    ilk, guncel, bilgi = {}, {}, {}
+    ilk, guncel, bilgi, kaynak = {}, {}, {}, {}
     for m, at, ko, h, a, lg, vk in c.execute("SELECT mid, at, ko, home, away, lig, vk FROM s ORDER BY mid, at"):
         try:
             o = (json.loads(vk) or {}).get("47")
@@ -80,7 +124,17 @@ def hesap():
         if o and all(k in o for k in S9):
             ilk.setdefault(m, (at, o))
             guncel[m] = (at, o)
+            kaynak.setdefault(m, "12 saat")
         bilgi[m] = (ko, h, a, lg)
+    try:
+        for m, at, ko, h, a, lg, vk in c.execute("SELECT mid, at, ko, home, away, lig, vk FROM acilis"):
+            o = json.loads(vk)
+            ilk[m] = (at, o)                       # acilis kaydi varsa ilk oran odur
+            guncel.setdefault(m, (at, o))
+            kaynak[m] = "açılış"
+            bilgi.setdefault(m, (ko, h, a, lg))
+    except sqlite3.OperationalError:
+        pass
     try:
         S5 = {m: (at, json.loads(v)) for m, at, v in c.execute("SELECT mid, at, vk FROM son5")}
     except sqlite3.OperationalError:
@@ -88,9 +142,8 @@ def hesap():
     c.close()
     R = O._sonuclar([str(m) for m in ilk]) if ilk else {}
     f = lambda x, y: "1" if x > y else "2" if y > x else "X"
-    G = {g: [0, 0, 0.0, 0.0] for g in GRUPLAR}            # secim, tuttu, beklenen, kar
-    PK = {g: [0, 0, 0.0, 0.0] for g in PARA_KOVA}
-    PS = {g: [0, 0, 0.0, 0.0] for g in ("en çok para giren", "en çok para çıkan")}
+    SET = {k: {"G": {g: [0, 0, 0.0, 0.0] for g in GRUPLAR}, "PK": {g: [0, 0, 0.0, 0.0] for g in PARA_KOVA},
+               "PS": {g: [0, 0, 0.0, 0.0] for g in ("en çok para giren", "en çok para çıkan")}, "n": 0} for k in ("açılış", "12 saat")}
     maclar, n = [], 0
     for m, (at0, o0) in ilk.items():
         ko, h, a, lg = bilgi[m]
@@ -107,6 +160,7 @@ def hesap():
         sira = sorted(S9, key=lambda k: abs(d[k]))
         grup = {k: GRUPLAR[sira.index(k) // 3] for k in S9}
         maclar.append({"mid": m, "ko": ko, "ev": h, "dep": a, "lig": lg, "son5": son5, "sayilir": sayilir, "sonuc": sonuc,
+                       "kaynak": kaynak.get(m), "ilk_at": at0,
                        "skor": f"{r[0]}-{r[1]}" if bitti else None, "iy": f"{r[2]}-{r[3]}" if bitti else None,
                        "S": [{"sec": k, "ilk": o0[k], "son": o1[k], "d": round(100 * d[k]), "grup": grup[k], "tuttu": k == sonuc} for k in sira],
                        "para": [{"sec": k, "d": round(100 * d[k]), "ilk": o0[k], "son": o1[k], "tuttu": k == sonuc}
@@ -114,6 +168,9 @@ def hesap():
         if not bitti or not sayilir:
             continue
         n += 1
+        st = SET[kaynak.get(m, "12 saat")]
+        st["n"] += 1
+        G, PK, PS = st["G"], st["PK"], st["PS"]
         for k in S9:
             for x in (G[grup[k]], PK[_pk(d[k])]):
                 x[0] += 1
@@ -129,8 +186,12 @@ def hesap():
     satir = lambda ad, x: {"ad": ad, "n": x[0], "w": x[1], "e": round(x[2], 1), "roi": round(100 * x[3] / x[0], 1) if x[0] else None,
                            "kar": round(x[3], 2)}
     maclar.sort(key=lambda x: x["ko"], reverse=True)
-    return {"biten": n, "seri": len(ilk), "son5_n": len(S5), "gruplar": [satir(g, G[g]) for g in GRUPLAR],
-            "para": [satir(g, PS[g]) for g in PS] + [satir(g, PK[g]) for g in PARA_KOVA if PK[g][0]], "maclar": maclar}
+    setler = [{"ad": "Bülten açılışı → son 5 dk" if k == "açılış" else "Maçtan ~12 saat önce → son 5 dk (açılış kaydı yok)", "biten": v["n"],
+               "gruplar": [satir(g, v["G"][g]) for g in GRUPLAR],
+               "para": [satir(g, v["PS"][g]) for g in v["PS"]] + [satir(g, v["PK"][g]) for g in PARA_KOVA if v["PK"][g][0]]}
+              for k, v in SET.items()]
+    return {"biten": n, "seri": len(ilk), "son5_n": len(S5), "acilis_n": sum(1 for v in kaynak.values() if v == "açılış"),
+            "setler": setler, "maclar": maclar}
 
 
 def get_page_data(gun=None):
@@ -162,7 +223,14 @@ def get_page_data(gun=None):
 
 def _loop():
     time.sleep(200)
+    t_ac = 0
     while True:
+        if time.time() - t_ac > ACILIS_SN:
+            t_ac = time.time()
+            try:
+                _last["acilis"] = acilis_tara()
+            except Exception as e:
+                _last["acilis"] = "HATA " + str(e)[:200]
         try:
             n = son5_kaydet()
             _last["at"] = datetime.now(timezone.utc).isoformat()
