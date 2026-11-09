@@ -55,13 +55,13 @@ def maclar_volkano():
         s = sqlite3.connect(f"file:{O.SERI_DB}?mode=ro", uri=True)
         ilk = {}
         for m, at, ko, h, a, vk in s.execute("SELECT mid, at, ko, home, away, vk FROM s ORDER BY mid, at"):
-            if m not in ilk:
+            if m not in ilk and vk:
                 o = (json.loads(vk) or {}).get("47")
                 if o and all(k in o for k in S9):
                     ilk[m] = (at, ko, h, a, o)
         s.close()
         v = sqlite3.connect(f"file:{K.IYV}?mode=ro", uri=True)
-        kil = {m: (json.loads(vk) or {}).get("47") for m, vk in v.execute("SELECT mid, vk FROM iyv_islenen")}
+        kil = {m: (json.loads(vk) or {}).get("47") for m, vk in v.execute("SELECT mid, vk FROM iyv_islenen") if vk}
         v.close()
     except Exception as e:
         print("Volkano okunamadı:", e)
@@ -118,6 +118,7 @@ def analiz(ad, L):
                 print("\n".join(G[g]["L"]))
 
 
-analiz("iddaa (ilk → son 5 dk)", maclar_iddaa())
+if sys.argv[1:2] != ["volkano"]:
+    analiz("iddaa (ilk → son 5 dk)", maclar_iddaa())
 analiz("Volkano (ilk → maçtan 15 dk önce kilit)", maclar_volkano())
 print("\n(beklenen kazanma = son oranlara göre para tarafının MS ihtimali; 'para tarafı kazandı' bundan belirgin düşükse para ters sinyal)")
