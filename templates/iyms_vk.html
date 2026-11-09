@@ -43,13 +43,11 @@
 {% for x in d.L %}
 <div class="kc">
   <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
-  {% if not x.son5 %}<div class="meta">{{ x.lig or '' }} · son 5 dk kaydı bekleniyor · ilk oranlar: {% for s in x.S %}{{ s.sec }} {{ s.ilk }}{{ ' · ' if not loop.last else '' }}{% endfor %}</div>
-  {% else %}
-  <div class="meta">{{ x.lig or '' }} · her satır: seçim · ilk → son 5 dk · para</div>
-  {% if x.para %}<div class="meta">💸 en çok para: {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
+  <div class="meta">{{ x.lig or '' }} · Volkano {{ 'son 5 dk kaydı' if x.son5 else 'güncel oran (son 5 dk kaydı bekleniyor)' }}{% if x.son5 and not x.sayilir %} · ilk kayıt maça 2 saatten yakın, sayılmıyor{% endif %} · her satır: seçim · ilk / son · değişim</div>
+  {% if x.para %}<div class="meta">💸 en çok düşen (para giren): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
   <div class="g9">{% for g in ('en az değişen 3', 'kalan 3', 'en çok değişen 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
-    {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><span>{{ s.sec }}</span><span>{{ s.ilk }}→{{ s.son }}</span><span>{{ '%+d'|format(s.d) }}%</span></div>{% endfor %}
-  </div>{% endfor %}</div>{% endif %}
+    {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><span>{{ s.sec }}</span><span>{{ s.ilk }}/{{ s.son }}</span><span>{{ '%+d'|format(s.d) }}%</span></div>{% endfor %}
+  </div>{% endfor %}</div>
 </div>
 {% else %}<div class="section-sub">Bu gün için maç yok.</div>{% endfor %}
 {% endblock %}

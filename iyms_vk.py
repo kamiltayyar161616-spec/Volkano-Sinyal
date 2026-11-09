@@ -71,15 +71,15 @@ def _pk(d):
 
 def hesap():
     c = sqlite3.connect(f"file:{O.SERI_DB}?mode=ro", uri=True, timeout=20)
-    ilk, bilgi = {}, {}
+    ilk, guncel, bilgi = {}, {}, {}
     for m, at, ko, h, a, lg, vk in c.execute("SELECT mid, at, ko, home, away, lig, vk FROM s ORDER BY mid, at"):
-        if m not in ilk:
-            try:
-                o = (json.loads(vk) or {}).get("47")
-            except (TypeError, ValueError):
-                o = None
-            if o and all(k in o for k in S9):
-                ilk[m] = (at, o)
+        try:
+            o = (json.loads(vk) or {}).get("47")
+        except (TypeError, ValueError):
+            o = None
+        if o and all(k in o for k in S9):
+            ilk.setdefault(m, (at, o))
+            guncel[m] = (at, o)
         bilgi[m] = (ko, h, a, lg)
     try:
         S5 = {m: (at, json.loads(v)) for m, at, v in c.execute("SELECT mid, at, vk FROM son5")}
@@ -94,14 +94,11 @@ def hesap():
     maclar, n = [], 0
     for m, (at0, o0) in ilk.items():
         ko, h, a, lg = bilgi[m]
-        if m not in S5:
-            if _dt(ko) > datetime.now(timezone.utc) - timedelta(hours=3):
-                maclar.append({"mid": m, "ko": ko, "ev": h, "dep": a, "lig": lg, "son5": False, "sonuc": None, "S": [
-                    {"sec": k, "ilk": o0[k], "son": None, "d": None, "grup": None, "tuttu": False} for k in S9]})
-            continue
-        at1, o1 = S5[m]
-        if (_dt(ko) - _dt(at0)).total_seconds() < MIN_ONCE_SN:
-            continue
+        son5 = m in S5
+        if not son5 and _dt(ko) < datetime.now(timezone.utc) - timedelta(hours=3):
+            continue                              # son 5 dk kaydi olmadan bitmis mac: gosterilmez, sayilmaz
+        at1, o1 = S5[m] if son5 else guncel[m]    # son 5 dk yoksa simdilik en guncel Volkano kaydi
+        sayilir = son5 and (_dt(ko) - _dt(at0)).total_seconds() >= MIN_ONCE_SN
         r = R.get(str(m)) or (None,) * 4
         bitti = r[0] is not None and r[2] is not None
         sonuc = f"{f(r[2], r[3])}/{f(r[0], r[1])}" if bitti else None
@@ -109,12 +106,12 @@ def hesap():
         d = {k: (p1[k] - p0[k]) / p0[k] for k in S9}
         sira = sorted(S9, key=lambda k: abs(d[k]))
         grup = {k: GRUPLAR[sira.index(k) // 3] for k in S9}
-        maclar.append({"mid": m, "ko": ko, "ev": h, "dep": a, "lig": lg, "son5": True, "sonuc": sonuc,
+        maclar.append({"mid": m, "ko": ko, "ev": h, "dep": a, "lig": lg, "son5": son5, "sayilir": sayilir, "sonuc": sonuc,
                        "skor": f"{r[0]}-{r[1]}" if bitti else None, "iy": f"{r[2]}-{r[3]}" if bitti else None,
                        "S": [{"sec": k, "ilk": o0[k], "son": o1[k], "d": round(100 * d[k]), "grup": grup[k], "tuttu": k == sonuc} for k in sira],
                        "para": [{"sec": k, "d": round(100 * d[k]), "ilk": o0[k], "son": o1[k], "tuttu": k == sonuc}
                                 for k in sorted(S9, key=lambda k: -d[k])[:3]]})
-        if not bitti:
+        if not bitti or not sayilir:
             continue
         n += 1
         for k in S9:
@@ -151,7 +148,7 @@ def get_page_data(gun=None):
     L = sorted([x for x in H["maclar"] if x["gun"] == gun], key=lambda x: x["ko"])
     G = {g: [0, 0, 0.0] for g in GRUPLAR}
     for x in L:
-        if x["sonuc"]:
+        if x["sonuc"] and x.get("sayilir"):
             for s in x["S"]:
                 y = G[s["grup"]]
                 y[0] += 1
