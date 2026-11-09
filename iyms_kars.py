@@ -68,7 +68,7 @@ def son5_kaydet():
     now = datetime.now(timezone.utc)
     c = db()
     L = [(m, i) for m, i, ko in c.execute("SELECT mid, i, ko FROM k WHERE idd_son5 IS NULL")
-         if now + timedelta(minutes=SON5[0]) <= datetime.fromisoformat(ko) <= now + timedelta(minutes=SON5[1])]
+         if now + timedelta(minutes=SON5[0]) <= _dt(ko) <= now + timedelta(minutes=SON5[1])]
     n = 0
     for m, i in L:
         try:
@@ -226,7 +226,7 @@ def hesap():
         para = None
         try:
             i0, i1 = json.loads(ji), json.loads(j5 or "null") or io
-            if (datetime.fromisoformat(ko) - datetime.fromisoformat(ai)).total_seconds() >= 7200:
+            if (_dt(ko) - _dt(ai)).total_seconds() >= 7200:
                 p0, p1 = _novig(i0), _novig(i1)
                 para = {k: (p1[k] - p0[k]) / p0[k] for k in S9}
         except (TypeError, ValueError, KeyError, ZeroDivisionError):
@@ -322,7 +322,7 @@ def get_page_data(gun=None):
     except Exception as e:
         return {"last": _last, "hata": str(e)[:200], "ozet": {}, "gruplar": [], "kovalar": [], "maclar": [], "gunler": [], "gun": gun}
     for x in H["maclar"]:
-        t = datetime.fromisoformat(x["ko"]).astimezone(TR)
+        t = _dt(x["ko"]).astimezone(TR)
         x["gun"], x["saat"] = t.date().isoformat(), t.strftime("%H:%M")
     gunler = sorted({x["gun"] for x in H["maclar"]}, reverse=True)
     bugun = datetime.now(TR).date().isoformat()
