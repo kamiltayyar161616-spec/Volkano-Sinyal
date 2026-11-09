@@ -29,11 +29,20 @@ for p in ("https://www.iddaa.com/spor-toto", "https://www.iddaa.com/spor-toto/bu
     s, b = get(p)
     print("sayfa", p, s, len(b))
     H += b
-js = sorted(set(re.findall(r'(?:src|href)="(/_next/static/[^"]+\.js)"', H)))
+js = sorted(set(re.findall(r'(?:src|href)="(/_next/static/[^"]+\.js|https://[^"]+\.js)"', H)))
+s0, ST = get("https://www.iddaa.com/spor-toto")
+m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', ST, re.S)
+print("\n== spor-toto sayfasi gomulu veri ==", "VAR" if m else "yok")
+if m:
+    print(m.group(1)[:3000])
+for k in ("Galatasaray", "Fenerbahçe", "Beşiktaş", "hafta", "Hafta", "matchList", "events", "program"):
+    i = ST.find(k)
+    if i >= 0:
+        print(f"[{k}] ...{re.sub(r'<[^>]+>', ' ', ST[max(0, i - 200): i + 300])[:400]}...")
 print("js:", len(js))
 yol = set()
 for j in js[:90]:
-    b = get("https://www.iddaa.com" + j)[1]
+    b = get(j if j.startswith("http") else "https://www.iddaa.com" + j)[1]
     for m in re.finditer(r'["\'`](/[a-zA-Z0-9_/{}$.-]*(?:toto|Toto|program|coupon|week|hafta|draw|bulletin|event)[a-zA-Z0-9_/{}$.?=&-]*)["\'`]', b):
         yol.add(m.group(1))
     for m in re.finditer(r"sportoto[A-Za-z]*\s*:\s*\"[^\"]+\"", b):
