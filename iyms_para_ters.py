@@ -17,7 +17,8 @@ import iyms_kars as K
 import oto_tahmin as O
 
 S9 = K.S9
-ESIK = 0.09
+ESIKLER = (0.07, 0.08, 0.09)
+ESIK = 0.07
 
 
 def dt(x):
@@ -66,14 +67,18 @@ def maclar_volkano():
     except Exception as e:
         print("Volkano okunamadı:", e)
         return out
-    for m, (at, ko, h, a, o0) in ilk.items():
-        o1 = kil.get(m)
-        if o1 and all(k in o1 for k in S9) and (dt(ko) - dt(at)).total_seconds() >= 7200:
-            out.append((m, h, a, ko, o0, o1, "kilit"))
+    kesisim = [m for m in ilk if kil.get(m) and all(k in kil[m] for k in S9)]
+    once = [(dt(ilk[m][1]) - dt(ilk[m][0])).total_seconds() / 3600 for m in kesisim]
+    print(f"\nVolkano: seride İY/MS'li {len(ilk)} maç · kilit oranı olan {sum(1 for v in kil.values() if v)} · ikisi de olan {len(kesisim)}"
+          + (f" · ilk kayıt maçtan ortalama {sum(once) / len(once):.1f} saat önce (en erken {max(once):.1f})" if once else ""))
+    for m in kesisim:
+        at, ko, h, a, o0 = ilk[m]
+        if (dt(ko) - dt(at)).total_seconds() >= 3600:
+            out.append((m, h, a, ko, o0, kil[m], "kilit"))
     return out
 
 
-def analiz(ad, L):
+def analiz(ad, L, esik=ESIK, detay=True):
     R = O._sonuclar([str(x[0]) for x in L]) if L else {}
     G = defaultdict(lambda: {"n": 0, "ayni": 0, "x": 0, "ters": 0, "bek": 0.0, "L": []})
     n_bitti = 0
@@ -85,7 +90,7 @@ def analiz(ad, L):
         p0, p1 = novig(o0), novig(o1)
         d = {k: (p1[k] - p0[k]) / p0[k] for k in S9}
         top = sorted(S9, key=lambda k: -d[k])[:3]
-        if d[top[0]] < ESIK:
+        if d[top[0]] < esik:
             continue
         taraf = top[0][2]
         ayni3 = all(k[2] == taraf for k in top)
@@ -104,21 +109,25 @@ def analiz(ad, L):
                 x[sonuc] += 1
                 x["bek"] += pms
                 x["L"].append(satir)
-    print(f"\n===== {ad}: biten {n_bitti} maç · en çok para giren seçim ≥ +%{100 * ESIK:.0f} olanlar =====")
+    print(f"\n===== {ad}: biten {n_bitti} maç · en çok para giren seçim ≥ +%{100 * esik:.0f} olanlar =====")
     print(f"{'grup':12} {'maç':>4} {'para tarafı kazandı':>20} {'berabere':>9} {'TERS':>6} {'beklenen kazanma':>17}")
     for g in ("ÜÇÜ AYNI", "İKİSİ AYNI", "TEK"):
         x = G[g]
         if x["n"]:
             print(f"{g:12} {x['n']:4} {x['ayni']:9} (%{100 * x['ayni'] / x['n']:4.0f}) {x['x']:9} {x['ters']:6} (%{100 * x['ters'] / x['n']:.0f}) "
                   f"{100 * x['bek'] / x['n']:12.0f}%")
-    if sys.argv[1:2] == ["detay"]:
+    if detay and "detay" in sys.argv:
         for g in ("ÜÇÜ AYNI", "İKİSİ AYNI"):
             if G[g]["L"]:
                 print(f"\n-- {g} --")
                 print("\n".join(G[g]["L"]))
 
 
-if sys.argv[1:2] != ["volkano"]:
-    analiz("iddaa (ilk → son 5 dk)", maclar_iddaa())
-analiz("Volkano (ilk → maçtan 15 dk önce kilit)", maclar_volkano())
+if "volkano" not in sys.argv:
+    LI = maclar_iddaa()
+    for e in ESIKLER:
+        analiz("iddaa (ilk → son 5 dk)", LI, e, detay=(e == ESIK))
+LV = maclar_volkano()
+for e in ESIKLER:
+    analiz("Volkano (ilk → maçtan 15 dk önce kilit; ilk kayıt ≥1 saat önce)", LV, e, detay=(e == ESIK))
 print("\n(beklenen kazanma = son oranlara göre para tarafının MS ihtimali; 'para tarafı kazandı' bundan belirgin düşükse para ters sinyal)")
