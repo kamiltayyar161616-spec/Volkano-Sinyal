@@ -343,7 +343,9 @@ def find_ng_match(home, away, kickoff_utc, name_match, hours=3):
         vk = _json.loads(r["volkano_json"]) if r["volkano_json"] else {}
         if vk.get("home") == home and vk.get("away") == away:
             return r
-        if fuzzy is None and ((name_match(home, r["home"]) and name_match(away, r["away"])) or
+        if not r["home"] and not vk.get("home"):
+            continue                                  # takim adi henuz dolmamis NowGoal satiri
+        if fuzzy is None and ((r["home"] and name_match(home, r["home"]) and name_match(away, r["away"] or "")) or
                               (vk.get("home") and name_match(home, vk["home"]) and name_match(away, vk.get("away") or ""))):
             fuzzy = r
     return fuzzy

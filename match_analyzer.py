@@ -103,7 +103,7 @@ def _norm(name: str) -> str:
     # yoksa AllSportsAPI'nin "Fenerbahce" (c'siz) demesiyle bizim kaydimizdaki
     # "Fenerbahce" (c'li, Sansa/Sbbet kaynakli) hic eslesmiyor, mac sonsuza kadar
     # 'pending' kaliyordu. Once sadelestirme, sonra kucuk harfe cevirme yapilir.
-    name = name.translate(_TR_FOLD_MAP)
+    name = (name or "").translate(_TR_FOLD_MAP)        # NowGoal'da henuz takim adi dolmamis satir (None) cokertmesin
     name = name.lower()
     name = re.sub(r"[^a-z0-9 ]", "", name)
     name = re.sub(r"\b(fc|sc|cf|cd|ac|sk|fk|if|bk|club|the)\b", "", name)
