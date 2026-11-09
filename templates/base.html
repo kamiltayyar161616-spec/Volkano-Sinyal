@@ -159,6 +159,7 @@
     <a href="/oynanabilir" class="{{ 'active' if active_page == 'oynanabilir' else '' }}"><span class="ic">✅</span>Oynanabilir</a>
     <a href="/istatistik" class="{{ 'active' if active_page == 'karne' else '' }}"><span class="ic">📊</span>Karne</a>
   </nav>
+  <div style="text-align:right;margin:4px 16px 0"><a href="/indir?yol={{ request.full_path|urlencode }}" style="font-size:12px;color:var(--chalk-faint);text-decoration:none;border:1px solid var(--navy-line);border-radius:12px;padding:3px 10px">⬇ JSON indir</a></div>
 </header>
 
 <main>

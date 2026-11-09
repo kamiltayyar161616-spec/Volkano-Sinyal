@@ -447,6 +447,33 @@ def canli_ajan_page():
     return render_template("canli_ajan.html", d=canli_ajan.get_page_data(request.args.get("gun")), active_page="ajan")
 
 
+@app.route("/indir")
+def sayfa_json_indir():
+    """Her sekmenin verisini JSON olarak indirir: sayfanin sablona verdigi veri aynen (yol = sekmenin adresi, ?gun= vb. dahil)."""
+    import json as _json
+    from datetime import datetime
+    from flask import Response, template_rendered
+    yol = request.args.get("yol") or "/"
+    if not yol.startswith("/") or yol.startswith("/indir"):
+        return "gecersiz yol", 400
+    yakala = {}
+
+    def _al(sender, template, context, **kw):
+        if not yakala:
+            yakala.update({k: v for k, v in context.items() if k not in ("request", "session", "g", "config", "url_for", "get_flashed_messages", "self")})
+
+    template_rendered.connect(_al, app)
+    try:
+        with app.test_request_context(yol):
+            app.dispatch_request()
+    finally:
+        template_rendered.disconnect(_al, app)
+    ad = (yol.strip("/").split("?")[0].replace("/", "_") or "ozet") + "_" + datetime.now().strftime("%Y%m%d_%H%M") + ".json"
+    govde = _json.dumps({"sekme": yol, "indirildi": datetime.now().isoformat(timespec="seconds"), "veri": yakala},
+                        ensure_ascii=False, indent=1, default=str)
+    return Response(govde, mimetype="application/json", headers={"Content-Disposition": f"attachment; filename={ad}"})
+
+
 @app.route("/patron")
 def patron_page():
     return render_template("patron.html", d=patron.get_page_data(request.args.get("sekme") or "baslamak"), active_page="patron")
