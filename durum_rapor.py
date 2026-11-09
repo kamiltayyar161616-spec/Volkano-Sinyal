@@ -128,7 +128,7 @@ def log_hatalari():
 def rapor():
     return {"at": datetime.now(timezone.utc).isoformat(),
             "arka_plan": {m: _mod_last(m) for m in ("oto_tahmin", "canli_ajan", "iyms_kars", "iyms_vk", "toto_tab", "kelly_tab",
-                                                     "sdoran", "m7", "gecpara", "desen_tab", "nowgoal", "istat_ajan", "iddaa_canli")},
+                                                     "sdoran", "m7", "gecpara", "desen_tab", "nowgoal", "istat_ajan", "iddaa_canli", "toto_iddaa")},
             "nowgoal": _guvenli(nowgoal_saglik), "kaynaklar": _guvenli(kaynak_tazelik), "db": _guvenli(diger_db),
             "canli": _guvenli(canli_ozet), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari)}
 

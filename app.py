@@ -51,6 +51,7 @@ import iyms_kars
 import iyms_vk
 import patron
 import durum_rapor
+import toto_iddaa
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -626,4 +627,5 @@ if __name__ == "__main__":
     iyms_vk.start_background()
     patron.start_background()
     durum_rapor.start_background()
+    toto_iddaa.start_background()
     app.run(host="0.0.0.0", port=8080)

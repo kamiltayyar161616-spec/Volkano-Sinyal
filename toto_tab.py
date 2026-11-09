@@ -513,7 +513,7 @@ def toto_hafta(hafta=None):
         elif re.fullmatch(r"\d+-\d+", str(m.get("skor") or "")):          # elle girilen skor
             r["ft_h"], r["ft_a"] = (int(v) for v in m["skor"].split("-"))
             r["sonuc"] = _sonuc(r["ft_h"], r["ft_a"])
-        x = {"no": m["no"], "ad": f"{m['ev']} - {m['dep']}", "ng": m.get("ng"), "ko": m.get("ko"),
+        x = {"no": m["no"], "ad": f"{m['ev']} - {m['dep']}", "ng": m.get("ng"), "ko": m.get("ko"), "iddaa": m.get("iddaa"),
              "skor": f"{r['ft_h']}-{r['ft_a']}" if r.get("sonuc") is not None else None,
              "sonuc": "1X2"[r["sonuc"]] if r.get("sonuc") is not None else None}
         x["simdi"] = secim(r.get("simdi"), "simdi")
