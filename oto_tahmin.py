@@ -738,18 +738,30 @@ def _sonuc7m_oku():
         return {}
 
 
+S7_MIN_DK = 130              # 7M yedek skoru, NowGoal'un gercek baslama saatinden bu kadar dk sonra gecerli
+
+
 def _sonuclar(mids):
     if not mids:
         return {}
     c = _ng()
     q = ",".join("?" * len(mids))
-    R = {str(m): (fh, fa, hh, ha) for m, fh, fa, hh, ha in c.execute(f"SELECT mid, ft_h, ft_a, ht_h, ht_a FROM ng_match WHERE mid IN ({q})",
-                                                                      [int(x) for x in mids])}
+    R, KO = {}, {}
+    for m, fh, fa, hh, ha, ko in c.execute(f"SELECT mid, ft_h, ft_a, ht_h, ht_a, kickoff_utc FROM ng_match WHERE mid IN ({q})",
+                                           [int(x) for x in mids]):
+        R[str(m)] = (fh, fa, hh, ha)
+        KO[str(m)] = ko
     c.close()
     S7 = _sonuc7m_oku()
+    sinir = datetime.now(timezone.utc) - timedelta(minutes=S7_MIN_DK)
     for m in mids:
         m = str(m)
         if (R.get(m) or (None,))[0] is None and S7.get(m):
+            try:
+                if KO.get(m) and datetime.fromisoformat(KO[m]) > sinir:
+                    continue                    # mac henuz bitmemis olabilir: 7M skoru kullanilmaz
+            except ValueError:
+                pass
             R[m] = tuple(S7[m])
     return R
 
@@ -767,13 +779,26 @@ def sonuc_7m(sure=120):
             ko = datetime.fromisoformat(x["ko"])
             if now - timedelta(days=2) < ko < now - timedelta(minutes=130):
                 aday[m] = x
+    S7, C = _sonuc7m_oku(), _cache_oku()
+    tum = {int(x) for x in list(aday) + list(S7) if str(x).isdigit()}
+    c = _ng()                                   # 130 dk NowGoal'un gercek baslama saatine gore
+    q = ",".join("?" * len(tum)) or "NULL"
+    KO = {str(m): ko for m, ko in c.execute(f"SELECT mid, kickoff_utc FROM ng_match WHERE mid IN ({q})", list(tum))}
+    c.close()
+    sinir = now - timedelta(minutes=S7_MIN_DK)
+    aday = {m: x for m, x in aday.items() if not KO.get(str(m)) or datetime.fromisoformat(KO[str(m)]) < sinir}
+    erken = [m for m in S7 if KO.get(m) and datetime.fromisoformat(KO[m]) > sinir]
+    for m in erken:                             # mac bitmeden yazilmis 7M skoru -> sil, sonra yeniden alinir
+        S7.pop(m, None)
+    if erken:
+        with _kilit:
+            json.dump(S7, open(SONUC_DOSYA, "w", encoding="utf-8"))
     if not aday:
         return 0
     R = _sonuclar(list(aday))
     eksik = [m for m in aday if (R.get(m) or (None,))[0] is None]
     if not eksik:
         return 0
-    S7, C = _sonuc7m_oku(), _cache_oku()
     t0, n = time.time(), 0
     for m in eksik:
         if time.time() - t0 > sure:
