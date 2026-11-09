@@ -50,6 +50,7 @@ import canli_ajan
 import iyms_kars
 import iyms_vk
 import patron
+import durum_rapor
 
 app = Flask(__name__)
 app.jinja_env.filters["localtime"] = to_local_str
@@ -597,4 +598,5 @@ if __name__ == "__main__":
     iyms_kars.start_background()
     iyms_vk.start_background()
     patron.start_background()
+    durum_rapor.start_background()
     app.run(host="0.0.0.0", port=8080)
