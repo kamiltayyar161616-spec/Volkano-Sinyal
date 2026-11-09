@@ -158,7 +158,7 @@ def kaydet():
         if mid in var:
             c.execute("UPDATE k SET at_son=?, idd_son=? WHERE mid=?", (at, js, mid))
         else:
-            c.execute("INSERT INTO k VALUES (?,?,?,?,?,?,?,?,?,?)", (mid, i, ko, h, a, lg, at, js, at, js))
+            c.execute("INSERT INTO k (mid, i, ko, ev, dep, lig, at_ilk, idd_ilk, at_son, idd_son) VALUES (?,?,?,?,?,?,?,?,?,?)", (mid, i, ko, h, a, lg, at, js, at, js))
     c.commit()
     c.close()
     return f"Volkano İY/MS {len(V)} maç · iddaa eşleşen {n_es} · İY/MS oranı yazılan {n_or}"
