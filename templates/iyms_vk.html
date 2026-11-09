@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}SAHA — İY/MS Volkano Para{% endblock %}
+{% block page_tag %}💸 İY/MS VOLKANO PARA{% endblock %}
+{% block subtitle %}Sadece Volkano (iddaa yok): Volkano'nun 9 İY/MS oranının <b>ilk kaydı</b> ile <b>maçtan 3-7 dk önceki son kaydı</b> karşılaştırılır. Her maçta seçenekler değişim büyüklüğüne göre sıralanır: <b>en az değişen 3</b> / <b>kalan 3</b> / <b>en çok değişen 3</b>. Para = marjsız ihtimaldeki değişim (oran düştü = para girdi). ROI = her seçime 1 birim, Volkano'nun son oranıyla. İlk kaydı maçtan 2 saatten az önce alınan maçlar sayılmaz.{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .ust{ display:flex; justify-content:space-between; gap:8px; font-weight:700; font-size:14.5px; }
+  .meta{ color:var(--chalk-faint); font-size:12px; margin-top:2px; }
+  .g9{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
+  .gb{ border-radius:10px; padding:6px 7px; background:var(--navy-deep); font-size:12px; }
+  .gb h4{ margin:0 0 4px; font-size:11px; color:#e0a030; font-weight:800; }
+  .sl{ display:flex; justify-content:space-between; padding:2px 0; font-family:'Space Grotesk',sans-serif; white-space:nowrap; }
+  .sl.ok{ background:rgba(40,160,90,.28); border-radius:5px; padding:2px 3px; font-weight:800; }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="300">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% block content %}
+<div class="section-sub">Son 5 dk kayıt turu: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok' }}{% if d.last.log %} · {{ d.last.log }}{% endif %}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %} · seride {{ d.seri or 0 }} maç · son 5 dk kaydı {{ d.son5_n or 0 }}</div>
+
+<h2 class="section">📈 TÜM ZAMANLAR ({{ d.biten or 0 }} biten maç)</h2>
+{% if d.biten %}
+<table class="tt"><tr><th>grup</th><th>seçim</th><th>tuttu</th><th>beklenen</th><th>Volkano ROI</th></tr>
+{% for x in d.gruplar %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
+<h2 class="section">💸 PARA YÖNÜ · Volkano ilk → son 5 dk</h2>
+<table class="tt"><tr><th>seçim</th><th>adet</th><th>tuttu</th><th>beklenen</th><th>Volkano ROI</th></tr>
+{% for x in d.para %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
+<div class="section-sub">Beklenen = Volkano'nun son oranının marjsız ihtimali. "Tuttu" beklenenden belirgin fazlaysa o hareket bilgi taşıyor.</div>
+{% else %}<div class="section-sub">Henüz biten ve iki kaydı da olan maç yok. Son 5 dk kayıtları bugünden itibaren birikiyor.</div>{% endif %}
+
+<h2 class="section">📅 GÜN GÜN</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/iyms-vk?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+{% if d.gun_ozet and d.gun_ozet[0].n %}<table class="tt"><tr><th>{{ d.gun[8:10] }}.{{ d.gun[5:7] }} biten</th><th>seçim</th><th>tuttu</th><th>Volkano ROI</th></tr>
+{% for x in d.gun_ozet %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>{% endif %}
+
+{% for x in d.L %}
+<div class="kc">
+  <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
+  {% if not x.son5 %}<div class="meta">{{ x.lig or '' }} · son 5 dk kaydı bekleniyor · ilk oranlar: {% for s in x.S %}{{ s.sec }} {{ s.ilk }}{{ ' · ' if not loop.last else '' }}{% endfor %}</div>
+  {% else %}
+  <div class="meta">{{ x.lig or '' }} · her satır: seçim · ilk → son 5 dk · para</div>
+  {% if x.para %}<div class="meta">💸 en çok para: {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
+  <div class="g9">{% for g in ('en az değişen 3', 'kalan 3', 'en çok değişen 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
+    {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><span>{{ s.sec }}</span><span>{{ s.ilk }}→{{ s.son }}</span><span>{{ '%+d'|format(s.d) }}%</span></div>{% endfor %}
+  </div>{% endfor %}</div>{% endif %}
+</div>
+{% else %}<div class="section-sub">Bu gün için maç yok.</div>{% endfor %}
+{% endblock %}

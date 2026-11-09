@@ -48,6 +48,7 @@ import desen_tab
 import oto_tahmin
 import canli_ajan
 import iyms_kars
+import iyms_vk
 import patron
 
 app = Flask(__name__)
@@ -450,6 +451,11 @@ def patron_page():
     return render_template("patron.html", d=patron.get_page_data(request.args.get("sekme") or "baslamak"), active_page="patron")
 
 
+@app.route("/iyms-vk")
+def iyms_vk_page():
+    return render_template("iyms_vk.html", d=iyms_vk.get_page_data(request.args.get("gun")), active_page="iymsvk")
+
+
 @app.route("/iyms-kars")
 def iyms_kars_page():
     return render_template("iyms_kars.html", d=iyms_kars.get_page_data(request.args.get("gun")), active_page="iymsk")
@@ -589,5 +595,6 @@ if __name__ == "__main__":
     oto_tahmin.start_background()
     canli_ajan.start_background()
     iyms_kars.start_background()
+    iyms_vk.start_background()
     patron.start_background()
     app.run(host="0.0.0.0", port=8080)
