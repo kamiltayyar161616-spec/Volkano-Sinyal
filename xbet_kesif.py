@@ -13,23 +13,27 @@ def _get(u):
         return json.loads(f.read().decode("utf-8", "replace"))
 
 
+def _g(u):
+    try:
+        with urllib.request.urlopen(urllib.request.Request(u, headers=H), timeout=30) as f:
+            return f.status, f.read(3000).decode("utf-8", "replace")
+    except Exception as e:
+        return getattr(e, "code", 0), str(e)[:100]
+
+
 def kesif():
-    out = {}
+    out = {"sozluk": {}}
+    for yol in ("GetEventsGroupsZip?lng=en", "GetGroupsZip?lng=en", "GetEventsZip?lng=en", "GetGroupsNamesZip?lng=en"):
+        out["sozluk"][yol] = _g(f"{B}/{yol}")
+    for u in ("https://1xbet.mobi/service-api/main-line-feed/v1/eventGroups?lng=en", "https://1xbet.mobi/genfiles/cms/betstemplates/betsNames_en.json"):
+        out["sozluk"][u] = _g(u)
     V = _get(f"{B}/Get1x2_VZip?sports=1&count=1000&lng=en&mode=4&country=1&getEmpty=true").get("Value") or []
-    out["bulten_mac"] = len(V)
-    out["alanlar"] = sorted(V[0].keys()) if V else []
-    out["zaman"] = [min(g["S"] for g in V), max(g["S"] for g in V)] if V else None
-    V = sorted(V, key=lambda g: -(g.get("EC") or 0))[:3]
-    out["maclar"] = []
-    for g in V:
-        x = {"mac": f"{g.get('O1')} - {g.get('O2')} | {g.get('L')} | S {g.get('S')} | EC {g.get('EC')} | I {g['I']}"}
-        G = _get(f"{B}/GetGameZip?id={g['I']}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode=4&partner=1&topGroups=&marketType=1").get("Value") or {}
-        GE = G.get("GE") or []
-        x["gruplar"] = [(e.get("G"), sum(len(a) for a in e.get("E") or [])) for e in GE]
-        x["dokuz"] = {str(e.get("G")): [[(o.get("T"), o.get("C"), o.get("P")) for o in a] for a in e.get("E") or []]
-                      for e in GE if sum(len(a) for a in e.get("E") or []) == 9}
-        x["SG"] = [(s.get("I"), s.get("PN") or s.get("TG")) for s in (G.get("SG") or [])][:10]
-        out["maclar"].append(x)
+    g = next((x for x in V if "Eibar" in (x.get("O2") or "")), None) or max(V, key=lambda x: x.get("EC") or 0)
+    out["mac"] = f"{g.get('O1')} - {g.get('O2')} | E1x2 {[(e.get('T'), e.get('C')) for e in g.get('E', []) if e.get('G') == 1]}"
+    for gm in (4, 2):
+        G = _get(f"{B}/GetGameZip?id={g['I']}&lng=en&isSubGames=true&GroupEvents=true&countevents=1000&grMode={gm}&partner=1&topGroups=&marketType=1").get("Value") or {}
+        out[f"grMode{gm}"] = {str(e.get("G")): [(o.get("T"), o.get("C"), o.get("P")) for a in e.get("E") or [] for o in a][:14]
+                              for e in G.get("GE") or [] if e.get("G") not in (136, 2663, 2665, 8863)}
     return out
 
 
