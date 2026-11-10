@@ -114,6 +114,7 @@ def start_background():
     threading.Thread(target=_calis, daemon=True, name="monsure_bakim").start()
     threading.Thread(target=lambda: _calis2(), daemon=True, name="monsure_bakim2").start()
     threading.Thread(target=lambda: _calis3(), daemon=True, name="monsure_bakim3").start()
+    threading.Thread(target=lambda: _calis4(), daemon=True, name="monsure_bakim4").start()
 
 
 def rapor():
@@ -208,5 +209,66 @@ def _calis3():
 def rapor3():
     try:
         return json.load(open(SONUC3))
+    except Exception:
+        return {"durum": "henüz çalışmadı"}
+
+
+# ---------------------------------------------------------------- v4: Zlatnik cron (test 4/4 basarili) + Stake sartlari (salt okunur)
+ISARET4 = os.path.join(KOK, "data", "monsure_bakim_v4.done")
+SONUC4 = os.path.join(KOK, "data", "monsure_bakim4.json")
+
+
+def _stake():
+    import urllib.request
+    out = {}
+    for u in ("https://stake.com/policies/terms", "https://stake.com/policies/sportsbook", "https://stake.com/robots.txt"):
+        try:
+            r = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                                                   "Accept": "text/html,*/*", "Accept-Language": "en"})
+            with urllib.request.urlopen(r, timeout=30) as f:
+                h = f.read().decode("utf-8", "replace")
+            t = re.sub(r"<script.*?</script>|<style.*?</style>", " ", h, flags=re.S)
+            t = re.sub(r"<[^>]+>", " ", t)
+            t = re.sub(r"\s+", " ", t)
+            par = [m.group(0) for m in re.finditer(r"[^.]{0,400}(?:\bbot|automat|software|script|robot|\bAPI\b|artificial intelligence|Montenegro)[^.]{0,400}\.", t, re.I)]
+            out[u] = {"boy": len(h), "metin_boy": len(t), "ilgili": par[:25], "bas": t[:400] if not par else None}
+        except Exception as e:
+            out[u] = f"{type(e).__name__}: {str(e)[:200]}"
+    return out
+
+
+def _calis4():
+    time.sleep(90)
+    if os.path.exists(ISARET4) or not os.path.isdir(MON):
+        return
+    open(ISARET4, "w").write(datetime.now(timezone.utc).isoformat())
+    R = {"basla": datetime.now(timezone.utc).isoformat()}
+    try:
+        R["stake"] = _stake()
+    except Exception as e:
+        R["stake"] = str(e)[:200]
+    json.dump(R, open(SONUC4, "w"), ensure_ascii=False, indent=1)
+    try:
+        R["deneme"] = _sh("timeout 240 /usr/bin/python3 -c 'import zlatnik_oran; zlatnik_oran.run_once()'", 260)
+        R["tazelik"] = _tazelik().get("zlatnik.json")
+        if R["tazelik"] is not None and R["tazelik"] < 6:
+            eski = _sh("crontab -l 2>/dev/null")["out"]
+            open(os.path.join(MON, f"crontab.bak-{DAMGA}-4"), "w").write(eski)
+            if "monsure zlatnik" not in eski:
+                p = subprocess.run(["crontab", "-"], input=eski.rstrip("\n") + "\n" + "\n".join(ZL_CRON) + "\n", text=True, capture_output=True)
+                R["crontab"] = {"rc": p.returncode, "err": p.stderr[-300:]}
+        R["cron_satirlari"] = [x for x in _sh("crontab -l")["out"].splitlines() if "zlatnik" in x]
+    except Exception as e:
+        R["HATA"] = f"{type(e).__name__}: {str(e)[:300]}"
+    json.dump(R, open(SONUC4, "w"), ensure_ascii=False, indent=1)
+    time.sleep(1500)
+    R["tazelik_25dk"] = _tazelik()
+    R["zlatnik_log"] = _sh(f"tail -n 8 {MON}/zlatnik_log.txt")["out"]
+    json.dump(R, open(SONUC4, "w"), ensure_ascii=False, indent=1)
+
+
+def rapor4():
+    try:
+        return json.load(open(SONUC4))
     except Exception:
         return {"durum": "henüz çalışmadı"}
