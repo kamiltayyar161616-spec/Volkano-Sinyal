@@ -11,11 +11,18 @@
   .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
   .ust{ display:flex; justify-content:space-between; gap:8px; font-weight:700; font-size:14.5px; }
   .meta{ color:var(--chalk-faint); font-size:12px; margin-top:2px; }
-  .g9{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
-  .gb{ border-radius:10px; padding:6px 7px; background:var(--navy-deep); font-size:12px; }
-  .gb h4{ margin:0 0 4px; font-size:11px; color:#e0a030; font-weight:800; }
-  .sl{ display:flex; justify-content:space-between; padding:2px 0; font-family:'Space Grotesk',sans-serif; white-space:nowrap; }
-  .sl.ok{ background:rgba(40,160,90,.28); border-radius:5px; padding:2px 3px; font-weight:800; }
+  .g9{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:10px; }
+  .gb{ border-radius:10px; padding:7px 6px 4px; background:var(--navy-deep); min-width:0; }
+  .gb h4{ margin:0 0 6px; font-size:9.5px; letter-spacing:.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#e0a030; font-weight:800; text-align:center; }
+  .sl{ padding:5px 5px; border-radius:7px; margin-bottom:4px; background:rgba(255,255,255,.03); font-family:'Space Grotesk',sans-serif; }
+  .sl .r1{ display:flex; justify-content:space-between; align-items:baseline; gap:4px; }
+  .sl .sc{ font-size:14px; font-weight:800; }
+  .sl .fk{ font-size:11px; font-weight:700; padding:0 5px; border-radius:6px; }
+  .sl .fk.a{ color:#3ccf7a; background:rgba(60,207,122,.12); } .sl .fk.e{ color:#ff8a80; background:rgba(255,90,79,.12); } .sl .fk.s{ color:var(--chalk-faint); }
+  .sl .r2{ display:flex; justify-content:space-between; font-size:11px; color:var(--chalk-faint); margin-top:2px; white-space:nowrap; }
+  .sl .r2 b{ color:var(--chalk); font-weight:600; }
+  .sl.ok{ background:rgba(40,160,90,.30); box-shadow:inset 0 0 0 1px rgba(60,207,122,.6); }
+  .lj{ text-align:right; font-size:10.5px; color:var(--chalk-faint); margin-top:6px; }
   .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
   .chip.on{ border-color:#e0a030; color:#e0a030; }
 </style>
@@ -45,11 +52,12 @@
 {% for x in d.L %}
 <div class="kc">
   <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
-  <div class="meta">{{ x.lig or '' }} · ilk: {{ 'bülten açılışı ' ~ ((x.ilk_at[:19] ~ '+00:00') | localdatetime) if x.kaynak == 'açılış' else 'maçtan ~12 saat önce (açılış kaydı yok)' }} · son: {{ '5 dk önce' if x.son5 else 'güncel (son 5 dk bekleniyor)' }}{% if x.son5 and not x.sayilir %} · ilk kayıt maça 2 saatten yakın, sayılmıyor{% endif %} · her satır: seçim · ilk / son · değişim</div>
+  <div class="meta">{{ x.lig or '' }} · ilk: {{ 'bülten açılışı ' ~ ((x.ilk_at[:19] ~ '+00:00') | localdatetime) if x.kaynak == 'açılış' else 'maçtan ~12 saat önce (açılış kaydı yok)' }} · son: {{ '5 dk önce' if x.son5 else 'güncel (son 5 dk bekleniyor)' }}{% if x.son5 and not x.sayilir %} · ilk kayıt maça 2 saatten yakın, sayılmıyor{% endif %}</div>
   {% if x.para %}<div class="meta">💸 en çok düşen (para giren): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
-  <div class="g9">{% for g in ('en az değişen 3', 'kalan 3', 'en çok değişen 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
-    {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><span>{{ s.sec }}</span><span>{{ s.ilk }}/{{ s.son }}</span><span>{{ '%+d'|format(s.d) }}%</span></div>{% endfor %}
+  <div class="g9">{% for g in ('en az değişen 3', 'kalan 3', 'en çok değişen 3') %}<div class="gb"><h4>{{ {'en az değişen 3': 'EN AZ DEĞİŞEN', 'kalan 3': 'KALAN', 'en çok değişen 3': 'EN ÇOK DEĞİŞEN'}[g] }}</h4>
+    {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><div class="r1"><span class="sc">{{ s.sec }}{{ ' ✓' if s.tuttu else '' }}</span><span class="fk {{ 'a' if s.d >= 1 else 'e' if s.d <= -1 else 's' }}">{{ '%+d'|format(s.d) }}%</span></div><div class="r2"><span>{{ s.ilk }}</span><span>→</span><b>{{ s.son }}</b></div></div>{% endfor %}
   </div>{% endfor %}</div>
+  <div class="lj">ilk → son oran · +% oran düştü (para girdi) · −% oran yükseldi</div>
 </div>
 {% else %}<div class="section-sub">Bu gün için maç yok.</div>{% endfor %}
 {% endblock %}
