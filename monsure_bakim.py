@@ -115,6 +115,7 @@ def start_background():
     threading.Thread(target=lambda: _calis2(), daemon=True, name="monsure_bakim2").start()
     threading.Thread(target=lambda: _calis3(), daemon=True, name="monsure_bakim3").start()
     threading.Thread(target=lambda: _calis4(), daemon=True, name="monsure_bakim4").start()
+    threading.Thread(target=lambda: _calis5(), daemon=True, name="monsure_bakim5").start()
 
 
 def rapor():
@@ -270,5 +271,51 @@ def _calis4():
 def rapor4():
     try:
         return json.load(open(SONUC4))
+    except Exception:
+        return {"durum": "henüz çalışmadı"}
+
+
+# ---------------------------------------------------------------- v5: Zlatnik cron (v4'te crontab kirpilarak okundugu icin kurulamadi)
+ISARET5 = os.path.join(KOK, "data", "monsure_bakim_v5.done")
+SONUC5 = os.path.join(KOK, "data", "monsure_bakim5.json")
+
+
+def _crontab_oku():
+    p = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=20)
+    if p.returncode != 0:
+        raise RuntimeError("crontab -l: " + p.stderr[-200:])
+    return p.stdout
+
+
+def _calis5():
+    time.sleep(60)
+    if os.path.exists(ISARET5) or not os.path.isdir(MON):
+        return
+    open(ISARET5, "w").write(datetime.now(timezone.utc).isoformat())
+    R = {"basla": datetime.now(timezone.utc).isoformat()}
+    try:
+        eski = _crontab_oku()
+        R["satir_once"] = len(eski.splitlines())
+        open(os.path.join(MON, f"crontab.bak-{DAMGA}-5"), "w").write(eski)
+        if "monsure zlatnik" not in eski:
+            yeni = eski.rstrip("\n") + "\n" + "\n".join(ZL_CRON) + "\n"
+            p = subprocess.run(["crontab", "-"], input=yeni, text=True, capture_output=True)
+            R["crontab"] = {"rc": p.returncode, "err": p.stderr[-300:]}
+        son = _crontab_oku()
+        R["satir_sonra"] = len(son.splitlines())
+        R["eski_korundu"] = all(x in son for x in eski.splitlines())
+        R["zlatnik_satiri"] = [x for x in son.splitlines() if "zlatnik" in x]
+    except Exception as e:
+        R["HATA"] = f"{type(e).__name__}: {str(e)[:300]}"
+    json.dump(R, open(SONUC5, "w"), ensure_ascii=False, indent=1)
+    time.sleep(1260)
+    R["tazelik_21dk"] = _tazelik()
+    R["zlatnik_log"] = _sh(f"tail -n 6 {MON}/zlatnik_log.txt")["out"]
+    json.dump(R, open(SONUC5, "w"), ensure_ascii=False, indent=1)
+
+
+def rapor5():
+    try:
+        return json.load(open(SONUC5))
     except Exception:
         return {"durum": "henüz çalışmadı"}
