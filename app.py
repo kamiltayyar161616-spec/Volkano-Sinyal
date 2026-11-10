@@ -50,6 +50,7 @@ import canli_ajan
 import iyms_kars
 import iyms_vk
 import iyms_av
+import xbet
 import patron
 import durum_rapor
 import toto_iddaa
@@ -632,6 +633,7 @@ if __name__ == "__main__":
     iyms_kars.start_background()
     iyms_vk.start_background()
     iyms_av.start_background()
+    xbet.start_background()
     patron.start_background()
     durum_rapor.start_background()
     toto_iddaa.start_background()
