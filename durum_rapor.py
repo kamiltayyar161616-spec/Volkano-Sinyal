@@ -135,6 +135,7 @@ def rapor():
             "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
             "monsure_bakim2": _guvenli(lambda: __import__("monsure_bakim").rapor2()),
             "monsure_tazelik": _guvenli(lambda: __import__("monsure_bakim")._tazelik()),
+            "iyms_bugun": _guvenli(lambda: __import__("iyms_bugun").ozet()),
             "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7())}
 
 
