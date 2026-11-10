@@ -154,3 +154,101 @@ def _calis():
 
 def start_background():
     threading.Thread(target=_calis, daemon=True, name="kupon_istisna").start()
+
+
+# ---------------------------------------------------------------- GEC KUPON (kullanici istegi 10.11.2026 22:12): maclar BASLADIKTAN SONRA,
+# DESEN'in son 45 dk'da baslamis bitmemis maclari, 1xbet SON MAC ONCESI oraniyla (xbet.db, baslama anindan onceki son satir), 500 TL.
+# Cifte sans orani xbet.db'de olmadigi icin "Favori kaybetmez" atlanir. 4'ten az macta kombine. Tek seferlik: data/kupon_gec_v1.done
+ISARET_GEC = os.path.join(KOK, "data", "kupon_gec_v1.done")
+_gec = {"durum": "bekliyor", "log": ""}
+
+
+def gec_kur():
+    import sqlite3
+    import desen_tab as T
+    import istat_ajan as IS
+    import kupon_ajan as K
+    import xbet as X
+    now = datetime.now(timezone.utc)
+    c = T._db()
+    R = [dict(r) for r in c.execute("SELECT * FROM mac WHERE skor IS NULL AND secim != '{}'")]
+    c.close()
+    x = sqlite3.connect(f"file:{X.DB}?mode=ro", uri=True, timeout=20)
+    E = x.execute("SELECT mid, ko, ev, dep FROM e").fetchall()
+    S, red = [], []
+    for r in R:
+        ko = datetime.fromisoformat(r["ko"]).replace(tzinfo=timezone.utc)
+        if not (now - timedelta(minutes=45) <= ko <= now):
+            continue
+        en = None
+        for m, eko, ev, dep in E:
+            if abs((datetime.fromisoformat(eko.replace("Z", "+00:00")) - ko).total_seconds()) > 1500:
+                continue
+            s1, s2 = IS._benz(r["ev"], ev), IS._benz(r["dep"], dep)
+            if s1 >= 0.5 and s2 >= 0.5 and (not en or s1 + s2 > en[0]):
+                en = (s1 + s2, m)
+        if not en:
+            red.append(f"{r['ev']} - {r['dep']}: 1xbet kaydında yok")
+            continue
+        row = x.execute("SELECT ms, au FROM s WHERE mid=? AND at < ? ORDER BY at DESC LIMIT 1", (en[1], ko.isoformat())).fetchone()
+        if not row:
+            red.append(f"{r['ev']} - {r['dep']}: maç öncesi 1xbet oranı yok")
+            continue
+        ms = json.loads(row[0]) if row[0] else {}
+        au = json.loads(row[1]) if row[1] else {}
+        best = None
+        for s, (p, n, metin) in json.loads(r["secim"]).items():
+            o = _oran(s, r["fav"], ms, {}, au)
+            if not o or o[0] < MIN_ORAN:
+                continue
+            if not best or (p / 100) * o[0] > best["skor"]:
+                best = {"mid": -int(r["id7m"]), "ko": ko.isoformat(), "ev": r["ev"], "dep": r["dep"], "lig": r["lig"],
+                        "pazar": f"D|{s}|{r['fav']}", "sec": o[1], "oran": float(o[0]), "p": p / 100, "p_kal": p / 100,
+                        "p_pi": 0.0, "guven": p, "destek": f"DESEN %{p} ({n} maç): {metin}", "skor": (p / 100) * o[0]}
+        if best:
+            S.append(best)
+        else:
+            red.append(f"{r['ev']} - {r['dep']}: uygun 1xbet oranı yok")
+    x.close()
+    if not S:
+        return None, "kurulamadı: uygun maç yok · " + "; ".join(red[:8])
+    S = S[:12]
+    n = len(S)
+    if n < K.MIN_MAC:
+        alt, kombi = n, 1
+        D = None
+    else:
+        alt, kombi, D = K.dagilim(S)
+    ev = sum(p * g for p, g in D) if D else None
+    c = K.db()
+    if "notu" not in [r[1] for r in c.execute("PRAGMA table_info(kupon)")]:
+        c.execute("ALTER TABLE kupon ADD COLUMN notu TEXT")
+    cur = c.execute("INSERT INTO kupon (at, n, alt, kombi, tutar, ev, p_kazan, en_kotu, durum, notu) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (now.isoformat(), n, alt, kombi, TUTAR, round(ev, 4) if ev else 0.0, 0.0, None, "açık",
+                     "İSTİSNA (GEÇ): maçlar BAŞLADIKTAN SONRA kuruldu, 1xbet son maç öncesi oranı, DESEN, 500₺ — karne değerlendirmesinde ayrı tutulmalı"))
+    for s in S:
+        c.execute("INSERT INTO secim VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (cur.lastrowid, s["mid"], s["ko"], s["ev"], s["dep"], s["lig"], s["pazar"], s["sec"], s["oran"], s["p"], s["p_kal"],
+                   s["p_pi"], s["guven"], s["destek"], "bekliyor"))
+    c.commit()
+    c.close()
+    return cur.lastrowid, (f"GEÇ KUPON #{cur.lastrowid}: {n} maç {'kombine' if alt == n else f'sistem {alt}-{n}'} · 500₺ · "
+                           + " | ".join(f"{s['ev']} - {s['dep']} {s['sec']} @{s['oran']}" for s in S)
+                           + (f" · elenen: {'; '.join(red[:5])}" if red else ""))
+
+
+def _gec_calis():
+    time.sleep(40)
+    if os.path.exists(ISARET_GEC):
+        _gec["durum"] = "daha önce çalıştı"
+        return
+    open(ISARET_GEC, "w").write(datetime.now(timezone.utc).isoformat())
+    try:
+        kid, msg = gec_kur()
+    except Exception as e:
+        kid, msg = None, f"HATA {type(e).__name__}: {str(e)[:200]}"
+    _gec.update(durum="kuruldu" if kid else "kurulamadı", log=msg)
+
+
+def start_gec():
+    threading.Thread(target=_gec_calis, daemon=True, name="kupon_gec").start()

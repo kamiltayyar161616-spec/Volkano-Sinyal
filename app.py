@@ -645,6 +645,7 @@ if __name__ == "__main__":
     xbet.start_background()
     kupon_ajan.start_background()
     kupon_istisna.start_background()
+    kupon_istisna.start_gec()
     monsure_bakim.start_background()
     patron.start_background()
     durum_rapor.start_background()
