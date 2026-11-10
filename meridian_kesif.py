@@ -7,29 +7,25 @@ import nowgoal as ng
 
 
 def kesif():
-    out = {}
-    try:
-        with urllib.request.urlopen(urllib.request.Request("https://1x2.goaloo908.com/robots.txt", headers=ng.HEADERS), timeout=15) as f:
-            out["robots"] = [f.status, f.read(800).decode("utf-8", "replace")]
-    except Exception as e:
-        out["robots"] = str(e)[:150]
+    """adim 2: kullanicinin gosterdigi maclar + buyuk ligler — goaloo listesinde MeridianBet"""
+    out = {"maclar": []}
     now = datetime.now(timezone.utc)
     c = sqlite3.connect(f"file:{ng.DB_FILE}?mode=ro", uri=True)
-    M = c.execute("SELECT mid, home, away, kickoff_utc FROM ng_match WHERE kickoff_utc BETWEEN ? AND ? ORDER BY kickoff_utc LIMIT 8",
-                  ((now + timedelta(hours=1)).isoformat(), (now + timedelta(hours=30)).isoformat())).fetchall()
-    out["yaklasan_24s"] = c.execute("SELECT COUNT(*) FROM ng_match WHERE kickoff_utc BETWEEN ? AND ?",
-                                    (now.isoformat(), (now + timedelta(hours=24)).isoformat())).fetchone()[0]
+    M = c.execute("""SELECT mid, home, away, kickoff_utc, league_ng FROM ng_match WHERE
+                     (home LIKE 'Everton%' AND away LIKE 'Coventry%') OR (home LIKE 'Toulouse%' AND away LIKE 'Strasbourg%')
+                     ORDER BY kickoff_utc DESC LIMIT 2""").fetchall()
+    M += c.execute("""SELECT mid, home, away, kickoff_utc, league_ng FROM ng_match WHERE kickoff_utc BETWEEN ? AND ?
+                      AND volkano_json IS NOT NULL ORDER BY kickoff_utc LIMIT 10""",
+                   ((now + timedelta(hours=1)).isoformat(), (now + timedelta(days=3)).isoformat())).fetchall()
     c.close()
-    out["maclar"] = []
-    for m, h, a, ko in M:
+    for m, h, a, ko, lg in M:
         try:
             B = ng.fetch_odds_books(m)
         except Exception as e:
             out["maclar"].append({"mac": f"{h} - {a}", "hata": str(e)[:120]})
             continue
         mer = [b for b in B if "meri" in b["name"].lower()]
-        out["maclar"].append({"mac": f"{h} - {a}", "ko": ko, "bahisci": len(B), "meridian": mer,
-                              "ornek_adlar": [b["name"] for b in B][:40] if not mer else None})
+        out["maclar"].append({"mid": m, "mac": f"{h} - {a}", "lig": lg, "ko": ko, "bahisci": len(B), "meridian": mer})
     return out
 
 
