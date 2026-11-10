@@ -26,9 +26,10 @@ def _top(ilk, son):
     return k, round(100 * d[k])
 
 
-def ozet():
+def ozet(geri=0):
     now = datetime.now(timezone.utc)
     g0 = datetime(now.year, now.month, now.day, tzinfo=timezone.utc) - timedelta(hours=3) + (timedelta(days=1) if now.hour >= 21 else timedelta(0))
+    g0 -= timedelta(days=geri)
     g1 = g0 + timedelta(days=1)
     V = {m: v for m, v in AV._volkano().items() if g0 <= AV._dt(v[1]) < g1}
     c = sqlite3.connect(f"file:{O.SERI_DB}?mode=ro", uri=True)
@@ -67,4 +68,19 @@ def ozet():
         P = [p[0] for p in (y["para_V"], y["para_A"], y["para_X"]) if p]
         y["uyum"] = len(P) >= 2 and len(set(P)) == 1
         out["maclar"].append(y)
+    return out
+
+
+def sekmeler(gun):
+    """o gunun sekme ozetleri (en yakin / kalan / en uzak ROI) — V Para, A–V, 1x–V"""
+    import iyms_vk
+    import iyms_xv
+    out = {}
+    for ad, m in (("V Para", iyms_vk), ("A–V", AV), ("1x–V", iyms_xv)):
+        try:
+            d = m.get_page_data(gun)
+            out[ad] = {"gun": d.get("gun"), "ozet": d.get("gun_ozet"), "mac": len(d.get("L") or []),
+                       "biten": sum(1 for x in d.get("L") or [] if x.get("sonuc"))}
+        except Exception as e:
+            out[ad] = str(e)[:150]
     return out
