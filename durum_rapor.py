@@ -126,28 +126,12 @@ def log_hatalari():
     return out
 
 
-def _kupon_tani():
-    """GECICI (salt okunur): kupon ajani Volkano oranini neden bulamiyor — iyv_aday ornegi"""
-    import patron as P
-    v = P._cache.get("v") or {}
-    mids = [x["mid"] for x in v.get("yakin") or []]
-    c = _ro("/root/defter/iyv.db")
-    R = {m: vk for m, vk in c.execute("SELECT mid, vk FROM iyv_aday")}
-    kol = [r[1] for r in c.execute("PRAGMA table_info(iyv_aday)")]
-    c.close()
-    ornek = next((vk for vk in R.values() if vk), None)
-    o = json.loads(ornek) if ornek else {}
-    return {"yakin": len(mids), "iyv_satir": len(R), "yakin_iyvde": sum(1 for m in mids if m in R),
-            "yakin_iyvde_str": sum(1 for m in mids if str(m) in R), "kolon": kol, "mid_tip": type(next(iter(R), None)).__name__,
-            "vk_anahtar": list(o.keys())[:20], "vk_1": o.get("1"), "vk_18": str(o.get("18"))[:300], "vk_47": str(o.get("47"))[:200]}
-
-
 def rapor():
     return {"at": datetime.now(timezone.utc).isoformat(),
             "arka_plan": {m: _mod_last(m) for m in ("oto_tahmin", "canli_ajan", "iyms_kars", "iyms_vk", "toto_tab", "kelly_tab",
                                                      "sdoran", "m7", "gecpara", "desen_tab", "nowgoal", "istat_ajan", "iddaa_canli", "toto_iddaa", "iyms_av", "xbet", "kupon_ajan")},
             "nowgoal": _guvenli(nowgoal_saglik), "kaynaklar": _guvenli(kaynak_tazelik), "db": _guvenli(diger_db),
-            "canli": _guvenli(canli_ozet), "kupon_tani": _guvenli(_kupon_tani), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari)}
+            "canli": _guvenli(canli_ozet), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari)}
 
 
 def gonder():
