@@ -112,10 +112,65 @@ def _calis():
 
 def start_background():
     threading.Thread(target=_calis, daemon=True, name="monsure_bakim").start()
+    threading.Thread(target=lambda: _calis2(), daemon=True, name="monsure_bakim2").start()
 
 
 def rapor():
     try:
         return json.load(open(SONUC))
+    except Exception:
+        return {"durum": "henüz çalışmadı"}
+
+
+# ---------------------------------------------------------------- v2: Zlatnik (kullanici onayi 10.11.2026 20:13)
+ISARET2 = os.path.join(KOK, "data", "monsure_bakim_v2.done")
+SONUC2 = os.path.join(KOK, "data", "monsure_bakim2.json")
+ZL_CRON = ["# monsure zlatnik (SAHA bakim 10.11.2026): zlatnik_oran.run_once 10 dk'da bir",
+           f"3-53/10 * * * * pkill -f '[z]latnik_oran'; sleep 1; cd {MON} && timeout 240 /usr/bin/python3 -c 'import zlatnik_oran; zlatnik_oran.run_once()' >> {MON}/zlatnik_log.txt 2>&1"]
+
+
+def _tazelik():
+    now = time.time()
+    return {os.path.basename(f): round((now - os.path.getmtime(f)) / 60, 1)
+            for f in sorted(__import__("glob").glob(os.path.join(MON, "*.json"))) if "package" not in f}
+
+
+def bakim2():
+    R = {"basla": datetime.now(timezone.utc).isoformat(), "tazelik_once": _tazelik()}
+    R["deneme"] = _sh("timeout 240 /usr/bin/python3 -c 'import zlatnik_oran; zlatnik_oran.run_once()'", 260)
+    try:
+        R["zlatnik_mac"] = len(json.load(open(os.path.join(MON, "zlatnik.json"), encoding="utf-8")))
+    except Exception as e:
+        R["zlatnik_mac"] = str(e)[:100]
+    R["tazelik_sonra"] = _tazelik()
+    if R["tazelik_sonra"].get("zlatnik.json", 999) < 6:
+        eski = _sh("crontab -l 2>/dev/null")["out"]
+        open(os.path.join(MON, f"crontab.bak-{DAMGA}-2"), "w").write(eski)
+        if "monsure zlatnik" not in eski:
+            p = subprocess.run(["crontab", "-"], input=eski.rstrip("\n") + "\n" + "\n".join(ZL_CRON) + "\n", text=True, capture_output=True)
+            R["crontab"] = {"rc": p.returncode, "err": p.stderr[-300:]}
+    R["cron_satirlari"] = [x for x in _sh("crontab -l")["out"].splitlines() if "monsure" in x]
+    return R
+
+
+def _calis2():
+    time.sleep(120)
+    if os.path.exists(ISARET2) or not os.path.isdir(MON):
+        return
+    open(ISARET2, "w").write(datetime.now(timezone.utc).isoformat())
+    try:
+        R = bakim2()
+    except Exception as e:
+        R = {"HATA": f"{type(e).__name__}: {str(e)[:300]}"}
+    json.dump(R, open(SONUC2, "w"), ensure_ascii=False, indent=1)
+    time.sleep(1500)                      # 25 dk sonra: tum dosyalar cron ile yenileniyor mu
+    R["tazelik_25dk"] = _tazelik()
+    R["zlatnik_log"] = _sh(f"tail -n 6 {MON}/zlatnik_log.txt")["out"]
+    json.dump(R, open(SONUC2, "w"), ensure_ascii=False, indent=1)
+
+
+def rapor2():
+    try:
+        return json.load(open(SONUC2))
     except Exception:
         return {"durum": "henüz çalışmadı"}
