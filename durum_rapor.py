@@ -131,7 +131,7 @@ def iddaa_iyms_tani():
     import iyms_kars as K
     E = [e for e in K._get(f"{K.B}/events?st=1&type=0&version=0")["data"]["events"] if e.get("sid") == 1 and e.get("d")]
     now = time.time()
-    E = sorted([e for e in E if now < e["d"] < now + 93600], key=lambda e: -(e.get("oc") or 0))[:3]
+    E = sorted([e for e in E if now < e["d"] < now + 93600], key=lambda e: -(e.get("oc") or 0))[:2]
     out = []
     for e in E:
         x = {"i": e["i"], "mac": f"{e.get('hn')} - {e.get('an')}", "oc": e.get("oc"), "liste_iyms": bool(K._iyms(e))}
@@ -150,6 +150,7 @@ def iddaa_iyms_tani():
                 m = d2.get("m") or []
                 x["pazar"] = len(m)
                 x["st_9secenek"] = [(p.get("st"), [o.get("n") for o in p.get("o", [])]) for p in m if len(p.get("o", [])) == 9][:3]
+                x["pazarlar"] = [(p.get("st"), p.get("sov"), len(p.get("o", [])), "|".join(str(o.get("n")) for o in p.get("o", []))[:60]) for p in m]
                 x["detay_iyms"] = K._iyms(d2)
             else:
                 x["ham"] = ham[:400]
