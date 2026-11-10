@@ -132,7 +132,8 @@ def rapor():
                                                      "sdoran", "m7", "gecpara", "desen_tab", "nowgoal", "istat_ajan", "iddaa_canli", "toto_iddaa", "iyms_av", "xbet", "kupon_ajan")},
             "nowgoal": _guvenli(nowgoal_saglik), "kaynaklar": _guvenli(kaynak_tazelik), "db": _guvenli(diger_db),
             "canli": _guvenli(canli_ozet), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari),
-            "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor())}
+            "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
+            "meridian_kesif": _guvenli(lambda: __import__("meridian_kesif").kesif())}
 
 
 def gonder():
