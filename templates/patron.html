@@ -24,10 +24,25 @@
 {% endblock %}
 {% block content %}
 {% if d.hesaplaniyor %}<div class="section-sub" style="color:#e0a030">⏳ PATRON şu an hesaplıyor (yaklaşık 1 dakika). Sayfa kendiliğinden yenilenir.</div>{% endif %}
-<div class="tabs"><a class="tab {{ 'on' if d.sekme == 'canli' else '' }}" href="/patron?sekme=canli">🔴 CANLI MAÇLAR</a><a class="tab {{ 'on' if d.sekme != 'canli' else '' }}" href="/patron">⏳ BAŞLAMAK ÜZERE</a></div>
+<div class="tabs"><a class="tab {{ 'on' if d.sekme == 'canli' else '' }}" href="/patron?sekme=canli">🔴 CANLI</a><a class="tab {{ 'on' if d.sekme not in ('canli', 'kupon') else '' }}" href="/patron">⏳ BAŞLAMAK ÜZERE</a><a class="tab {{ 'on' if d.sekme == 'kupon' else '' }}" href="/patron?sekme=kupon">🎫 KUPON</a></div>
 <div class="section-sub">Son hesap: {{ (d.at[:19] ~ '+00:00') | localdatetime if d.at else '-' }} ({{ d.sure }} sn) · ajanlar: {% for a in d.ajanlar or [] %}{{ a.ad }} {{ a.mac }} maç{% if a.hata %} <span style="color:#ff5a4f">⚠</span>{% endif %}{{ ' · ' if not loop.last else '' }}{% endfor %}{% if d.hata %} · ⚠ {{ d.hata }}{% endif %}</div>
 
-{% if d.sekme == 'canli' %}
+{% if d.sekme == 'kupon' %}
+{% set kp = d.kupon or {} %}{% set ks = kp.kasa or {} %}
+<div class="section-sub">🎫 <b>Kupon Ajanı</b> (sanal kasa, gerçek bahis yok). <b>Yaradılış ilkesi: kasa artıda kalmalı.</b> Beklenen getirisi (Volkano %12 vergisi düşülmüş) en az +%5 olmayan kupon kurulmaz; 5+ maçlı sistemde 2 maç yatarsa yatırılanı geri getirmeyen kupon kurulmaz; tutar yarım Kelly, 100₺ altını gösterirse oynanmaz (en fazla 500₺). Seçimler PATRON'un tüm sekme ajanlarından, sadece başlamamış maçlar: maç sonucu, 2.5 alt/üst, İY/MS. İhtimal = ½ PATRON'un o güven bandındaki gerçek isabeti + ½ piyasa (Volkano + 1xbet). 4 maç kombine, 5+ maç (n−2)…n sistem.</div>
+<div class="section-sub">Son tur: {{ kp.last.log or 'henüz yok (uygulama açıldıktan ~7 dk sonra)' }}{% if kp.last.hata %} · ⚠ {{ kp.last.hata }}{% endif %}</div>
+<table class="tt"><tr><th>kasa</th><th>açıkta</th><th>kupon</th><th>biten / kazanan</th><th>kâr</th><th>ROI</th></tr>
+<tr><td><b>{{ '%.2f'|format(ks.bakiye or 0) }}₺</b></td><td>{{ '%.0f'|format(ks.acik or 0) }}₺</td><td>{{ ks.oynanan or 0 }}</td><td>{{ ks.biten or 0 }} / {{ ks.kazanan or 0 }}</td><td><b style="color:{{ '#3ccf7a' if (ks.kar or 0) >= 0 else '#ff5a4f' }}">{{ '%+.2f'|format(ks.kar or 0) }}₺</b></td><td>{{ '%+.1f'|format(ks.roi) ~ '%' if ks.roi is not none else '-' }}</td></tr></table>
+{% for k in kp.kuponlar or [] %}
+<div class="kc">
+  <div class="ust"><span class="tk">#{{ k.id }} · {{ k.n }} maç {{ k.tip }} · {{ '%.0f'|format(k.tutar) }}₺</span><span class="gv" style="color:{{ '#3ccf7a' if k.durum == 'kazandı' else '#ff5a4f' if k.durum == 'kaybetti' else '#e0a030' }}">{{ k.durum|upper }}{% if k.getiri is not none %} {{ '%.2f'|format(k.getiri) }}₺{% endif %}</span></div>
+  <div class="meta">{{ (k.at[:19] ~ '+00:00') | localdatetime }} · {{ k.kombi }} kombin · beklenen getiri {{ '%+.1f'|format(100 * (k.ev - 1)) }}% · kazanma (en az geri alma) ihtimali %{{ (100 * k.p_kazan)|round|int }}{% if k.en_kotu is not none %} · 2 maç yatarsa x{{ '%.2f'|format(k.en_kotu) }}{% endif %} · tutan {{ k.tutan }}/{{ k.n }}</div>
+  {% for s in k.S %}<div class="pk {{ 'g1' if s.durum == 'tuttu' else '' }}" style="{{ 'border-left-color:#ff5a4f' if s.durum == 'yattı' else '' }}"><span class="gv">{{ s.oran }}</span><b>{{ s.saat }} · {{ s.ev }} – {{ s.dep }}</b>
+    <div class="meta">{{ {'MS':'Maç sonucu','2.5':'2.5 Alt/Üst','İY/MS':'İY/MS'}.get(s.pazar, s.pazar) }} <b>{{ s.sec }}</b> · ihtimal %{{ (100 * s.p)|round|int }} (karne %{{ (100 * s.p_kal)|round|int }}, piyasa %{{ (100 * s.p_pi)|round|int }}) · {{ s.durum }} · {{ s.destek }}</div></div>{% endfor %}
+</div>
+{% else %}<div class="section-sub">Henüz kupon yok. Ajan ilkelere uyan kupon bulunca kurar; uygun kupon yoksa o tur oynamaz.</div>{% endfor %}
+
+{% elif d.sekme == 'canli' %}
 {% set cv = d.canli or {} %}
 {% if cv.hata %}<div class="section-sub">⚠ {{ cv.hata }}</div>{% endif %}
 <div class="section-sub">Canlı Köprü Ajanı: Canlı Ajan'ın sinyalleri, istatistik baskısı ve iddaa canlı ihtimalleri birleşir. İhtimal = arşiv % + iddaa canlı % + o sinyal türünün gerçek karnesi (15+ biten sinyal varsa) ortalaması, istatistik baskısı ±3-4 puan. Maç önü PATRON seçimi canlıda şu anki iddaa ihtimaliyle yeniden puanlanır. Henüz gerçekleşmemiş olanlar üstte.{% if cv.karne %} · Sinyal karnesi: {% for t, k in cv.karne.items() %}{{ t }} %{{ k.h }} ({{ k.n }}){{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}</div>

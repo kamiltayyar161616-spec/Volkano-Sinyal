@@ -287,6 +287,7 @@ def hesapla():
     BAND = [(80, "80+"), (70, "70-80"), (60, "60-70"), (50, "50-60"), (0, "50 altı")]
     PB = {b: [0, 0] for _, b in BAND}
     PP = defaultdict(lambda: [0, 0])
+    PK = defaultdict(lambda: [0, 0])                 # kupon ajani icin kalibrasyon: (pazar, 5'lik guven bandi) -> gercek isabet
     yakin, gecmis_n = [], 0
     for m, L in OY.items():
         r = M.get(m)
@@ -311,6 +312,12 @@ def hesapla():
                 PB[b][1] += t
                 PP[p["pazar"]][0] += 1
                 PP[p["pazar"]][1] += t
+            for p in P:                                   # pazar x bant kalibrasyonu: her secim (en guvenilen disindakiler de)
+                t = tuttu(p["pazar"], p["sec"], r["ft_h"], r["ft_a"], r["ht_h"], r["ht_a"])
+                if t is not None:
+                    k = PK[(p["pazar"], int(p["guven"] // 5) * 5)]
+                    k[0] += 1
+                    k[1] += t
         elif now - timedelta(hours=3) < ko < now + timedelta(hours=YAKIN_SAAT):
             if not any(len({d["kaynak"].split("-")[0] for d in p["destek"]}) >= 2 for p in P):
                 continue                                  # en az iki farkli guvenilir sistem (karnesi 15+) ayni secimi demeli
@@ -326,6 +333,7 @@ def hesapla():
     return {"at": now.isoformat(), "ajanlar": ajan_durum, "karne": kt, "yakin": yakin, "gecmis_n": gecmis_n,
             "band": [{"ad": b, "n": PB[b][0], "h": round(100 * PB[b][1] / PB[b][0], 1) if PB[b][0] else None} for _, b in BAND],
             "pazar": [{"ad": PAZAR_AD.get(p, p), "n": v[0], "h": round(100 * v[1] / v[0], 1)} for p, v in sorted(PP.items(), key=lambda t: -t[1][0])],
+            "kalib": {f"{pz}|{b}": v for (pz, b), v in PK.items()},
             "sure": round(time.time() - t0, 1)}
 
 
@@ -489,6 +497,12 @@ def get_page_data(sekme="baslamak"):
     v["hesaplaniyor"] = not _cache["v"]
     v["hata"] = _cache["hata"]
     v["sekme"] = sekme
+    if sekme == "kupon":
+        try:
+            import kupon_ajan
+            v["kupon"] = kupon_ajan.get_page_data()
+        except Exception as e:
+            v["kupon"] = {"kasa": {}, "kuponlar": [], "last": {"hata": str(e)[:200]}}
     if sekme == "canli":
         try:
             v["canli"] = canli()
