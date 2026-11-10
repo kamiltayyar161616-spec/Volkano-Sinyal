@@ -124,6 +124,8 @@ def _degerlendir(c, mid, ko, ev, dep, lig, pin, xb, now):
         if fark < FARK:
             continue
         r = c.execute("SELECT fark FROM sinyal WHERE mid=? AND taraf=?", (mid, TARAF[i])).fetchone()
+        if r:
+            _bahis_ac(c, mid, TARAF[i], xb["cur"][i], 1 / adil, now)   # kuponu olmayan eski sinyal: kosul hala geciyorsa simdiki oranla
         if r and r[0] >= fark:
             continue
         c.execute("""INSERT INTO sinyal (mid, taraf, at, ko, ev, dep, lig, pin_ref, pin, pin_adil, xb, fark, dusus, guncel)
