@@ -134,8 +134,7 @@ def rapor():
             "canli": _guvenli(canli_ozet), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari),
             "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
             "monsure_bakim2": _guvenli(lambda: __import__("monsure_bakim").rapor2()),
-            "monsure_bakim5": _guvenli(lambda: __import__("monsure_bakim").rapor5()),
-            "desen_tani": _guvenli(lambda: __import__("desen_tani").tani())}
+            "monsure_bakim5": _guvenli(lambda: __import__("monsure_bakim").rapor5())}
 
 
 def gonder():

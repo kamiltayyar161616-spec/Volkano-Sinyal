@@ -74,7 +74,7 @@ def tara():
     except Exception as e:
         _last["hata"] = f"program: {str(e)[:80]}"
         return
-    aday = [(i, m["ko"]) for i, m in P.items() if m["durum"] == 0 and m["ko"]
+    aday = [(i, m["ko"]) for i, m in P.items() if m["durum"] in m7.BASLAMADI and m["ko"]
             and PENCERE[0] * 60 <= (m["ko"] - now).total_seconds() <= PENCERE[1] * 60]
     c = _db()
     var = {r[0] for r in c.execute("SELECT id7m FROM sinyal")}

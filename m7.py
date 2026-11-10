@@ -1,6 +1,6 @@
 """7M canli skor / dakika (AllSportsAPI yerine). Arka planda dakikada bir js-live.7mdt.com/datafile/sxl.js okunur.
 sDt2[id] = [durum, ev gol, dep gol, ev kirmizi?, dep kirmizi?, 'yari baslangici', 'iy skoru', '', 'mac basi', ...] (saatler GMT+8)
-durum: 0 baslamadi, 1 birinci yari, 2 devre arasi, 3 ikinci yari, 4 bitti (digerleri: ertelendi vb.)
+durum: 0 / 17 baslamadi (7M Kasim 2026'da 0 yerine 17 kullanmaya basladi), 1 birinci yari, 2 devre arasi, 3 ikinci yari, 4 bitti (digerleri: ertelendi vb.)
 Takim adlari: data.7mdt.com/goaldata/en/<id>.js (d_ta, d_tb, d_mn); bir kez cekilir, data/m7.db'de saklanir."""
 import os
 import re
@@ -15,6 +15,7 @@ AD = "https://data.7mdt.com/goaldata/en/{id}.js"
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "m7.db")
 GMT8 = timezone(timedelta(hours=8))
 CYCLE_SEC = 60
+BASLAMADI = (0, 17)          # 7M "henuz baslamadi" kodlari
 AD_BASINA = 40               # tur basina en fazla bu kadar yeni takim adi cekilir
 _canli = {"at": 0.0, "maclar": [], "hata": None, "program": {}}
 _started = False
