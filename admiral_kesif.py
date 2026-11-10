@@ -1,45 +1,76 @@
-"""SADECE OKUR: Admiral İY/MS kesfi. Adim 1: monsure'daki Admiral tarayicisinin kullandigi adresler + ornek kayit + robots.txt.
+"""SADECE OKUR: Admiral İY/MS kesfi (adim 2). Listeden bir mac alir, maç detay adreslerini dener, İY/MS (Poluvreme/Kraj, 9 secenek) pazarini arar.
+robots.txt (admiralbet.me): sadece */profile*, */login*, */forgot-password* yasak; cgoffer API serbest.
 Sonuc durum raporuna (durum dali, 'admiral_kesif') gider. Hicbir sekmeye/veriye yazmaz.
   python3 admiral_kesif.py"""
-import glob
 import json
-import os
-import re
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
-MON = "/root/monsure"
+A = "https://cgoffer.admiralbet.me"
+H = {"language": "sr-Latn", "officeid": "1175", "Accept": "application/json, text/plain, */*", "Origin": "https://admiralbet.me",
+     "Referer": "https://admiralbet.me/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
 
 
-def _get(u, n=4000):
+def _get(u):
     try:
-        r = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
-        with urllib.request.urlopen(r, timeout=20) as f:
-            return f.status, f.read(n).decode("utf-8", "replace")
+        with urllib.request.urlopen(urllib.request.Request(u, headers=H), timeout=30) as f:
+            return f.status, f.read().decode("utf-8", "replace")
     except Exception as e:
         return getattr(e, "code", 0), f"{type(e).__name__}: {str(e)[:150]}"
 
 
+def _bets_ozet(bets):
+    out = []
+    for b in bets or []:
+        if not isinstance(b, dict):
+            continue
+        oc = b.get("betOutcomes") or b.get("outcomes") or []
+        out.append({k: b.get(k) for k in ("betTypeId", "betTypeName", "id", "sBV", "betTypeOrder") if k in b} |
+                   {"n": len(oc), "sec": [(o.get("name"), o.get("odd") or o.get("odds")) for o in oc][:9]})
+    return out
+
+
 def kesif():
-    out = {"dosyalar": [], "adresler": [], "kod": {}, "ornek": None, "robots": {}}
-    for f in sorted(glob.glob(os.path.join(MON, "**", "*admiral*"), recursive=True))[:20]:
-        out["dosyalar"].append(f)
-        if f.endswith(".py"):
-            try:
-                s = open(f, encoding="utf-8", errors="replace").read()
-            except OSError:
-                continue
-            out["kod"][f] = s[:6000]
-            out["adresler"] += re.findall(r"https?://[^\s\"'{}]+", s)
+    now = datetime.now(timezone.utc)
+    u = (f"{A}/api/offer/getEventsStartingSoonFilterSelections/?sportId=1&topN=25&skipN=0&isLive=false"
+         f"&dateFrom={now:%Y-%m-%dT%H:%M:%S}.000&dateTo={now + timedelta(days=3):%Y-%m-%dT%H:%M:%S}.000&eventMappingTypes=1,2,3,4,5&pageId=35")
+    s, t = _get(u)
+    out = {"liste_durum": s}
     try:
-        d = json.load(open(os.path.join(MON, "admiralbet.json"), encoding="utf-8"))
-        d = d if isinstance(d, list) else d.get("matches") or d
-        out["ornek"] = d[:2] if isinstance(d, list) else str(d)[:1500]
-    except Exception as e:
-        out["ornek"] = f"okunamadi: {e}"
-    hostlar = sorted({re.match(r"https?://[^/]+", a).group(0) for a in out["adresler"] if re.match(r"https?://[^/]+", a)})
-    for h in hostlar[:5]:
-        out["robots"][h] = _get(h + "/robots.txt", 2000)
-    out["adresler"] = sorted(set(out["adresler"]))[:40]
+        E = json.loads(t)
+    except ValueError:
+        out["liste_ham"] = t[:500]
+        return out
+    E = [e for e in E if isinstance(e, dict)]
+    e = max(E, key=lambda x: x.get("betsCount") or x.get("numberOfBets") or len(x.get("bets") or []))
+    out["ornek_anahtar"] = {k: (v if not isinstance(v, (list, dict)) else type(v).__name__) for k, v in e.items()}
+    out["liste_bets"] = _bets_ozet(e.get("bets"))[:6]
+    ev, sp, rg, cp = e.get("id"), e.get("sportId", 1), e.get("regionId"), e.get("competitionId")
+    out["deneme"] = []
+    for d in (f"{A}/api/offer/betsAndGroups/{sp}/{rg}/{cp}/{ev}", f"{A}/api/offer/getEventDetails/{ev}",
+              f"{A}/api/offer/event/{ev}", f"{A}/api/offer/betsAndGroups/{ev}"):
+        s2, t2 = _get(d)
+        x = {"url": d.replace(A, ""), "durum": s2, "boy": len(t2)}
+        try:
+            D = json.loads(t2)
+            x["tip"] = type(D).__name__
+            x["anahtar"] = list(D.keys())[:20] if isinstance(D, dict) else None
+            bets = D.get("bets") if isinstance(D, dict) else D if isinstance(D, list) else None
+            if isinstance(D, dict) and not bets:
+                for k in ("betGroups", "groups", "betTypes"):
+                    if isinstance(D.get(k), list):
+                        x[k + "_ornek"] = [str(g)[:200] for g in D[k][:3]]
+            B = _bets_ozet(bets if isinstance(bets, list) else [])
+            x["pazar"] = len(B)
+            x["dokuzlu"] = [b for b in B if b["n"] == 9][:4]
+            x["polu"] = [b for b in B if "polu" in str(b.get("betTypeName", "")).lower() or "kraj" in str(b.get("betTypeName", "")).lower()][:4]
+            x["adlar"] = sorted({(b.get("betTypeId"), b.get("betTypeName"), b["n"]) for b in B}, key=str)[:80]
+        except ValueError:
+            x["ham"] = t2[:300]
+        out["deneme"].append(x)
+        if x.get("pazar", 0) > 5:
+            break
+    out["mac"] = f"{e.get('name')} | {e.get('dateTime')} | id {ev} rg {rg} cp {cp}"
     return out
 
 
