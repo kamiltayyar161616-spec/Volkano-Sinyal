@@ -125,48 +125,12 @@ def log_hatalari():
     return out
 
 
-def iddaa_iyms_tani():
-    """SADECE OKUR: iddaa mac detay adresi İY/MS pazarini veriyor mu (iyms_kars 0 oran yaziyorsa sebebi)"""
-    import urllib.request
-    import iyms_kars as K
-    E = [e for e in K._get(f"{K.B}/events?st=1&type=0&version=0")["data"]["events"] if e.get("sid") == 1 and e.get("d")]
-    now = time.time()
-    E = sorted([e for e in E if now < e["d"] < now + 93600], key=lambda e: -(e.get("oc") or 0))[:2]
-    out = []
-    for e in E:
-        x = {"i": e["i"], "mac": f"{e.get('hn')} - {e.get('an')}", "oc": e.get("oc"), "liste_iyms": bool(K._iyms(e))}
-        try:
-            r = urllib.request.Request(f"{K.B}/event/{e['i']}", headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
-            with urllib.request.urlopen(r, timeout=30) as f:
-                ham = f.read().decode("utf-8")
-                x["durum"] = f.status
-            D = json.loads(ham)
-            d = D.get("data") if isinstance(D, dict) else None
-            x["kok"] = list(D.keys())[:10] if isinstance(D, dict) else type(D).__name__
-            x["data_tip"] = type(d).__name__
-            if isinstance(d, dict):
-                x["data_anahtar"] = list(d.keys())[:20]
-                d2 = (d.get("events") or [d])[0]
-                m = d2.get("m") or []
-                x["pazar"] = len(m)
-                x["st_9secenek"] = [(p.get("st"), [o.get("n") for o in p.get("o", [])]) for p in m if len(p.get("o", [])) == 9][:3]
-                x["pazarlar"] = [(p.get("st"), p.get("sov"), len(p.get("o", [])), "|".join(str(o.get("n")) for o in p.get("o", []))[:60]) for p in m]
-                x["detay_iyms"] = K._iyms(d2)
-            else:
-                x["ham"] = ham[:400]
-        except Exception as ex:
-            x["hata"] = f"{type(ex).__name__}: {str(ex)[:200]}"
-        out.append(x)
-    return out
-
-
 def rapor():
     return {"at": datetime.now(timezone.utc).isoformat(),
             "arka_plan": {m: _mod_last(m) for m in ("oto_tahmin", "canli_ajan", "iyms_kars", "iyms_vk", "toto_tab", "kelly_tab",
                                                      "sdoran", "m7", "gecpara", "desen_tab", "nowgoal", "istat_ajan", "iddaa_canli", "toto_iddaa")},
             "nowgoal": _guvenli(nowgoal_saglik), "kaynaklar": _guvenli(kaynak_tazelik), "db": _guvenli(diger_db),
-            "canli": _guvenli(canli_ozet), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari),
-            "iddaa_iyms_tani": _guvenli(iddaa_iyms_tani)}
+            "canli": _guvenli(canli_ozet), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari)}
 
 
 def gonder():
