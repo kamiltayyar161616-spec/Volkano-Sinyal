@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}SAHA — İY/MS 1xbet vs Volkano{% endblock %}
+{% block page_tag %}✖️ İY/MS 1XBET–VOLKANO{% endblock %}
+{% block subtitle %}Volkano'nun 9 İY/MS oranı <b>ilk görüldüğü anda</b> kilitlenir ve sabit kalır. 1xbet'in oranı maç 1xbet'te ilk görüldüğünde kaydedilir, sonra <b>maçtan 1-8 dk önce son oran</b> alınır. Her maçta seçenekler 1xbet son ÷ Volkano ilk farkına göre sıralanır: <b>en yakın 3</b> / <b>kalan 3</b> / <b>en uzak 3</b>. ROI = gruptaki her seçime 1 birim, o sitenin oranıyla (1xbet son, Volkano ilk). Para = 1xbet ilk → son 5 dk marjsız ihtimal değişimi (oran düştü = para girdi).{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .ust{ display:flex; justify-content:space-between; gap:8px; font-weight:700; font-size:14.5px; }
+  .meta{ color:var(--chalk-faint); font-size:12px; margin-top:2px; }
+  .g9{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:10px; }
+  .gb{ border-radius:10px; padding:7px 6px 4px; background:var(--navy-deep); min-width:0; }
+  .gb h4{ margin:0 0 6px; font-size:10px; letter-spacing:.06em; color:#e0a030; font-weight:800; text-align:center; }
+  .sl{ padding:5px 5px; border-radius:7px; margin-bottom:4px; background:rgba(255,255,255,.03); font-family:'Space Grotesk',sans-serif; }
+  .sl .r1{ display:flex; justify-content:space-between; align-items:baseline; gap:4px; }
+  .sl .sc{ font-size:14px; font-weight:800; }
+  .sl .fk{ font-size:11px; font-weight:700; padding:0 5px; border-radius:6px; }
+  .sl .fk.a{ color:#3ccf7a; background:rgba(60,207,122,.12); } .sl .fk.e{ color:#ff8a80; background:rgba(255,90,79,.12); } .sl .fk.s{ color:var(--chalk-faint); }
+  .sl .r2{ display:flex; justify-content:space-between; font-size:11px; color:var(--chalk-faint); margin-top:2px; white-space:nowrap; }
+  .sl .r2 b{ color:var(--chalk); font-weight:600; }
+  .sl.ok{ background:rgba(40,160,90,.30); box-shadow:inset 0 0 0 1px rgba(60,207,122,.6); }
+  .lj{ text-align:right; font-size:10.5px; color:var(--chalk-faint); margin-top:6px; }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="300">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% block content %}
+<div class="section-sub">1xbet kaydı: {{ d.xlast.log or 'henüz yok' }}{% if d.xlast.lig %} · {{ d.xlast.lig }}{% endif %}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %} · 1xbet kaydı {{ d.kayit or 0 }} maç · son 5 dk kaydı {{ d.son5_n or 0 }}</div>
+
+<h2 class="section">📈 TÜM ZAMANLAR ({{ d.biten or 0 }} biten maç)</h2>
+{% if d.biten %}
+<table class="tt"><tr><th>grup</th><th>seçim</th><th>tuttu</th><th>beklenen</th><th>1xbet ROI</th><th>Volkano ROI</th></tr>
+{% for x in d.gruplar %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi_a) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_a) }} br</span></td><td>{{ roi(x.roi_v) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_v) }} br</span></td></tr>{% endfor %}</table>
+<table class="tt"><tr><th>💸 para yönü (1xbet)</th><th>seçim</th><th>tuttu</th><th>beklenen</th><th>1xbet ROI</th></tr>
+{% for x in d.para %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
+<div class="section-sub">Beklenen = marjsız ihtimal ortalaması. "Tuttu" beklenenden belirgin fazlaysa o grup bilgi taşıyor. Para yönünde 1xbet ilk kaydı maçtan 2 saatten az önce olan maçlar sayılmaz.</div>
+{% else %}<div class="section-sub">Henüz biten ve 1xbet son 5 dk kaydı olan maç yok. İlk sonuçlar maçlar bittikçe gelir.</div>{% endif %}
+
+<h2 class="section">📅 GÜN GÜN</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/iyms-xv?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+{% if d.gun_ozet and d.gun_ozet[0].n %}<table class="tt"><tr><th>{{ d.gun[8:10] }}.{{ d.gun[5:7] }} biten</th><th>seçim</th><th>tuttu</th><th>1xbet ROI</th><th>Volkano ROI</th></tr>
+{% for x in d.gun_ozet %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ roi(x.roi_a) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_a) }} br</span></td><td>{{ roi(x.roi_v) }}<br><span class="meta">{{ '%+.2f'|format(x.kar_v) }} br</span></td></tr>{% endfor %}</table>{% endif %}
+
+{% for x in d.L %}
+<div class="kc">
+  <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
+  <div class="meta">{{ x.lig or '' }} · 1xbet: {{ x.a_ad }} · Volkano ilk: {{ 'bülten açılışı' if x.v_kaynak == 'açılış' else '~12 saat önce' }} {{ (x.v_at[:19] ~ '+00:00') | localdatetime }} · 1xbet ilk {{ (x.a_at[:19] ~ '+00:00') | localdatetime }} · son: {{ '5 dk önce' if x.son5 else '1xbet ilk oranı (son 5 dk bekleniyor)' }}</div>
+  {% if x.para %}<div class="meta">💸 1xbet en çok düşen (para giren): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
+  <div class="g9">{% for g in ('en yakın 3', 'kalan 3', 'en uzak 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
+    {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><div class="r1"><span class="sc">{{ s.sec }}{{ ' ✓' if s.tuttu else '' }}</span><span class="fk {{ 'a' if s.fark >= 1 else 'e' if s.fark <= -1 else 's' }}">{{ '%+d'|format(s.fark) }}%</span></div><div class="r2"><span>X <b>{{ s.a }}</b></span><span>V <b>{{ s.v }}</b></span></div></div>{% endfor %}
+  </div>{% endfor %}</div>
+  <div class="lj">X = 1xbet son · V = Volkano ilk · % = 1xbet'in Volkano'ya farkı</div>
+</div>
+{% else %}<div class="section-sub">Bu gün için eşleşen maç yok.</div>{% endfor %}
+{% endblock %}

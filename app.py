@@ -51,6 +51,7 @@ import iyms_kars
 import iyms_vk
 import iyms_av
 import xbet
+import iyms_xv
 import patron
 import durum_rapor
 import toto_iddaa
@@ -490,6 +491,11 @@ def iyms_vk_page():
 @app.route("/iyms-av")
 def iyms_av_page():
     return render_template("iyms_av.html", d=iyms_av.get_page_data(request.args.get("gun")), active_page="iymsav")
+
+
+@app.route("/iyms-xv")
+def iyms_xv_page():
+    return render_template("iyms_xv.html", d=iyms_xv.get_page_data(request.args.get("gun")), active_page="iymsxv")
 
 
 @app.route("/iyms-kars")
