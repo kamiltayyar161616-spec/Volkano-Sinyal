@@ -106,7 +106,8 @@ def patron_ozet():
     import patron as P
     v = P._cache.get("v") or {}
     return {"hesap_at": v.get("at"), "sure": v.get("sure"), "hata": P._cache.get("hata"), "ajanlar": v.get("ajanlar"),
-            "yaklasan": len(v.get("yakin") or []), "band": v.get("band"), "karne_ilk15": (v.get("karne") or [])[:15]}
+            "yaklasan": len(v.get("yakin") or []), "band": v.get("band"), "karne_ilk15": (v.get("karne") or [])[:15],
+            "pazar": v.get("pazar"), "kalib": v.get("kalib"), "karne": [k for k in v.get("karne") or [] if k["n"] >= 15]}
 
 
 def log_hatalari():
