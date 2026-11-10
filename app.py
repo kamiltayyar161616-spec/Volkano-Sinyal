@@ -54,6 +54,7 @@ import xbet
 import iyms_xv
 import kupon_ajan
 import monsure_bakim
+import zlatnik_test
 import patron
 import durum_rapor
 import toto_iddaa
@@ -644,6 +645,7 @@ if __name__ == "__main__":
     xbet.start_background()
     kupon_ajan.start_background()
     monsure_bakim.start_background()
+    zlatnik_test.start_background()
     patron.start_background()
     durum_rapor.start_background()
     toto_iddaa.start_background()
