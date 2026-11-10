@@ -1,7 +1,7 @@
 """1XBET ORAN KAYDI — SAHA maclari (Volkano'su olan NowGoal maclari 3 gun ileri, digerleri 12 saat ileri) icin 1xbet 1X2 + İY/MS + tam mac alt/ust zaman serisi.
 Sadece okur, bahis yok. Kaynak: 1xbet.mobi service-api/LineFeed (robots.txt bu yolu yasaklamiyor; 1xbet.com sunucu konumunu engelliyor).
   Lig listesi : GetChampsZip?sport=1  -> lig basina Get1x2_VZip (en fazla 50 mac)   [30 dk'da bir]
-  Mac detayi  : GetGameZip?id=..      G1 T1/T2/T3 = 1/X/2 · G11 T15..T23 = İY/MS 1/1..2/2 · G17 T9 = ust, T10 = alt (P = cizgi)
+  Mac detayi  : GetGameZip?id=..      G1 T1/T2/T3 = 1/X/2 · G11 T15..T23 = İY/MS 1/1..2/2 · G17 T9 = ust, T10 = alt (P = cizgi) · G2 handikap 0 T7/T8 = beraberlikte iade 1/2
 Kayit: ilk goruldugu an, sonra 30 dk'da bir (maca 2 saat kala 10 dk'da bir); oran degismediyse satir yazilmaz; maçtan 1-8 dk once 'son5' satiri.
   python3 xbet.py          (ozet)
   python3 xbet.py tara     (bir tur)"""
@@ -45,6 +45,8 @@ def db():
                  x_ad TEXT, x_lig TEXT, son_bakis TEXT)""")
     c.execute("CREATE TABLE IF NOT EXISTS s (mid INTEGER, at TEXT, tur TEXT, ms TEXT, iyms TEXT, au TEXT)")
     c.execute("CREATE INDEX IF NOT EXISTS s_mid ON s(mid, at)")
+    if "dnb" not in [r[1] for r in c.execute("PRAGMA table_info(s)")]:
+        c.execute("ALTER TABLE s ADD COLUMN dnb TEXT")
     return c
 
 
@@ -65,9 +67,9 @@ def bulten():
 
 
 def oranlar(xid):
-    """mac detayi -> (ms {1,X,2}, iyms {1/1..2/2}, au {"2.5": [ust, alt]})"""
+    """mac detayi -> (ms {1,X,2}, iyms {1/1..2/2}, au {"2.5": [ust, alt]}, dnb {1, 2} = beraberlikte iade: G2 handikap 0 T7/T8)"""
     G = _get(f"{B}/GetGameZip?id={xid}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode=4&partner=1&topGroups=&marketType=1").get("Value") or {}
-    ms, iy, au = {}, {}, {}
+    ms, iy, au, dnb = {}, {}, {}, {}
     for g in G.get("GE") or []:
         for a in g.get("E") or []:
             for o in a:
@@ -78,9 +80,12 @@ def oranlar(xid):
                     ms[MS_T[t]] = c
                 elif g.get("G") == 11 and t in IYMS_T:
                     iy[IYMS_T[t]] = c
+                elif g.get("G") == 2 and t in (7, 8) and not o.get("P"):
+                    dnb["1" if t == 7 else "2"] = c
                 elif g.get("G") == 17 and t in (9, 10) and o.get("P") is not None:
                     au.setdefault(f"{float(o['P']):g}", [None, None])[0 if t == 9 else 1] = c
-    return (ms if len(ms) == 3 else None, iy if len(iy) == 9 else None, {k: v for k, v in au.items() if all(v)} or None)
+    return (ms if len(ms) == 3 else None, iy if len(iy) == 9 else None, {k: v for k, v in au.items() if all(v)} or None,
+            dnb if len(dnb) == 2 else None)
 
 
 def _maclar(now):
@@ -129,8 +134,8 @@ def kaydet():
     now = datetime.now(timezone.utc)
     yeni = esle(now)
     c = db()
-    son = {m: (ms, iy, au) for m, ms, iy, au in c.execute(
-        "SELECT mid, ms, iyms, au FROM s WHERE rowid IN (SELECT MAX(rowid) FROM s GROUP BY mid)")}
+    son = {m: (ms, iy, au, dn) for m, ms, iy, au, dn in c.execute(
+        "SELECT mid, ms, iyms, au, dnb FROM s WHERE rowid IN (SELECT MAX(rowid) FROM s GROUP BY mid)")}
     s5 = {m for (m,) in c.execute("SELECT DISTINCT mid FROM s WHERE tur='son5'")}
     L = c.execute("SELECT mid, xid, ko, son_bakis FROM e WHERE ko > ?", ((now + timedelta(minutes=SON5[0] - 1)).isoformat(),)).fetchall()
     n_bak = n_yaz = n_s5 = 0
@@ -141,17 +146,17 @@ def kaydet():
         if not son5 and sb and (now - _dt(sb)).total_seconds() < aralik - 30:
             continue
         try:
-            ms, iy, au = oranlar(xid)
+            ms, iy, au, dn = oranlar(xid)
         except Exception:
             continue
         n_bak += 1
         c.execute("UPDATE e SET son_bakis=? WHERE mid=?", (now.isoformat(), m))
         if not (ms or iy or au):
             continue
-        J = tuple(json.dumps(x, sort_keys=True) if x else None for x in (ms, iy, au))
+        J = tuple(json.dumps(x, sort_keys=True) if x else None for x in (ms, iy, au, dn))
         tur = "son5" if son5 else "ilk" if m not in son else "tur"
         if son5 or J != son.get(m):
-            c.execute("INSERT INTO s VALUES (?,?,?,?,?,?)", (m, now.isoformat(), tur, *J))
+            c.execute("INSERT INTO s (mid, at, tur, ms, iyms, au, dnb) VALUES (?,?,?,?,?,?,?)", (m, now.isoformat(), tur, *J))
             n_yaz += 1
             n_s5 += son5
         time.sleep(0.4)

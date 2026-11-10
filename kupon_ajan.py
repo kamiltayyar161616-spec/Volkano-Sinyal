@@ -6,7 +6,9 @@ YARADILIŞ İLKESİ (en önemli kural): KASA ARTIDA KALMALI.
   3) Tutar = yarim Kelly (kasanin log buyumesini en iyi yapan oranin yarisi); 100 TL'nin altini gosteriyorsa kupon OYNANMAZ, 500 TL ust sinir.
   4) Acik kuponlardaki toplam para kasanin %30'unu gecemez. Bir mac ayni anda tek kuponda.
 Secim havuzu : PATRON (tum sekmelerin uzman ajanlari: Oto, NowGoal, Kelly, Toto, SD Oran, Oracle) -> baslamamis maclar (15 dk - 6 saat).
-Pazarlar     : Maç sonucu (1/X/2), MS 2.5 alt/ust, İY/MS. (Cifte sans ve 1.5 alt/ust YOK.)
+Pazarlar     : Maç sonucu (1/X/2), MS 2.5 alt/ust, İY/MS, beraberlikte iade (PATRON cifte sans 1X/X2 -> DNB 1/2; beraberlikte para iade).
+               (Cifte sans ve 1.5 alt/ust YOK.) 2.5: bizim isabet piyasadan en az 5 puan yuksek olmali.
+Destek       : karnesi %45 alti kaynaklar sayilmaz; en az 2 farkli sistem (%45+) ayni secimi demeli.
 İhtimal      : p = ½ PATRON'un o pazar + guven bandindaki GERCEK isabeti (kalibrasyon, 30+ biten secim) + ½ piyasa (1xbet marjsiz);
                deger/getiri hesaplarinda ihtiyat icin p − 0.03 kullanilir.
 Oran         : SADECE 1xbet (xbet.db son kayit; Volkano oranlari kupon icin kullanilmaz). Esik: MS/2.5 p>=%55 oran>=1.50 · İY/MS p>=%40 oran>=2.20 · tek secim degeri >= 1.03.
@@ -36,7 +38,11 @@ KELLY_PAY = 0.5
 MAX_ACIK = 0.30
 EV_ESIK, EV_ESIK_ZOR = 1.05, 1.10
 MIN_MAC, MAX_MAC = 4, 12
-ESIK = {"MS": (0.55, 1.50), "2.5": (0.55, 1.50), "İY/MS": (0.40, 2.20)}
+ESIK = {"MS": (0.55, 1.50), "2.5": (0.55, 1.50), "İY/MS": (0.40, 2.20), "DNB": (0.50, 1.50)}   # DNB: p = kazanma ihtimali
+AU_FARK = 0.05                   # 2.5 alt/ust: bizim gercek isabet piyasa ihtimalinden en az 5 puan yuksek olmali
+DESTEK_MIN_H = 45                # karnesi %45 alti kaynak destek sayilmaz
+DESTEK_MIN_SISTEM = 2            # en az 2 farkli sistem (karnesi %45+) ayni secimi demeli
+MAX_DNB = 4                      # kuponda en fazla 4 beraberlikte iade (hesap 3 durumlu)
 SECIM_DEGER = 1.03
 KALIB_N = 30
 GUVENLIK = 0.03                  # ihtimal tahmini hata payi: hesaplarda p - 0.03 kullanilir (fazla iyimserlik sistemde katlanir)
@@ -124,7 +130,7 @@ def xbet(mids):
     c = sqlite3.connect(f"file:{X.DB}?mode=ro", uri=True, timeout=10)
     q = ",".join("?" * len(mids))
     R = {}
-    for m, ms, iy, au in c.execute(f"""SELECT mid, ms, iyms, au FROM s WHERE rowid IN (SELECT MAX(rowid) FROM s GROUP BY mid)
+    for m, ms, iy, au, dn in c.execute(f"""SELECT mid, ms, iyms, au, dnb FROM s WHERE rowid IN (SELECT MAX(rowid) FROM s GROUP BY mid)
                                        AND mid IN ({q})""", list(mids)):
         o = {}
         if ms:
@@ -134,6 +140,8 @@ def xbet(mids):
         a = (json.loads(au) if au else {}).get("2.5")
         if a and all(a):
             o["2.5"] = {"ÜST": a[0], "ALT": a[1]}
+        if dn:
+            o["DNB"] = json.loads(dn)
         R[int(m)] = o
     c.close()
     return R
@@ -160,29 +168,50 @@ def adaylar(v=None):
         en = None
         for p in x["P"]:
             pz, sec = p["pazar"], p["sec"]
+            kal_pz = pz
+            if pz == "ÇŞ" and sec in ("1X", "X2"):                    # cifte sans yerine beraberlikte iade (DNB)
+                pz, sec = "DNB", sec.replace("X", "")
             if pz not in ESIK:
+                continue
+            D = [d for d in p["destek"] if d["h"] >= DESTEK_MIN_H]
+            if len({d["kaynak"].split("-")[0] for d in D}) < DESTEK_MIN_SISTEM:
+                red["zayıf destek"] = red.get("zayıf destek", 0) + 1
                 continue
             o = (XB.get(x["mid"]) or {}).get(pz, {}).get(sec)         # kupon orani: SADECE 1xbet
             if not o:
                 red["oran yok"] += 1
                 continue
-            pk, nk = _kalib(v, pz, p["guven"])
+            pk, nk = _kalib(v, kal_pz, p["guven"])
             if pk is None:
                 red["kalibrasyon az"] += 1
                 continue
-            pp = _novig(XB[x["mid"]][pz]).get(sec)                     # piyasa ihtimali: 1xbet marjsiz
-            if not pp:
-                red["oran yok"] += 1
-                continue
-            pr = 0.5 * pk + 0.5 * pp
-            deger = (pr - GUVENLIK) * (1 + (1 - VERGI) * (o - 1))
+            p_iade = 0.0
+            if pz == "DNB":                                            # kalibrasyon = cifte sans isabeti; beraberlik payi piyasadan
+                m3 = _novig((XB.get(x["mid"]) or {}).get("MS") or {})
+                if len(m3) != 3:
+                    red["oran yok"] += 1
+                    continue
+                p_iade = m3["X"]
+                pp = m3[sec]
+                pr = max(0.0, 0.5 * (pk - p_iade) + 0.5 * pp)
+                deger = (pr - GUVENLIK) * o + p_iade
+            else:
+                pp = _novig(XB[x["mid"]][pz]).get(sec)                 # piyasa ihtimali: 1xbet marjsiz
+                if not pp:
+                    red["oran yok"] += 1
+                    continue
+                if pz == "2.5" and pk - pp < AU_FARK:
+                    red["alt/üst fark az"] = red.get("alt/üst fark az", 0) + 1
+                    continue
+                pr = 0.5 * pk + 0.5 * pp
+                deger = (pr - GUVENLIK) * (1 + (1 - VERGI) * (o - 1))
             pmin, omin = ESIK[pz]
             if pr < pmin or o < omin or deger < SECIM_DEGER:
                 red["eşik altı"] += 1
                 continue
             s = {"mid": x["mid"], "ko": x["ko"], "ev": x["ev"], "dep": x["dep"], "lig": x.get("lig"), "pazar": pz, "sec": sec, "oran": o,
-                 "p": round(pr, 4), "p_kal": round(pk, 4), "p_pi": round(pp, 4), "guven": p["guven"], "deger": round(deger, 4),
-                 "destek": ", ".join(f"{d['kaynak']} %{d['h']}" for d in p["destek"][:4]), "kal_n": nk}
+                 "p": round(pr, 4), "p_iade": round(p_iade, 4), "p_kal": round(pk, 4), "p_pi": round(pp, 4), "guven": p["guven"],
+                 "deger": round(deger, 4), "destek": ", ".join(f"{d['kaynak']} %{d['h']}" for d in D[:4]), "kal_n": nk}
             if not en or s["deger"] > en["deger"]:
                 en = s
         if en:
@@ -207,20 +236,23 @@ def dagilim(S):
     n = len(S)
     alt = n if n <= MIN_MAC else n - 2
     kombi = sum(comb(n, k) for k in range(alt, n + 1))
+    ST = []                                  # her secim: [(ihtimal, oran ya da None=yatti)]; DNB: beraberlik = iade (oran 1)
+    for s in S:
+        q = max(0.01, s["p"] - GUVENLIK)
+        pi = s.get("p_iade") or 0.0
+        ST.append([(q, s["oran"]), (pi, 1.0), (max(0.0, 1 - q - pi), None)] if pi else [(q, s["oran"]), (1 - q, None)])
     D = []
-    for mask in range(1 << n):
-        pr, od = 1.0, []
-        for i, s in enumerate(S):
-            q = max(0.01, s["p"] - GUVENLIK)
-            if mask >> i & 1:
-                pr *= q
-                od.append(s["oran"])
-            else:
-                pr *= 1 - q
-        g = _esym(od, alt, n) / kombi if len(od) >= alt else 0.0
-        if g > 1:
-            g = 1 + (1 - VERGI) * (g - 1)
-        D.append((pr, g))
+
+    def gez(i, pr, od):
+        if pr <= 0:
+            return
+        if i == n:
+            g = _esym(od, alt, n) / kombi if len(od) >= alt else 0.0
+            D.append((pr, 1 + (1 - VERGI) * (g - 1) if g > 1 else g))
+            return
+        for p, o in ST[i]:
+            gez(i + 1, pr * p, od + [o] if o else od)
+    gez(0, 1.0, [])
     return alt, kombi, D
 
 
@@ -252,6 +284,14 @@ def kupon_sec(A, ks):
         return None, f"{len(A)} güçlü seçim var, en az {MIN_MAC} gerekli"
     esik = EV_ESIK if ks["bakiye"] >= KASA0 else EV_ESIK_ZOR
     en, sebep = None, "uygun kupon yok"
+    A2, dn = [], 0
+    for s in A:                                                        # en fazla MAX_DNB beraberlikte iade
+        if s["pazar"] == "DNB":
+            if dn >= MAX_DNB:
+                continue
+            dn += 1
+        A2.append(s)
+    A = A2
     for n in range(MIN_MAC, min(MAX_MAC, len(A)) + 1):
         S = A[:n]
         alt, kombi, D = dagilim(S)
@@ -320,6 +360,10 @@ def kur(dene=False):
 
 
 def _tuttu(pz, sec, fh, fa, hh, ha):
+    if pz == "DNB":
+        if fh is None:
+            return None
+        return "iade" if fh == fa else (fh > fa) == (sec == "1")
     import patron as P
     return P.tuttu(pz, sec, fh, fa, hh, ha)
 
@@ -343,7 +387,7 @@ def sonuclandir():
             yeni = None
             if r and r[0] == "finished" and r[1] is not None:
                 t = _tuttu(pz, sec, r[1], r[2], r[3], r[4])
-                yeni = "tuttu" if t else "yattı" if t is False else None
+                yeni = "iade" if t == "iade" else "tuttu" if t is True else "yattı" if t is False else None
             if yeni is None and ((r and r[0] == "void") or _dt(ko) < now - timedelta(hours=VOID_H)):
                 yeni = "iptal"
             if yeni:
@@ -351,7 +395,7 @@ def sonuclandir():
         S = c.execute("SELECT oran, durum FROM secim WHERE kid=?", (kid,)).fetchall()
         if any(d == "bekliyor" for _, d in S):
             continue
-        od = [1.0 if d == "iptal" else o for o, d in S if d in ("tuttu", "iptal")]
+        od = [1.0 if d in ("iptal", "iade") else o for o, d in S if d in ("tuttu", "iptal", "iade")]
         g = tutar * _esym(od, alt, n) / kombi if len(od) >= alt else 0.0
         if g > tutar:
             g = tutar + (1 - VERGI) * (g - tutar)
