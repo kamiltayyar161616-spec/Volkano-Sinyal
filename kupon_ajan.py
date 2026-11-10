@@ -8,7 +8,7 @@ YARADILIŞ İLKESİ (en önemli kural): KASA ARTIDA KALMALI.
 Secim havuzu : PATRON (tum sekmelerin uzman ajanlari: Oto, NowGoal, Kelly, Toto, SD Oran, Oracle) -> baslamamis maclar (15 dk - 6 saat).
 Pazarlar     : Maç sonucu (1/X/2), MS 2.5 alt/ust, İY/MS, beraberlikte iade (PATRON cifte sans 1X/X2 -> DNB 1/2; beraberlikte para iade).
                (Cifte sans ve 1.5 alt/ust YOK.) 2.5: bizim isabet piyasadan en az 5 puan yuksek olmali.
-Destek       : karnesi %45 alti kaynaklar sayilmaz; en az 2 farkli sistem (%45+) ayni secimi demeli.
+Destek       : karnesi %45 alti kaynaklar sayilmaz; en az 2 farkli sistem (%45+) ya da karnesi %60+ tek guclu kaynak.
 İhtimal      : p = ½ PATRON'un o pazar + guven bandindaki GERCEK isabeti (kalibrasyon, 30+ biten secim) + ½ piyasa (1xbet marjsiz);
                deger/getiri hesaplarinda ihtiyat icin p − 0.03 kullanilir.
 Oran         : SADECE 1xbet (xbet.db son kayit; Volkano oranlari kupon icin kullanilmaz). Esik: MS/2.5 p>=%55 oran>=1.50 · İY/MS p>=%40 oran>=2.20 · tek secim degeri >= 1.03.
@@ -41,7 +41,8 @@ MIN_MAC, MAX_MAC = 4, 12
 ESIK = {"MS": (0.55, 1.50), "2.5": (0.55, 1.50), "İY/MS": (0.40, 2.20), "DNB": (0.50, 1.50)}   # DNB: p = kazanma ihtimali
 AU_FARK = 0.05                   # 2.5 alt/ust: bizim gercek isabet piyasa ihtimalinden en az 5 puan yuksek olmali
 DESTEK_MIN_H = 45                # karnesi %45 alti kaynak destek sayilmaz
-DESTEK_MIN_SISTEM = 2            # en az 2 farkli sistem (karnesi %45+) ayni secimi demeli
+DESTEK_MIN_SISTEM = 2            # en az 2 farkli sistem (karnesi %45+) ayni secimi demeli ...
+GUCLU_TEK = 60                   # ... ya da karnesi %60+ tek guclu kaynak yeter
 MAX_DNB = 4                      # kuponda en fazla 4 beraberlikte iade (hesap 3 durumlu)
 SECIM_DEGER = 1.03
 KALIB_N = 30
@@ -174,7 +175,7 @@ def adaylar(v=None):
             if pz not in ESIK:
                 continue
             D = [d for d in p["destek"] if d["h"] >= DESTEK_MIN_H]
-            if len({d["kaynak"].split("-")[0] for d in D}) < DESTEK_MIN_SISTEM:
+            if len({d["kaynak"].split("-")[0] for d in D}) < DESTEK_MIN_SISTEM and not any(d["h"] >= GUCLU_TEK for d in D):
                 red["zayıf destek"] = red.get("zayıf destek", 0) + 1
                 continue
             o = (XB.get(x["mid"]) or {}).get(pz, {}).get(sec)         # kupon orani: SADECE 1xbet
