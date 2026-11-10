@@ -2,7 +2,7 @@
 
 YARADILIŞ İLKESİ (en önemli kural): KASA ARTIDA KALMALI.
   1) Beklenen getirisi en az %5 pozitif olmayan kupon KURULMAZ (kasa baslangicin altindaysa %10).
-  2) 5+ macli sistemde "2 mac yatarsa" bile yatirilan geri gelmiyorsa kupon KURULMAZ.
+  2) Sistem kuponda sistemin kaldirdigi kadar mac yatarsa (5-10 macta 1, 11+ macta 2) yatirilan geri gelmiyorsa kupon KURULMAZ.
   3) Tutar = yarim Kelly (kasanin log buyumesini en iyi yapan oranin yarisi); 100 TL'nin altini gosteriyorsa kupon OYNANMAZ, 500 TL ust sinir.
   4) Acik kuponlardaki toplam para kasanin %30'unu gecemez. Bir mac ayni anda tek kuponda.
 Secim havuzu : PATRON (tum sekmelerin uzman ajanlari: Oto, NowGoal, Kelly, Toto, SD Oran, Oracle) -> baslamamis maclar (15 dk - 6 saat).
@@ -12,7 +12,7 @@ Destek       : karnesi %45 alti kaynaklar sayilmaz; en az 2 farkli sistem (%45+)
 İhtimal      : p = ½ PATRON'un o pazar + guven bandindaki GERCEK isabeti (kalibrasyon, 30+ biten secim) + ½ piyasa (1xbet marjsiz);
                deger/getiri hesaplarinda ihtiyat icin p − 0.03 kullanilir.
 Oran         : SADECE 1xbet (xbet.db son kayit; Volkano oranlari kupon icin kullanilmaz). Esik: MS/2.5 p>=%55 oran>=1.50 · İY/MS p>=%40 oran>=2.20 · tek secim degeri >= 1.03.
-Kupon        : 4 mac kombine; 5+ mac (n-2)..n sistem (6 mac -> 4-5-6, 12 mac -> 10-11-12). Mac sayisini (4-12) ajan secer: beklenen
+Kupon        : 4 mac kombine; 5-10 mac (n-1)-n sistem (5 -> 4-5, 10 -> 9-10); 11+ mac (n-2)..n (11 -> 9-10-11, 15 -> 13-14-15). Mac sayisini (4-12) ajan secer: beklenen
                kasa buyumesi (Kelly) en yuksek olan. Kupon siklgini ajan belirler: en erken mac 2 saat icindeyse ya da 10+ guclu secim varsa kurar.
 Sonuc        : NowGoal skoru (İY + MS). Ertelenen / 30 saatte skoru gelmeyen mac oran 1.00 sayilir.
   python3 kupon_ajan.py          (durum)
@@ -232,10 +232,15 @@ def _esym(od, alt, n):
     return sum(e[k] for k in range(alt, n + 1) if k < len(e))
 
 
+def sistem_alt(n):
+    """kupon formati: 4 mac kombine · 5-10 mac (n-1)-n sistem (5 -> 4-5, 10 -> 9-10) · 11+ mac (n-2)..n (11 -> 9-10-11, 15 -> 13-14-15)"""
+    return n if n <= MIN_MAC else n - 1 if n <= 10 else n - 2
+
+
 def dagilim(S):
     """secimler -> (alt sinir, kombin sayisi, [(ihtimal, getiri/tutar)])  — vergi dusulmus"""
     n = len(S)
-    alt = n if n <= MIN_MAC else n - 2
+    alt = sistem_alt(n)
     kombi = sum(comb(n, k) for k in range(alt, n + 1))
     ST = []                                  # her secim: [(ihtimal, oran ya da None=yatti)]; DNB: beraberlik = iade (oran 1)
     for s in S:
@@ -302,7 +307,7 @@ def kupon_sec(A, ks):
             continue
         ek = en_kotu(S, alt) if n > MIN_MAC else None
         if ek is not None and ek < 1:
-            sebep = f"{n} maç: 2 maç yatarsa getiri x{ek:.2f} (< 1)"
+            sebep = f"{n} maç: {n - alt} maç yatarsa getiri x{ek:.2f} (< 1)"
             continue
         f = kelly(D)
         tutar = min(MAX_BAHIS, round(ks["serbest"] * f * KELLY_PAY / 5) * 5)
