@@ -369,6 +369,24 @@ def _tuttu(pz, sec, fh, fa, hh, ha):
     return P.tuttu(pz, sec, fh, fa, hh, ha)
 
 
+def _desen_sonuc(id7m, pz):
+    """'D|<sonuc>|<fav>' -> tuttu / yattı / iptal / None (bekliyor)"""
+    import desen_tab as T
+    import m7_desen as MD
+    c = T._db()
+    r = c.execute("SELECT skor, iy FROM mac WHERE id7m=?", (id7m,)).fetchone()
+    c.close()
+    if not r or not r["skor"]:
+        return None
+    if r["skor"] == "?":
+        return "iptal"
+    _, s, fav = pz.split("|")
+    fh, fa = (int(x) for x in r["skor"].split("-"))
+    iy = tuple(int(x) for x in r["iy"].split("-")) if r["iy"] else None
+    t = MD.sonuclar(fh, fa, iy, None if fav in ("", "None") else int(fav)).get(s)
+    return None if t is None else "tuttu" if t else "yattı"
+
+
 def sonuclandir():
     import nowgoal as ng
     c = db()
@@ -384,8 +402,12 @@ def sonuclandir():
         for rid, m, ko, pz, sec, o, d in S:
             if d != "bekliyor":
                 continue
-            r = n_.execute("SELECT status, ft_h, ft_a, ht_h, ht_a FROM ng_match WHERE mid=?", (m,)).fetchone()
             yeni = None
+            if m < 0:                                                  # istisna kuponu: DESEN (7M) maci, sonuc desen.db'den
+                yeni = _desen_sonuc(-m, pz)
+                r = None
+            else:
+                r = n_.execute("SELECT status, ft_h, ft_a, ht_h, ht_a FROM ng_match WHERE mid=?", (m,)).fetchone()
             if r and r[0] == "finished" and r[1] is not None:
                 t = _tuttu(pz, sec, r[1], r[2], r[3], r[4])
                 yeni = "iade" if t == "iade" else "tuttu" if t is True else "yattı" if t is False else None

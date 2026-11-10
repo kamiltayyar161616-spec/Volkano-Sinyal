@@ -53,6 +53,7 @@ import iyms_av
 import xbet
 import iyms_xv
 import kupon_ajan
+import kupon_istisna
 import monsure_bakim
 import patron
 import durum_rapor
@@ -643,6 +644,7 @@ if __name__ == "__main__":
     iyms_av.start_background()
     xbet.start_background()
     kupon_ajan.start_background()
+    kupon_istisna.start_background()
     monsure_bakim.start_background()
     patron.start_background()
     durum_rapor.start_background()
