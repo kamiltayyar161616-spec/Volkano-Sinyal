@@ -37,7 +37,7 @@
 
 {% if d.sekme == 'kupon' %}
 {% set kp = d.kupon or {} %}{% set ks = kp.kasa or {} %}
-<div class="section-sub">🎫 <b>Kupon Ajanı</b> (sanal kasa, gerçek bahis yok). <b>Yaradılış ilkesi: kasa artıda kalmalı.</b> Beklenen getirisi (Volkano %12 vergisi düşülmüş) en az +%5 olmayan kupon kurulmaz; 5+ maçlı sistemde 2 maç yatarsa yatırılanı geri getirmeyen kupon kurulmaz; tutar yarım Kelly, 100₺ altını gösterirse oynanmaz (en fazla 500₺). Seçimler PATRON'un tüm sekme ajanlarından, sadece başlamamış maçlar: maç sonucu, 2.5 alt/üst, İY/MS. İhtimal = ½ PATRON'un o güven bandındaki gerçek isabeti + ½ piyasa (Volkano + 1xbet). 4 maç kombine, 5+ maç (n−2)…n sistem.</div>
+<div class="section-sub">🎫 <b>Kupon Ajanı</b> (sanal kasa, gerçek bahis yok). <b>Yaradılış ilkesi: kasa artıda kalmalı.</b> Beklenen getirisi en az +%5 olmayan kupon kurulmaz; 5+ maçlı sistemde 2 maç yatarsa yatırılanı geri getirmeyen kupon kurulmaz; tutar yarım Kelly, 100₺ altını gösterirse oynanmaz (en fazla 500₺). Seçimler PATRON'un tüm sekme ajanlarından, sadece başlamamış maçlar: maç sonucu, 2.5 alt/üst, İY/MS. İhtimal = ½ PATRON'un o güven bandındaki gerçek isabeti + ½ piyasa (Volkano + 1xbet). 4 maç kombine, 5+ maç (n−2)…n sistem.</div>
 <div class="section-sub">Son tur: {{ kp.last.log or 'henüz yok (uygulama açıldıktan ~7 dk sonra)' }}{% if kp.last.hata %} · ⚠ {{ kp.last.hata }}{% endif %}</div>
 <table class="tt"><tr><th>kasa</th><th>açıkta</th><th>kupon</th><th>biten / kazanan</th><th>kâr</th><th>ROI</th></tr>
 <tr><td><b>{{ '%.2f'|format(ks.bakiye or 0) }}₺</b></td><td>{{ '%.0f'|format(ks.acik or 0) }}₺</td><td>{{ ks.oynanan or 0 }}</td><td>{{ ks.biten or 0 }} / {{ ks.kazanan or 0 }}</td><td><b style="color:{{ '#3ccf7a' if (ks.kar or 0) >= 0 else '#ff5a4f' }}">{{ '%+.2f'|format(ks.kar or 0) }}₺</b></td><td>{{ '%+.1f'|format(ks.roi) ~ '%' if ks.roi is not none else '-' }}</td></tr></table>
@@ -59,7 +59,7 @@ function hesap(el){
   var e=[1]; for(var i=0;i<od.length;i++) e.push(0);
   od.forEach(function(o){ for(var k=od.length;k>0;k--) e[k]+=e[k-1]*o; });
   var top=0; for(var k=alt;k<=n && k<e.length;k++) top+=e[k];
-  var g=tutar*top/kombi; if(g>tutar) g=tutar+0.88*(g-tutar);
+  var g=tutar*top/kombi;
   h.querySelector('.h-o').textContent=top.toFixed(2).replace('.',',');
   h.querySelector('.h-k').textContent=g.toFixed(2).replace('.',',')+' TL'+(g>0?(g>=tutar?'  ▲':'  ▼'):'');
 }

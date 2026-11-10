@@ -1,7 +1,7 @@
 """PATRON KUPON AJANI — sanal kasa (gercek bahis YOK). Sadece OKUR + analiz eder; SAHA'daki hicbir sekmeyi/veriyi degistirmez.
 
 YARADILIŞ İLKESİ (en önemli kural): KASA ARTIDA KALMALI.
-  1) Beklenen getirisi (Volkano %12 vergisi dusulmus) en az %5 pozitif olmayan kupon KURULMAZ (kasa baslangicin altindaysa %10).
+  1) Beklenen getirisi en az %5 pozitif olmayan kupon KURULMAZ (kasa baslangicin altindaysa %10).
   2) 5+ macli sistemde "2 mac yatarsa" bile yatirilan geri gelmiyorsa kupon KURULMAZ.
   3) Tutar = yarim Kelly (kasanin log buyumesini en iyi yapan oranin yarisi); 100 TL'nin altini gosteriyorsa kupon OYNANMAZ, 500 TL ust sinir.
   4) Acik kuponlardaki toplam para kasanin %30'unu gecemez. Bir mac ayni anda tek kuponda.
@@ -9,7 +9,7 @@ Secim havuzu : PATRON (tum sekmelerin uzman ajanlari: Oto, NowGoal, Kelly, Toto,
 Pazarlar     : Maç sonucu (1/X/2), MS 2.5 alt/ust, İY/MS. (Cifte sans ve 1.5 alt/ust YOK.)
 İhtimal      : p = ½ PATRON'un o pazar + guven bandindaki GERCEK isabeti (kalibrasyon, 30+ biten secim) + ½ piyasa (Volkano + 1xbet marjsiz);
                deger/getiri hesaplarinda ihtiyat icin p − 0.03 kullanilir.
-Oran         : Volkano (iyv.db anlik). Esik: MS/2.5 p>=%55 oran>=1.50 · İY/MS p>=%40 oran>=2.20 · vergi sonrasi tek secim degeri >= 1.03.
+Oran         : Volkano (iyv.db anlik). Esik: MS/2.5 p>=%55 oran>=1.50 · İY/MS p>=%40 oran>=2.20 · tek secim degeri >= 1.03.
 Kupon        : 4 mac kombine; 5+ mac (n-2)..n sistem (6 mac -> 4-5-6, 12 mac -> 10-11-12). Mac sayisini (4-12) ajan secer: beklenen
                kasa buyumesi (Kelly) en yuksek olan. Kupon siklgini ajan belirler: en erken mac 2 saat icindeyse ya da 10+ guclu secim varsa kurar.
 Sonuc        : NowGoal skoru (İY + MS). Ertelenen / 30 saatte skoru gelmeyen mac oran 1.00 sayilir.
@@ -31,7 +31,7 @@ KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "kupon
 DB = os.path.join(KLASOR, "kupon.db")
 IYV = "/root/defter/iyv.db"
 KASA0, MIN_BAHIS, MAX_BAHIS = 5000.0, 100.0, 500.0
-VERGI = 0.12                     # Volkano net kazanctan keser
+VERGI = 0.0                      # vergi hesaba katilmaz (kullanici istegi)
 KELLY_PAY = 0.5
 MAX_ACIK = 0.30
 EV_ESIK, EV_ESIK_ZOR = 1.05, 1.10
