@@ -113,6 +113,7 @@ def _calis():
 def start_background():
     threading.Thread(target=_calis, daemon=True, name="monsure_bakim").start()
     threading.Thread(target=lambda: _calis2(), daemon=True, name="monsure_bakim2").start()
+    threading.Thread(target=lambda: _calis3(), daemon=True, name="monsure_bakim3").start()
 
 
 def rapor():
@@ -172,5 +173,40 @@ def _calis2():
 def rapor2():
     try:
         return json.load(open(SONUC2))
+    except Exception:
+        return {"durum": "henüz çalışmadı"}
+
+
+# ---------------------------------------------------------------- v3: GERI ALMA (10.11.2026 20:30) — cron satirlari kendi kabugunu
+# oldurdugu icin (pkill -f) siteleri aslinda scheduler guncelliyormus; scheduler.py yedekten ORIJINAL haline doner.
+ISARET3 = os.path.join(KOK, "data", "monsure_bakim_v3.done")
+SONUC3 = os.path.join(KOK, "data", "monsure_bakim3.json")
+
+
+def _calis3():
+    time.sleep(60)
+    if os.path.exists(ISARET3) or not os.path.isdir(MON):
+        return
+    open(ISARET3, "w").write(datetime.now(timezone.utc).isoformat())
+    R = {"basla": datetime.now(timezone.utc).isoformat()}
+    try:
+        sch = os.path.join(MON, "scheduler.py")
+        bak = f"{sch}.bak-{DAMGA}"
+        shutil.copy2(sch, f"{sch}.bozuk-{DAMGA}")
+        shutil.copy2(bak, sch)
+        R["geri_alindi"] = open(sch).read() == open(bak).read()
+        R["durdur"] = _sh("pkill -f '[m]onsure/scheduler.py'; sleep 2; pgrep -fa '[m]onsure/scheduler.py'")
+        R["baslat"] = _sh(f"cd {MON} && (setsid nohup /usr/bin/python3 {MON}/scheduler.py >> {MON}/scheduler.log 2>&1 &) ; sleep 3; pgrep -fa '[m]onsure/scheduler.py'")
+    except Exception as e:
+        R["HATA"] = f"{type(e).__name__}: {str(e)[:300]}"
+    json.dump(R, open(SONUC3, "w"), ensure_ascii=False, indent=1)
+    time.sleep(600)
+    R["tazelik_10dk"] = _tazelik()
+    json.dump(R, open(SONUC3, "w"), ensure_ascii=False, indent=1)
+
+
+def rapor3():
+    try:
+        return json.load(open(SONUC3))
     except Exception:
         return {"durum": "henüz çalışmadı"}
