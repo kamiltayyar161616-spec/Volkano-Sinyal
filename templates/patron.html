@@ -19,6 +19,14 @@
   .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
   .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:left; } .tt td{ padding:5px 3px; border-top:1px solid var(--navy-line); }
   details{ margin:0 16px 12px; } summary{ cursor:pointer; color:var(--chalk-faint); font-size:13px; }
+  .sw{ position:relative; display:inline-block; width:42px; height:24px; vertical-align:middle; margin-left:8px; }
+  .sw input{ opacity:0; width:0; height:0; }
+  .sw span{ position:absolute; inset:0; border-radius:12px; background:#555; transition:.15s; cursor:pointer; }
+  .sw span:before{ content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; border-radius:50%; background:#eee; transition:.15s; }
+  .sw input:checked + span{ background:#29c4e0; } .sw input:checked + span:before{ transform:translateX(18px); background:#0b8fb0; }
+  .hes{ display:grid; grid-template-columns:1fr 1fr; gap:1px; margin-top:9px; border-radius:10px; overflow:hidden; background:var(--navy-line); font-size:13px; }
+  .hes div{ background:var(--navy-deep); padding:7px 9px; display:flex; justify-content:space-between; }
+  .hes .kz{ grid-column:1 / 3; background:#1a6b1a; font-size:16px; font-weight:800; }
 </style>
 <meta http-equiv="refresh" content="{{ 30 if d.hesaplaniyor else 60 if d.sekme == 'canli' else 300 }}">
 {% endblock %}
@@ -37,11 +45,26 @@
 <div class="kc">
   <div class="ust"><span class="tk">#{{ k.id }} · {{ k.n }} maç {{ k.tip }} · {{ '%.0f'|format(k.tutar) }}₺</span><span class="gv" style="color:{{ '#3ccf7a' if k.durum == 'kazandı' else '#ff5a4f' if k.durum == 'kaybetti' else '#e0a030' }}">{{ k.durum|upper }}{% if k.getiri is not none %} {{ '%.2f'|format(k.getiri) }}₺{% endif %}</span></div>
   <div class="meta">{{ (k.at[:19] ~ '+00:00') | localdatetime }} · {{ k.kombi }} kombin · beklenen getiri {{ '%+.1f'|format(100 * (k.ev - 1)) }}% · kazanma (en az geri alma) ihtimali %{{ (100 * k.p_kazan)|round|int }}{% if k.en_kotu is not none %} · 2 maç yatarsa x{{ '%.2f'|format(k.en_kotu) }}{% endif %} · tutan {{ k.tutan }}/{{ k.n }}</div>
-  {% for s in k.S %}<div class="pk {{ 'g1' if s.durum == 'tuttu' else '' }}" style="{{ 'border-left-color:#ff5a4f' if s.durum == 'yattı' else '' }}"><span class="gv">{{ s.oran }}</span><b>{{ s.saat }} · {{ s.ev }} – {{ s.dep }}</b>
+  {% for s in k.S %}<div class="pk {{ 'g1' if s.durum == 'tuttu' else '' }}" style="{{ 'border-left-color:#ff5a4f' if s.durum == 'yattı' else '' }}"><span class="gv">{{ s.oran }}<label class="sw" title="tuttu / tutmadı"><input type="checkbox" class="hs" data-o="{{ 1.0 if s.durum == 'iptal' else s.oran }}" {{ 'checked' if s.durum in ('tuttu', 'iptal') else '' }} onchange="hesap(this)"><span></span></label></span><b>{{ s.saat }} · {{ s.ev }} – {{ s.dep }}</b>
     <div class="meta">{{ {'MS':'Maç sonucu','2.5':'2.5 Alt/Üst','İY/MS':'İY/MS'}.get(s.pazar, s.pazar) }} <b>{{ s.sec }}</b> · ihtimal %{{ (100 * s.p)|round|int }} (karne %{{ (100 * s.p_kal)|round|int }}, piyasa %{{ (100 * s.p_pi)|round|int }}) · {{ s.durum }} · {{ s.destek }}</div></div>{% endfor %}
+  <div class="hes" data-tutar="{{ k.tutar }}" data-alt="{{ k.alt }}" data-n="{{ k.n }}" data-kombi="{{ k.kombi }}"><div class="kz"><span>Kazanç</span><span class="h-k">0,00 TL</span></div><div><span>Toplam oran</span><b class="h-o">0,00</b></div><div><span>Kupon tutarı</span><b>{{ '%.0f'|format(k.tutar) }} TL</b></div><div><span>Kombin başı</span><b>{{ '%.2f'|format(k.tutar / k.kombi) }} TL</b></div><div><span>{{ 'Kombine' if k.n == k.alt else 'Sistem ' ~ k.alt ~ '-' ~ k.n }}</span><b>{{ k.kombi }} kombin</b></div></div>
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok. Ajan ilkelere uyan kupon bulunca kurar; uygun kupon yoksa o tur oynamaz.</div>{% endfor %}
 
+<script>
+function hesap(el){
+  var kc=el.closest('.kc'), h=kc.querySelector('.hes'); if(!h) return;
+  var alt=+h.dataset.alt, n=+h.dataset.n, kombi=+h.dataset.kombi, tutar=+h.dataset.tutar;
+  var od=[].map.call(kc.querySelectorAll('.hs:checked'), function(x){ return +x.dataset.o; });
+  var e=[1]; for(var i=0;i<od.length;i++) e.push(0);
+  od.forEach(function(o){ for(var k=od.length;k>0;k--) e[k]+=e[k-1]*o; });
+  var top=0; for(var k=alt;k<=n && k<e.length;k++) top+=e[k];
+  var g=tutar*top/kombi; if(g>tutar) g=tutar+0.88*(g-tutar);
+  h.querySelector('.h-o').textContent=top.toFixed(2).replace('.',',');
+  h.querySelector('.h-k').textContent=g.toFixed(2).replace('.',',')+' TL'+(g>0?(g>=tutar?'  ▲':'  ▼'):'');
+}
+document.querySelectorAll('.hes').forEach(function(h){ var x=h.closest('.kc').querySelector('.hs'); if(x) hesap(x); });
+</script>
 {% elif d.sekme == 'canli' %}
 {% set cv = d.canli or {} %}
 {% if cv.hata %}<div class="section-sub">⚠ {{ cv.hata }}</div>{% endif %}
