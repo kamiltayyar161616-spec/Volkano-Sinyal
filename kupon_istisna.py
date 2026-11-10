@@ -4,7 +4,7 @@ tek kupon, 500 TL (sanal kasa). Kasa ilkesi/Kelly/esikler bu kupona UYGULANMAZ (
 Secim: her mactan desen secimlerinden (arsiv tutma % x 1xbet orani) en yuksek olan; 1xbet orani 1.10 alti alinmaz; İY alt/ust
 1xbet kaydinda olmadigi icin atlanir. 1xbet orani kupon aninda canli cekilir (1X2 G1, cifte sans G8, alt/ust G17).
 Mac 7M id'si negatif mid olarak saklanir (pazar 'D|<sonuc>|<fav>'), sonuc DESEN'in 7M skorundan islenir (kupon_ajan.sonuclandir).
-Maca en az 3 dk olan, en fazla 12 mac. En az 4 mac birikene kadar 5 dk'da bir tekrar bakar, 3 saat icinde 4 olmazsa kurmaz."""
+Maca en az 3 dk olan, en fazla 12 mac. En az 4 mac birikene kadar 4 dk'da bir tekrar bakar, 12 Kasim 00:00 TR'ye kadar."""
 import json
 import os
 import threading
@@ -132,11 +132,11 @@ def kur():
 
 
 def _calis():
-    time.sleep(240)
+    time.sleep(60)
     if os.path.exists(ISARET):
         _last["durum"] = "daha önce kuruldu"
         return
-    bitis = time.time() + 3 * 3600
+    bitis = datetime(2026, 11, 11, 21, 0, tzinfo=timezone.utc).timestamp()   # 12 Kasim 00:00 TR
     while time.time() < bitis:
         try:
             kid, msg = kur()
@@ -147,8 +147,8 @@ def _calis():
             open(ISARET, "w").write(msg)
             _last["durum"] = "kuruldu"
             return
-        time.sleep(300)
-    _last["durum"] = "3 saatte 4 uygun maç birikmedi, kurulmadı"
+        time.sleep(240)
+    _last["durum"] = "12 Kasım 00:00'a kadar 4 uygun maç birikmedi, kurulmadı"
     open(ISARET, "w").write(_last["durum"])
 
 
