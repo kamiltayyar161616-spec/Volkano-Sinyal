@@ -1,4 +1,4 @@
-"""1XBET ORAN KAYDI — SAHA maclari (Volkano'su olan NowGoal maclari, 3 gun ileri) icin 1xbet 1X2 + İY/MS + tam mac alt/ust zaman serisi.
+"""1XBET ORAN KAYDI — SAHA maclari (Volkano'su olan NowGoal maclari 3 gun ileri, digerleri 12 saat ileri) icin 1xbet 1X2 + İY/MS + tam mac alt/ust zaman serisi.
 Sadece okur, bahis yok. Kaynak: 1xbet.mobi service-api/LineFeed (robots.txt bu yolu yasaklamiyor; 1xbet.com sunucu konumunu engelliyor).
   Lig listesi : GetChampsZip?sport=1  -> lig basina Get1x2_VZip (en fazla 50 mac)   [30 dk'da bir]
   Mac detayi  : GetGameZip?id=..      G1 T1/T2/T3 = 1/X/2 · G11 T15..T23 = İY/MS 1/1..2/2 · G17 T9 = ust, T10 = alt (P = cizgi)
@@ -28,6 +28,7 @@ LIG_SN = 1800
 SIK_SN, YAKIN_SN, YAKIN_H = 1800, 600, 2
 SON5 = (1, 8)
 GUN = 3
+DIGER_SAAT = 12                 # Volkano'su olmayan NowGoal maclari (kupon ajani icin): maca 12 saat kala izlenir
 _last = {"at": None, "log": "", "hata": None, "lig": ""}
 _E = {"t": 0, "E": []}
 
@@ -85,8 +86,9 @@ def oranlar(xid):
 def _maclar(now):
     n = sqlite3.connect(f"file:{ng.DB_FILE}?mode=ro", uri=True, timeout=30)
     R = n.execute("""SELECT mid, kickoff_utc, home, away, COALESCE(NULLIF(league_vk,''), league_ng) FROM ng_match
-                     WHERE volkano_json IS NOT NULL AND kickoff_utc > ? AND kickoff_utc < ?""",
-                  ((now + timedelta(minutes=SON5[0])).isoformat(), (now + timedelta(days=GUN)).isoformat())).fetchall()
+                     WHERE kickoff_utc > ? AND (volkano_json IS NOT NULL AND kickoff_utc < ? OR kickoff_utc < ?)""",
+                  ((now + timedelta(minutes=SON5[0])).isoformat(), (now + timedelta(days=GUN)).isoformat(),
+                   (now + timedelta(hours=DIGER_SAAT)).isoformat())).fetchall()
     n.close()
     return R
 

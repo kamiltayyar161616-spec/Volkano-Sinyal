@@ -7,9 +7,9 @@ YARADILIŞ İLKESİ (en önemli kural): KASA ARTIDA KALMALI.
   4) Acik kuponlardaki toplam para kasanin %30'unu gecemez. Bir mac ayni anda tek kuponda.
 Secim havuzu : PATRON (tum sekmelerin uzman ajanlari: Oto, NowGoal, Kelly, Toto, SD Oran, Oracle) -> baslamamis maclar (15 dk - 6 saat).
 Pazarlar     : Maç sonucu (1/X/2), MS 2.5 alt/ust, İY/MS. (Cifte sans ve 1.5 alt/ust YOK.)
-İhtimal      : p = ½ PATRON'un o pazar + guven bandindaki GERCEK isabeti (kalibrasyon, 30+ biten secim) + ½ piyasa (Volkano + 1xbet marjsiz);
+İhtimal      : p = ½ PATRON'un o pazar + guven bandindaki GERCEK isabeti (kalibrasyon, 30+ biten secim) + ½ piyasa (1xbet marjsiz);
                deger/getiri hesaplarinda ihtiyat icin p − 0.03 kullanilir.
-Oran         : Volkano (iyv.db anlik). Esik: MS/2.5 p>=%55 oran>=1.50 · İY/MS p>=%40 oran>=2.20 · tek secim degeri >= 1.03.
+Oran         : SADECE 1xbet (xbet.db son kayit; Volkano oranlari kupon icin kullanilmaz). Esik: MS/2.5 p>=%55 oran>=1.50 · İY/MS p>=%40 oran>=2.20 · tek secim degeri >= 1.03.
 Kupon        : 4 mac kombine; 5+ mac (n-2)..n sistem (6 mac -> 4-5-6, 12 mac -> 10-11-12). Mac sayisini (4-12) ajan secer: beklenen
                kasa buyumesi (Kelly) en yuksek olan. Kupon siklgini ajan belirler: en erken mac 2 saat icindeyse ya da 10+ guclu secim varsa kurar.
 Sonuc        : NowGoal skoru (İY + MS). Ertelenen / 30 saatte skoru gelmeyen mac oran 1.00 sayilir.
@@ -154,7 +154,7 @@ def adaylar(v=None):
     now = datetime.now(timezone.utc)
     Y = [x for x in v.get("yakin") or [] if now + timedelta(minutes=PENCERE[0]) < _dt(x["ko"]) < now + timedelta(minutes=PENCERE[1])]
     mids = [x["mid"] for x in Y]
-    VK, XB = volkano(mids), xbet(mids)
+    XB = xbet(mids)
     out, red = [], {"oran yok": 0, "kalibrasyon az": 0, "eşik altı": 0}
     for x in Y:
         en = None
@@ -162,7 +162,7 @@ def adaylar(v=None):
             pz, sec = p["pazar"], p["sec"]
             if pz not in ESIK:
                 continue
-            o = (VK.get(x["mid"]) or {}).get(pz, {}).get(sec)
+            o = (XB.get(x["mid"]) or {}).get(pz, {}).get(sec)         # kupon orani: SADECE 1xbet
             if not o:
                 red["oran yok"] += 1
                 continue
@@ -170,12 +170,10 @@ def adaylar(v=None):
             if pk is None:
                 red["kalibrasyon az"] += 1
                 continue
-            pm = [_novig(S[x["mid"]][pz]).get(sec) for S in (VK, XB) if pz in (S.get(x["mid"]) or {})]
-            pm = [q for q in pm if q]
-            if not pm:
+            pp = _novig(XB[x["mid"]][pz]).get(sec)                     # piyasa ihtimali: 1xbet marjsiz
+            if not pp:
                 red["oran yok"] += 1
                 continue
-            pp = sum(pm) / len(pm)
             pr = 0.5 * pk + 0.5 * pp
             deger = (pr - GUVENLIK) * (1 + (1 - VERGI) * (o - 1))
             pmin, omin = ESIK[pz]
