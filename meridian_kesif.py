@@ -31,3 +31,19 @@ def kesif():
         out["maclar"].append({"mac": f"{h} - {a}", "ko": ko, "bahisci": len(B), "meridian": mer,
                               "ornek_adlar": [b["name"] for b in B][:40] if not mer else None})
     return out
+
+
+def zlatnik():
+    """SADECE OKUR: zlatnik dosyalari — hangisi zlatnik.json yaziyor"""
+    import glob
+    import os
+    import subprocess
+    out = {}
+    for f in ("zlatnik_scraper.py", "zlatnik_oran.py", "zlatnik_calculator.py"):
+        p = os.path.join("/root/monsure", f)
+        if os.path.exists(p):
+            s = open(p, encoding="utf-8", errors="replace").read()
+            out[f] = {"boy": len(s), "kod": s[:9000] if f == "zlatnik_scraper.py" else s[:2500]}
+    out["grep"] = subprocess.run("grep -rn 'zlatnik.json' /root/monsure --include=*.py --include=*.js --include=*.sh | head -20",
+                                 shell=True, capture_output=True, text=True).stdout
+    return out
