@@ -1,60 +1,35 @@
-"""SADECE OKUR: 1xbet kesfi — robots.txt + LineFeed (mac oncesi bulten) adresleri sunucudan erisilebilir mi, İY/MS / 1X2 / alt-ust nerede.
-Sonuc durum raporuna ('xbet_kesif') gider. Hicbir sekmeye/veriye yazmaz.
-  python3 xbet_kesif.py"""
+"""SADECE OKUR: 1xbet kesfi adim 2 (1xbet.mobi service-api LineFeed). Cok pazarli maclarda 9 secenekli grup (İY/MS) ara + bulten boyu.
+Sonuc durum raporuna ('xbet_kesif'). Hicbir sekmeye/veriye yazmaz."""
 import json
 import urllib.request
 
 H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
      "Accept": "application/json, text/plain, */*"}
-HOST = ("https://1xbet.com", "https://1xbet.me", "https://1xbet.mobi")
+B = "https://1xbet.mobi/service-api/LineFeed"
 
 
-def _get(u, n=600000):
-    try:
-        with urllib.request.urlopen(urllib.request.Request(u, headers=H), timeout=25) as f:
-            return f.status, f.geturl(), f.read(n).decode("utf-8", "replace")
-    except Exception as e:
-        return getattr(e, "code", 0), u, f"{type(e).__name__}: {str(e)[:150]}"
+def _get(u):
+    with urllib.request.urlopen(urllib.request.Request(u, headers=H), timeout=30) as f:
+        return json.loads(f.read().decode("utf-8", "replace"))
 
 
 def kesif():
     out = {}
-    for h in HOST:
-        x = {}
-        s, u, t = _get(h + "/robots.txt", 4000)
-        x["robots"] = [s, u, t[:1500]]
-        for yol in ("/service-api/LineFeed/Get1x2_VZip?sports=1&count=10&lng=en&mode=4&country=1&getEmpty=true",
-                    "/LineFeed/Get1x2_VZip?sports=1&count=10&lng=en&mode=4&country=1"):
-            s, u, t = _get(h + yol)
-            y = {"durum": s, "son_url": u, "boy": len(t)}
-            try:
-                D = json.loads(t)
-                V = D.get("Value") or []
-                y["mac"] = len(V)
-                if V:
-                    g = V[0]
-                    y["ornek"] = {k: g.get(k) for k in ("I", "O1", "O2", "S", "L", "CI")}
-                    y["E"] = g.get("E", [])[:12]
-                    s2, u2, t2 = _get(f"{h}{yol.split('/LineFeed')[0]}/LineFeed/GetGameZip?id={g['I']}&lng=en&isSubGames=true&GroupEvents=true"
-                                      f"&countevents=500&grMode=4&partner=1&topGroups=&marketType=1")
-                    z = {"durum": s2, "boy": len(t2)}
-                    try:
-                        G = (json.loads(t2).get("Value") or {})
-                        GE = G.get("GE") or []
-                        z["gruplar"] = [(e.get("G"), len(e.get("E") or []), sum(len(a) for a in e.get("E") or [])) for e in GE][:60]
-                        z["ornek_grup"] = {str(e.get("G")): [[(o.get("T"), o.get("C"), o.get("P")) for o in a][:4] for a in (e.get("E") or [])][:9]
-                                           for e in GE if e.get("G") in (1, 17, 8, 2, 15, 62)}
-                    except ValueError:
-                        z["ham"] = t2[:300]
-                    y["detay"] = z
-            except ValueError:
-                y["ham"] = t[:300]
-            x[yol.split("?")[0]] = y
-            if y.get("mac"):
-                break
-        out[h] = x
-        if any(isinstance(v, dict) and v.get("mac") for v in x.values()):
-            break
+    V = _get(f"{B}/Get1x2_VZip?sports=1&count=1000&lng=en&mode=4&country=1&getEmpty=true").get("Value") or []
+    out["bulten_mac"] = len(V)
+    out["alanlar"] = sorted(V[0].keys()) if V else []
+    out["zaman"] = [min(g["S"] for g in V), max(g["S"] for g in V)] if V else None
+    V = sorted(V, key=lambda g: -(g.get("EC") or 0))[:3]
+    out["maclar"] = []
+    for g in V:
+        x = {"mac": f"{g.get('O1')} - {g.get('O2')} | {g.get('L')} | S {g.get('S')} | EC {g.get('EC')} | I {g['I']}"}
+        G = _get(f"{B}/GetGameZip?id={g['I']}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode=4&partner=1&topGroups=&marketType=1").get("Value") or {}
+        GE = G.get("GE") or []
+        x["gruplar"] = [(e.get("G"), sum(len(a) for a in e.get("E") or [])) for e in GE]
+        x["dokuz"] = {str(e.get("G")): [[(o.get("T"), o.get("C"), o.get("P")) for o in a] for a in e.get("E") or []]
+                      for e in GE if sum(len(a) for a in e.get("E") or []) == 9}
+        x["SG"] = [(s.get("I"), s.get("PN") or s.get("TG")) for s in (G.get("SG") or [])][:10]
+        out["maclar"].append(x)
     return out
 
 
