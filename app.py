@@ -49,6 +49,7 @@ import oto_tahmin
 import canli_ajan
 import iyms_kars
 import iyms_vk
+import iyms_av
 import patron
 import durum_rapor
 import toto_iddaa
@@ -485,6 +486,11 @@ def iyms_vk_page():
     return render_template("iyms_vk.html", d=iyms_vk.get_page_data(request.args.get("gun")), active_page="iymsvk")
 
 
+@app.route("/iyms-av")
+def iyms_av_page():
+    return render_template("iyms_av.html", d=iyms_av.get_page_data(request.args.get("gun")), active_page="iymsav")
+
+
 @app.route("/iyms-kars")
 def iyms_kars_page():
     return render_template("iyms_kars.html", d=iyms_kars.get_page_data(request.args.get("gun")), active_page="iymsk")
@@ -625,6 +631,7 @@ if __name__ == "__main__":
     canli_ajan.start_background()
     iyms_kars.start_background()
     iyms_vk.start_background()
+    iyms_av.start_background()
     patron.start_background()
     durum_rapor.start_background()
     toto_iddaa.start_background()
