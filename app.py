@@ -49,6 +49,7 @@ import oto_tahmin
 import canli_ajan
 import iyms_kars
 import iyms_vk
+import iyms_para
 import iyms_av
 import xbet
 import iyms_xv
@@ -485,6 +486,16 @@ def sayfa_json_indir():
 @app.route("/patron")
 def patron_page():
     return render_template("patron.html", d=patron.get_page_data(request.args.get("sekme") or "baslamak"), active_page="patron")
+
+
+@app.route("/iyms-xbet-para")
+def iyms_xbet_para_page():
+    return render_template("iyms_para.html", d=iyms_para.get_page_data("xbet", request.args.get("gun")), active_page="iymsxpara")
+
+
+@app.route("/iyms-admiral-para")
+def iyms_admiral_para_page():
+    return render_template("iyms_para.html", d=iyms_para.get_page_data("admiral", request.args.get("gun")), active_page="iymsapara")
 
 
 @app.route("/iyms-vk")
