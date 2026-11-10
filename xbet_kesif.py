@@ -22,18 +22,26 @@ def _g(u):
 
 
 def kesif():
-    out = {"sozluk": {}}
-    for yol in ("GetEventsGroupsZip?lng=en", "GetGroupsZip?lng=en", "GetEventsZip?lng=en", "GetGroupsNamesZip?lng=en"):
-        out["sozluk"][yol] = _g(f"{B}/{yol}")
-    for u in ("https://1xbet.mobi/service-api/main-line-feed/v1/eventGroups?lng=en", "https://1xbet.mobi/genfiles/cms/betstemplates/betsNames_en.json"):
-        out["sozluk"][u] = _g(u)
-    V = _get(f"{B}/Get1x2_VZip?sports=1&count=1000&lng=en&mode=4&country=1&getEmpty=true").get("Value") or []
-    g = next((x for x in V if "Eibar" in (x.get("O2") or "")), None) or max(V, key=lambda x: x.get("EC") or 0)
-    out["mac"] = f"{g.get('O1')} - {g.get('O2')} | E1x2 {[(e.get('T'), e.get('C')) for e in g.get('E', []) if e.get('G') == 1]}"
-    for gm in (4, 2):
-        G = _get(f"{B}/GetGameZip?id={g['I']}&lng=en&isSubGames=true&GroupEvents=true&countevents=1000&grMode={gm}&partner=1&topGroups=&marketType=1").get("Value") or {}
-        out[f"grMode{gm}"] = {str(e.get("G")): [(o.get("T"), o.get("C"), o.get("P")) for a in e.get("E") or [] for o in a][:14]
-                              for e in G.get("GE") or [] if e.get("G") not in (136, 2663, 2665, 8863)}
+    out = {}
+    for yol in ("GetChampsZip?sport=1&lng=en&country=1&tf=2200000&tz=3&virtualSports=true&gr=0",
+                "GetChampsZip?sport=1&lng=en&country=1"):
+        try:
+            C = _get(f"{B}/{yol}").get("Value") or []
+            out[yol] = {"lig": len(C), "ornek": [{k: c.get(k) for k in ("LI", "L", "GC", "CI", "SC")} for c in C[:3]],
+                        "toplam_GC": sum(c.get("GC") or 0 for c in C)}
+            if C:
+                big = max(C, key=lambda c: c.get("GC") or 0)
+                V = _get(f"{B}/Get1x2_VZip?sports=1&champs={big['LI']}&count=50&lng=en&mode=4&country=1&getEmpty=true").get("Value") or []
+                out[yol]["lig_deneme"] = [big.get("L"), big.get("GC"), len(V)]
+                break
+        except Exception as e:
+            out[yol] = str(e)[:150]
+    for yol in ("Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&getEmpty=true&tf=2200000",
+                "Get1x2_VZip?sports=1&count=50&lng=en&mode=4&country=1&getEmpty=true&partner=1&virtualSports=true&gr=0"):
+        try:
+            out[yol] = len(_get(f"{B}/{yol}").get("Value") or [])
+        except Exception as e:
+            out[yol] = str(e)[:150]
     return out
 
 
