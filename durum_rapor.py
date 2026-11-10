@@ -135,9 +135,7 @@ def rapor():
             "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
             "monsure_bakim2": _guvenli(lambda: __import__("monsure_bakim").rapor2()),
             "monsure_tazelik": _guvenli(lambda: __import__("monsure_bakim")._tazelik()),
-            "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7()),
-            "kupon_istisna": _guvenli(lambda: dict(__import__("kupon_istisna")._last)),
-            "kupon_gec": _guvenli(lambda: dict(__import__("kupon_istisna")._gec))}
+            "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7())}
 
 
 def gonder():
