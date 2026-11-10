@@ -39,11 +39,16 @@
 {% set av = d.avci or {} %}
 <div class="section-sub">🎯 <b>Sert Düşüş Avcısı</b>: Pinnacle bir tarafı sert düşürür (son 2 saatteki en yüksek orana göre %25+), 1xBet ise hâlâ Pinnacle'ın marjsız adil oranından %10+ yüksek verirse <b>YAKALA</b>. Maça 3 saat kalan tüm maçlar 5 dk'da bir, hareket başlayanlar (%10+) her dakika izlenir. Kaynak: NowGoal oran dosyası (Pinnacle + 1xBet anlık).</div>
 <div class="section-sub">Son tur: {{ av.last.log if av.last and av.last.log else 'henüz yok (uygulama açıldıktan ~3 dk sonra)' }}{% if av.last and av.last.hata %} · ⚠ {{ av.last.hata }}{% endif %}{% if av.karne and av.karne.n %} · <b>Karne: {{ av.karne.w }}/{{ av.karne.n }} tuttu · 1xBet oranıyla ROI {{ '%+.1f'|format(av.karne.roi) }}%</b>{% endif %}</div>
+{% set ak = av.kasa or {} %}
+<table class="tt"><tr><th>avcı kasası</th><th>açıkta</th><th>kupon</th><th>biten / kazanan</th><th>kâr</th><th>ROI</th></tr>
+<tr><td><b>{{ '%.2f'|format(ak.bakiye or 0) }}₺</b></td><td>{{ '%.0f'|format(ak.acik or 0) }}₺</td><td>{{ ak.n or 0 }}</td><td>{{ ak.biten or 0 }} / {{ ak.kazanan or 0 }}</td><td><b style="color:{{ '#3ccf7a' if (ak.kar or 0) >= 0 else '#ff5a4f' }}">{{ '%+.2f'|format(ak.kar or 0) }}₺</b></td><td>{{ '%+.1f'|format(ak.roi) ~ '%' if ak.roi is not none else '-' }}</td></tr></table>
+<div class="section-sub">Her YAKALA sinyalinde o anki 1xBet oranıyla tek maç kupon (sanal 5000₺ kasa, yarım Kelly, 100–500₺).</div>
 {% for s in av.L or [] %}
 <div class="kc">
   <div class="ust"><span class="tk">{{ s.saat }} · {{ s.ev }} – {{ s.dep }}</span><span class="gv" style="color:{{ '#3ccf7a' if s.durum == 'tuttu' else '#ff5a4f' if s.durum == 'yattı' else '#e0a030' }}">{% if s.skor %}{{ s.skor }} · {% endif %}{{ (s.durum or 'bekliyor')|upper }}</span></div>
   <div class="meta">{{ s.lig or '' }} · yakalandı {{ s.yakalandi }} (maça {{ s.kalan }} dk)</div>
   <div class="pk g1"><span class="gv">{{ s.xb }}</span><b>YAKALA: MS {{ s.taraf }} · 1xBet {{ s.xb }}</b>
+    {% if s.b_tutar %}<div class="meta">🎫 Kupon: <b>{{ '%.0f'|format(s.b_tutar) }}₺ @ {{ s.b_oran }}</b> · {{ s.b_durum }}{% if s.b_getiri is not none %} · {{ '%.2f'|format(s.b_getiri) }}₺{% endif %}</div>{% endif %}
     <div class="meta">Pinnacle {{ s.pin_ref }} → {{ s.pin }} (%{{ (100 * s.dusus)|round|int }} düşüş) · Pinnacle adil {{ s.pin_adil }} · 1xBet farkı <b>+%{{ (100 * s.fark)|round|int }}</b></div></div>
 </div>
 {% else %}<div class="section-sub">Henüz sinyal yok. Sert hareket olunca burada görünür.</div>{% endfor %}

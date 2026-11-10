@@ -5,6 +5,7 @@ Kademe 1 (5 dk'da bir): maça 2 dk - 3 saat kalan tüm NowGoal maçları; Pinnac
 Kademe 2 (her dakika): izlenen maçlar; Pinnacle düşüşü %25+ VE 1xBet o taraf için hâlâ Pinnacle'ın marjsız adil oranından %10+ yüksekse
             → YAKALA sinyali (maç+taraf başına bir kez; daha iyi fark gelirse güncellenir).
 Sonuç NowGoal skoru; karne: isabet + 1xBet oranıyla ROI (1 birim).
+Sanal kasa 5000 TL: her YAKALA sinyalinde o anki 1xBet oranıyla tek maç kupon, yarım Kelly (p = Pinnacle adil), 100-500 TL.
   python3 avci.py        (özet)"""
 import json
 import os
@@ -25,6 +26,7 @@ IZLE_DUSUS = 0.10
 SINYAL_DUSUS = 0.25
 FARK = 0.10
 REF_DK = 120
+KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her YAKALA sinyaline tek maçlık kupon
 TARAF = ("1", "X", "2")
 _last = {"at": None, "log": "", "hata": None, "izle": 0}
 _izle = {}                       # mid -> ko
@@ -43,7 +45,38 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS sinyal (mid INTEGER, taraf TEXT, at TEXT, ko TEXT, ev TEXT, dep TEXT, lig TEXT,
                  pin_ref REAL, pin REAL, pin_adil REAL, xb REAL, fark REAL, dusus REAL, guncel TEXT, sonuc TEXT,
                  PRIMARY KEY (mid, taraf))""")
+    c.execute("""CREATE TABLE IF NOT EXISTS bahis (mid INTEGER, taraf TEXT, at TEXT, oran REAL, p REAL, tutar REAL, durum TEXT, getiri REAL,
+                 PRIMARY KEY (mid, taraf))""")
     return c
+
+
+def kasa(c=None):
+    kapat = c is None
+    if c is None:
+        if not os.path.exists(DB):
+            return {"bakiye": KASA0, "acik": 0.0, "n": 0, "biten": 0, "kazanan": 0, "kar": 0.0, "roi": None}
+        c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+    R = c.execute("SELECT tutar, durum, getiri FROM bahis").fetchall()
+    if kapat:
+        c.close()
+    acik = sum(t for t, d, g in R if d == "açık")
+    B = [(t, g or 0) for t, d, g in R if d != "açık"]
+    yat, get = sum(t for t, _ in B), sum(g for _, g in B)
+    return {"bakiye": round(KASA0 - yat + get, 2), "serbest": round(KASA0 - yat + get - acik, 2), "acik": round(acik, 2), "n": len(R),
+            "biten": len(B), "kazanan": sum(1 for t, g in B if g > t), "kar": round(get - yat, 2),
+            "roi": round(100 * (get - yat) / yat, 1) if yat else None}
+
+
+def _bahis_ac(c, mid, taraf, oran, p, now):
+    """YAKALA aninda 1xBet oraniyla tek mac kupon: yarim Kelly, 100-500 TL"""
+    if c.execute("SELECT 1 FROM bahis WHERE mid=? AND taraf=?", (mid, taraf)).fetchone():
+        return
+    ks = kasa(c)
+    f = max(0.0, (p * oran - 1) / (oran - 1)) * KELLY_PAY
+    tutar = min(MAX_BAHIS, max(MIN_BAHIS, round(ks["serbest"] * f / 5) * 5))
+    if ks["serbest"] < tutar:
+        return
+    c.execute("INSERT INTO bahis VALUES (?,?,?,?,?,?,?,?)", (mid, taraf, now.isoformat(), oran, round(p, 4), tutar, "açık", None))
 
 
 def _oku(mid):
@@ -100,6 +133,8 @@ def _degerlendir(c, mid, ko, ev, dep, lig, pin, xb, now):
                   (mid, TARAF[i], now.isoformat(), ko, ev, dep, lig, ref[i], pin["cur"][i], round(adil, 3), xb["cur"][i],
                    round(fark, 4), round(dusus, 4), now.isoformat()))
         yeni += not r
+        if not r:
+            _bahis_ac(c, mid, TARAF[i], xb["cur"][i], 1 / adil, now)
     return izle, yeni
 
 
@@ -158,8 +193,13 @@ def sonuclandir():
             if r and r[0] == "finished" and r[1] is not None:
                 s = "1" if r[1] > r[2] else "2" if r[2] > r[1] else "X"
                 c.execute("UPDATE sinyal SET sonuc=? WHERE mid=? AND taraf=?", (f"{r[1]}-{r[2]}|{'tuttu' if s == taraf else 'yattı'}", mid, taraf))
+                if s == taraf:
+                    c.execute("UPDATE bahis SET durum='kazandı', getiri=ROUND(tutar * oran, 2) WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
+                else:
+                    c.execute("UPDATE bahis SET durum='kaybetti', getiri=0 WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
             elif r and r[0] == "void":
                 c.execute("UPDATE sinyal SET sonuc='iptal' WHERE mid=? AND taraf=?", (mid, taraf))
+                c.execute("UPDATE bahis SET durum='iptal', getiri=tutar WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
         n.close()
         c.commit()
     c.close()
@@ -167,10 +207,11 @@ def sonuclandir():
 
 def get_page_data():
     if not os.path.exists(DB):
-        return {"last": _last, "L": [], "karne": None}
+        return {"last": _last, "L": [], "karne": None, "kasa": kasa(), "kasa0": KASA0}
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
     c.row_factory = sqlite3.Row
-    L = [dict(r) for r in c.execute("SELECT * FROM sinyal ORDER BY at DESC LIMIT 200")]
+    L = [dict(r) for r in c.execute("""SELECT s.*, b.tutar AS b_tutar, b.oran AS b_oran, b.durum AS b_durum, b.getiri AS b_getiri
+                                         FROM sinyal s LEFT JOIN bahis b ON b.mid = s.mid AND b.taraf = s.taraf ORDER BY s.at DESC LIMIT 200""")]
     c.close()
     n = w = 0
     kar = 0.0
@@ -184,7 +225,8 @@ def get_page_data():
             n += 1
             w += x["durum"] == "tuttu"
             kar += (x["xb"] - 1) if x["durum"] == "tuttu" else -1
-    return {"last": _last, "L": L, "karne": {"n": n, "w": w, "roi": round(100 * kar / n, 1) if n else None, "kar": round(kar, 2)}}
+    return {"last": _last, "L": L, "karne": {"n": n, "w": w, "roi": round(100 * kar / n, 1) if n else None, "kar": round(kar, 2)},
+            "kasa": kasa(), "kasa0": KASA0}
 
 
 def _loop():
