@@ -135,9 +135,7 @@ def rapor():
             "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
             "monsure_bakim2": _guvenli(lambda: __import__("monsure_bakim").rapor2()),
             "monsure_tazelik": _guvenli(lambda: __import__("monsure_bakim")._tazelik()),
-            "monsure_log": _guvenli(lambda: {f: __import__("monsure_bakim")._sh(f"tail -n 25 /root/monsure/{f}")["out"][-2500:]
-                                             for f in ("zlatnik_log.txt", "scheduler.log")} | {"cron_log": __import__("monsure_bakim")._sh(
-                                             "grep -i 'zlatnik' /var/log/syslog 2>/dev/null | tail -n 6; journalctl -u cron --since '-40 min' --no-pager 2>/dev/null | grep -i zlatnik | tail -n 6")["out"][-1500:]})}
+            "monsure_bakim6": _guvenli(lambda: __import__("monsure_bakim").rapor6())}
 
 
 def gonder():

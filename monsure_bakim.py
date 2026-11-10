@@ -116,6 +116,7 @@ def start_background():
     threading.Thread(target=lambda: _calis3(), daemon=True, name="monsure_bakim3").start()
     threading.Thread(target=lambda: _calis4(), daemon=True, name="monsure_bakim4").start()
     threading.Thread(target=lambda: _calis5(), daemon=True, name="monsure_bakim5").start()
+    threading.Thread(target=lambda: _calis6(), daemon=True, name="monsure_bakim6").start()
 
 
 def rapor():
@@ -317,5 +318,70 @@ def _calis5():
 def rapor5():
     try:
         return json.load(open(SONUC5))
+    except Exception:
+        return {"durum": "henüz çalışmadı"}
+
+
+# ---------------------------------------------------------------- v6: kendini olduren cron satirlari (pkill/pgrep kendi kabugunu
+# yakaliyordu) -> komutlar ayri betiklere tasinir; benim ekledigim 3 satir 2 betik satiriyla degisir, monsure'un eski satirlarina dokunulmaz.
+ISARET6 = os.path.join(KOK, "data", "monsure_bakim_v6.done")
+SONUC6 = os.path.join(KOK, "data", "monsure_bakim6.json")
+BEKCI_SH = f"""#!/bin/sh
+# SAHA bakim 10.11.2026: monsure bekci — web (5000) cevap vermezse gunicorn, scheduler yoksa scheduler yeniden baslar
+cd {MON}
+if ! curl -s -m 25 -o /dev/null http://127.0.0.1:5000/; then
+  pkill -f 'gunicorn app:app --bind 0.0.0.0:5000'
+  sleep 3
+  setsid nohup {GUNI} >> {MON}/gunicorn.log 2>&1 &
+  echo "$(date -u) web yeniden baslatildi" >> {MON}/saha_bekci.log
+fi
+if ! pgrep -f '{MON}/scheduler.py' >/dev/null; then
+  setsid nohup /usr/bin/python3 {MON}/scheduler.py >> {MON}/scheduler.log 2>&1 &
+  echo "$(date -u) scheduler yeniden baslatildi" >> {MON}/saha_bekci.log
+fi
+"""
+ZL_SH = f"""#!/bin/sh
+# SAHA bakim 10.11.2026: Zlatnik oranlari -> zlatnik.json (ayni anda ikinci kopya calismaz)
+cd {MON} && exec flock -n /tmp/saha_zlatnik.lock timeout 240 /usr/bin/python3 -c 'import zlatnik_oran; zlatnik_oran.run_once()' >> {MON}/zlatnik_log.txt 2>&1
+"""
+YENI_CRON = ["# SAHA bakim 10.11.2026 (v6): monsure bekci + zlatnik betikleri",
+             f"*/5 * * * * /bin/sh {MON}/saha_bekci.sh",
+             f"3-53/10 * * * * /bin/sh {MON}/saha_zlatnik.sh"]
+
+
+def _calis6():
+    time.sleep(60)
+    if os.path.exists(ISARET6) or not os.path.isdir(MON):
+        return
+    open(ISARET6, "w").write(datetime.now(timezone.utc).isoformat())
+    R = {"basla": datetime.now(timezone.utc).isoformat()}
+    try:
+        for ad, icerik in (("saha_bekci.sh", BEKCI_SH), ("saha_zlatnik.sh", ZL_SH)):
+            p = os.path.join(MON, ad)
+            open(p, "w").write(icerik)
+            os.chmod(p, 0o755)
+        eski = _crontab_oku()
+        open(os.path.join(MON, f"crontab.bak-{DAMGA}-6"), "w").write(eski)
+        benim = set(BEKCI) | set(ZL_CRON)
+        kalan = [x for x in eski.splitlines() if x not in benim]
+        R["cikan"] = len(eski.splitlines()) - len(kalan)
+        if not any("saha_bekci.sh" in x for x in kalan):
+            kalan += YENI_CRON
+        p = subprocess.run(["crontab", "-"], input="\n".join(kalan) + "\n", text=True, capture_output=True)
+        R["crontab"] = {"rc": p.returncode, "err": p.stderr[-300:]}
+        son = _crontab_oku()
+        R["eski_monsure_korundu"] = all(x in son for x in eski.splitlines() if x not in benim)
+        R["saha_satirlari"] = [x for x in son.splitlines() if "saha_" in x or "SAHA" in x]
+        R["zlatnik_elle"] = _sh(f"/bin/sh {MON}/saha_zlatnik.sh; tail -n 4 {MON}/zlatnik_log.txt", 280)
+        R["tazelik"] = _tazelik()
+        R["bekci_elle"] = _sh(f"/bin/sh {MON}/saha_bekci.sh; echo rc=$?; pgrep -fa '[m]onsure/scheduler.py'; curl -s -m 20 -o /dev/null -w '%{{http_code}}' http://127.0.0.1:5000/")
+    except Exception as e:
+        R["HATA"] = f"{type(e).__name__}: {str(e)[:300]}"
+    json.dump(R, open(SONUC6, "w"), ensure_ascii=False, indent=1)
+
+
+def rapor6():
+    try:
+        return json.load(open(SONUC6))
     except Exception:
         return {"durum": "henüz çalışmadı"}
