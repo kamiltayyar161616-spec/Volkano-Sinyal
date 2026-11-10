@@ -117,6 +117,7 @@ def start_background():
     threading.Thread(target=lambda: _calis4(), daemon=True, name="monsure_bakim4").start()
     threading.Thread(target=lambda: _calis5(), daemon=True, name="monsure_bakim5").start()
     threading.Thread(target=lambda: _calis6(), daemon=True, name="monsure_bakim6").start()
+    threading.Thread(target=lambda: _calis7(), daemon=True, name="monsure_bakim7").start()
 
 
 def rapor():
@@ -383,5 +384,40 @@ def _calis6():
 def rapor6():
     try:
         return json.load(open(SONUC6))
+    except Exception:
+        return {"durum": "henüz çalışmadı"}
+
+
+# ---------------------------------------------------------------- v7: bekci, birden fazla scheduler varsa en eskisi disindakileri kapatir
+ISARET7 = os.path.join(KOK, "data", "monsure_bakim_v7.done")
+SONUC7 = os.path.join(KOK, "data", "monsure_bakim7.json")
+BEKCI_SH7 = BEKCI_SH + f"""N=$(pgrep -f '{MON}/scheduler.py' | wc -l)
+if [ "$N" -gt 1 ]; then
+  pgrep -f '{MON}/scheduler.py' | sort -n | tail -n +2 | xargs -r kill
+  echo "$(date -u) fazla scheduler kapatildi ($N)" >> {MON}/saha_bekci.log
+fi
+"""
+
+
+def _calis7():
+    time.sleep(45)
+    if os.path.exists(ISARET7) or not os.path.isdir(MON):
+        return
+    open(ISARET7, "w").write(datetime.now(timezone.utc).isoformat())
+    R = {"basla": datetime.now(timezone.utc).isoformat()}
+    try:
+        p = os.path.join(MON, "saha_bekci.sh")
+        open(p, "w").write(BEKCI_SH7)
+        os.chmod(p, 0o755)
+        R["once"] = _sh("pgrep -fa '[m]onsure/scheduler.py'")["out"]
+        R["bekci"] = _sh(f"/bin/sh {p}; sleep 2; pgrep -fa '[m]onsure/scheduler.py'; tail -n 3 {MON}/saha_bekci.log")["out"]
+    except Exception as e:
+        R["HATA"] = f"{type(e).__name__}: {str(e)[:300]}"
+    json.dump(R, open(SONUC7, "w"), ensure_ascii=False, indent=1)
+
+
+def rapor7():
+    try:
+        return json.load(open(SONUC7))
     except Exception:
         return {"durum": "henüz çalışmadı"}
