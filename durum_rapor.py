@@ -135,6 +135,7 @@ def rapor():
             "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
             "monsure_bakim2": _guvenli(lambda: __import__("monsure_bakim").rapor2()),
             "monsure_tazelik": _guvenli(lambda: __import__("monsure_bakim")._tazelik()),
+            "avci": _guvenli(lambda: {"kasa": __import__("avci").kasa(), "son": [{k: x.get(k) for k in ("saat", "ev", "dep", "taraf", "pin", "pin_adil", "xb", "fark", "yakalandi", "kalan", "b_tutar", "b_oran", "b_durum", "durum")} for x in __import__("avci").get_page_data()["L"][:8]]}),
             "iyms_bugun": _guvenli(lambda: __import__("iyms_bugun").ozet()),
             "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7())}
 
