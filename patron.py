@@ -497,6 +497,12 @@ def get_page_data(sekme="baslamak"):
     v["hesaplaniyor"] = not _cache["v"]
     v["hata"] = _cache["hata"]
     v["sekme"] = sekme
+    if sekme == "avci":
+        try:
+            import avci
+            v["avci"] = avci.get_page_data()
+        except Exception as e:
+            v["avci"] = {"L": [], "last": {"hata": str(e)[:200]}}
     if sekme == "kupon":
         try:
             import kupon_ajan
