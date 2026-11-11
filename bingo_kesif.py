@@ -26,7 +26,7 @@ def iddaa():
     F = [e for e in E if e.get("sid") == 1]
     out = {"toplam": len(E), "futbol": len(F), "anahtar": sorted(F[0].keys()) if F else []}
     S = []
-    for e in F[:4]:
+    for e in [e for e in F if e.get("m")][:3]:
         S.append({"ev": e.get("hn"), "dep": e.get("an"), "ek": {k: e[k] for k in e if k not in ("m",)},
                   "m": [{"st": m.get("st"), "sov": m.get("sov"), "mk": {k: m[k] for k in m if k not in ("o",)},
                          "o": [(x.get("n"), x.get("odd")) for x in m.get("o", [])]} for m in e.get("m", [])][:25]})
@@ -39,9 +39,27 @@ def iddaa():
     return out
 
 
+def _xdene():
+    out = {}
+    for ad, u in (("a", f"{XL}/Get1x2_VZip?sports=1&count=40&lng=en&mode=4&country=1&getEmpty=true"),
+                  ("b", f"{XL}/Get1x2_VZip?sports=1&count=40&lng=en&mode=4&country=1&partner=7&getEmpty=true&noFilterBlockEvent=true"),
+                  ("c", f"{XL}/Get1x2_VZip?sports=1&count=40&lng=en&gr=70&mode=4&country=1&virtualSports=true"),
+                  ("d", "https://1xbet.mobi/LiveFeed/Get1x2_VZip?sports=1&count=40&lng=en&mode=4&country=1&getEmpty=true"),
+                  ("e", f"{XL}/Get1x2_VZip?count=40&lng=en&mode=4&country=1&top=true&partner=1&virtualSports=true&getEmpty=true&sports=1")):
+        try:
+            V = _get(u).get("Value") or []
+            out[ad] = len(V)
+            if V and "V" not in out:
+                out["V"] = V
+        except Exception as e:
+            out[ad] = f"{type(e).__name__}: {str(e)[:80]}"
+    return out
+
+
 def xbet():
-    V = _get(f"{XL}/Get1x2_VZip?sports=1&count=40&lng=en&mode=4&country=1&getEmpty=true&partner=1").get("Value") or []
-    out = {"say": len(V), "anahtar": sorted(V[0].keys()) if V else []}
+    D = _xdene()
+    V = D.pop("V", [])
+    out = {"dene": D, "say": len(V), "anahtar": sorted(V[0].keys()) if V else []}
     out["ornek"] = [{k: x.get(k) for k in ("I", "O1", "O2", "L", "S", "SC", "E", "AE")} for x in V[:2]]
     if V:
         G = _get(f"{XL}/GetGameZip?id={V[0]['I']}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode=4&partner=1&topGroups=&marketType=1").get("Value") or {}
@@ -64,6 +82,8 @@ def volkano():
         except Exception:
             continue
         adres[p] = sorted(set(re.findall(r"https?://[^\s'\"<>)]+", t)))[:20]
+        L = t.splitlines()
+        adres[p + "#satir"] = [f"{i}: {L[i][:200]}" for i in range(len(L)) if re.search(r"xtreme|/api|/v[0-9]/|endpoint|params|headers|live|Live|fetch|requests\\.|urlopen", L[i])][:60]
     out["adresler"] = adres
     return out
 
