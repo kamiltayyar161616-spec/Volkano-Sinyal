@@ -167,7 +167,7 @@ def sayfa_testi():
 def rapor():
     return {"at": datetime.now(timezone.utc).isoformat(),
             "arka_plan": {m: _mod_last(m) for m in ("oto_tahmin", "canli_ajan", "iyms_kars", "iyms_vk", "toto_tab", "kelly_tab",
-                                                     "sdoran", "m7", "gecpara", "desen_tab", "nowgoal", "istat_ajan", "iddaa_canli", "toto_iddaa", "iyms_av", "xbet", "kupon_ajan", "avci")},
+                                                     "sdoran", "m7", "gecpara", "desen_tab", "nowgoal", "istat_ajan", "iddaa_canli", "toto_iddaa", "iyms_av", "xbet", "kupon_ajan", "avci", "bingo")},
             "nowgoal": _guvenli(nowgoal_saglik), "kaynaklar": _guvenli(kaynak_tazelik), "db": _guvenli(diger_db),
             "canli": _guvenli(canli_ozet), "patron": _guvenli(patron_ozet), "log": _guvenli(log_hatalari),
             "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
@@ -180,6 +180,7 @@ def rapor():
             "iyms_dun": _guvenli(lambda: __import__("iyms_bugun").ozet(1)),
             "iyms_sekme_dun": _guvenli(lambda: __import__("iyms_bugun").sekmeler((datetime.now(timezone.utc) - timedelta(hours=21)).date().isoformat())),
             "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7()),
+            "bingo": _guvenli(lambda: __import__("bingo").ozet()),
             "bingo_kesif": _guvenli(lambda: __import__("bingo_kesif").rapor())}
 
 

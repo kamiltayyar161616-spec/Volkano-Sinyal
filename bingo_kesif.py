@@ -88,5 +88,49 @@ def volkano():
     return out
 
 
+_VC = {"durum": "başlamadı"}
+_VSCRIPT = r'''
+import asyncio, json, sys
+from playwright.async_api import async_playwright
+async def main():
+    U = []
+    async with async_playwright() as p:
+        b = await p.chromium.launch()
+        pg = await b.new_page()
+        pg.on("request", lambda r: U.append(r.url) if ("xtreme" in r.url or "/api/" in r.url) else None)
+        for u in ("https://www.volcanobet.me/sport-v2/live", "https://www.volcanobet.me/sport-v2/live/events"):
+            try:
+                await pg.goto(u, timeout=45000)
+                await pg.wait_for_timeout(12000)
+            except Exception as e:
+                U.append("HATA " + u + " " + str(e)[:100])
+        await b.close()
+    print(json.dumps(U[:120]))
+asyncio.run(main())
+'''
+
+
+def _vcanli():
+    import subprocess, sys, threading
+    def is_():
+        try:
+            for py in ("/root/volcanobet/venv/bin/python", "/usr/bin/python3", sys.executable):
+                import os
+                if not os.path.exists(py):
+                    continue
+                r = subprocess.run([py, "-c", _VSCRIPT], capture_output=True, text=True, timeout=150)
+                if r.returncode == 0:
+                    _VC.update(durum="tamam", py=py, urller=sorted(set(json.loads(r.stdout.strip().splitlines()[-1]))))
+                    return
+                _VC[py] = r.stderr[-300:]
+            _VC["durum"] = "olmadı"
+        except Exception as e:
+            _VC["durum"] = f"HATA {type(e).__name__}: {str(e)[:150]}"
+    if _VC["durum"] == "başlamadı":
+        _VC["durum"] = "çalışıyor"
+        threading.Thread(target=is_, daemon=True).start()
+    return _VC
+
+
 def rapor():
-    return {"iddaa": _g(iddaa), "xbet": _g(xbet), "volkano": _g(volkano)}
+    return {"iddaa": _g(iddaa), "xbet": _g(xbet), "volkano": _g(volkano), "vcanli": _g(_vcanli)}

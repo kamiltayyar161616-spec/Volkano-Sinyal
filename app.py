@@ -56,6 +56,7 @@ import iyms_ortak
 import kupon_ajan
 import kupon_temizle
 import avci
+import bingo
 import monsure_bakim
 import patron
 import durum_rapor
@@ -498,6 +499,11 @@ def iyms_av_page():
     return render_template("iyms_av.html", d=iyms_av.get_page_data(request.args.get("gun")), active_page="iymsav")
 
 
+@app.route("/bingo")
+def bingo_page():
+    return render_template("bingo.html", d=bingo.get_page_data(request.args.get("gun")), active_page="bingo")
+
+
 @app.route("/iyms-ortak")
 def iyms_ortak_page():
     return render_template("iyms_ortak.html", d=iyms_ortak.get_page_data(request.args.get("gun")), active_page="iymsortak")
@@ -653,6 +659,7 @@ if __name__ == "__main__":
     kupon_ajan.start_background()
     kupon_temizle.start_background()
     avci.start_background()
+    bingo.start_background()
     monsure_bakim.start_background()
     patron.start_background()
     durum_rapor.start_background()
