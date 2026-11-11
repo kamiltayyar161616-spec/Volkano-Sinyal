@@ -164,7 +164,9 @@ def hesap():
                        "skor": f"{r[0]}-{r[1]}" if bitti else None, "iy": f"{r[2]}-{r[3]}" if bitti else None,
                        "S": [{"sec": k, "ilk": o0[k], "son": o1[k], "d": round(100 * d[k]), "grup": grup[k], "tuttu": k == sonuc} for k in sira],
                        "para": [{"sec": k, "d": round(100 * d[k]), "ilk": o0[k], "son": o1[k], "tuttu": k == sonuc}
-                                for k in sorted(S9, key=lambda k: -d[k])[:3]]})
+                                for k in sorted(S9, key=lambda k: -d[k])[:3]],
+                       "cikan": [{"sec": k, "d": round(100 * d[k]), "ilk": o0[k], "son": o1[k], "tuttu": k == sonuc}
+                                 for k in sorted(S9, key=lambda k: d[k])[:3]]})
         if not bitti or not sayilir:
             continue
         n += 1
