@@ -52,6 +52,7 @@ import iyms_vk
 import iyms_av
 import xbet
 import iyms_xv
+import iyms_ortak
 import kupon_ajan
 import kupon_temizle
 import avci
@@ -495,6 +496,11 @@ def iyms_vk_page():
 @app.route("/iyms-av")
 def iyms_av_page():
     return render_template("iyms_av.html", d=iyms_av.get_page_data(request.args.get("gun")), active_page="iymsav")
+
+
+@app.route("/iyms-ortak")
+def iyms_ortak_page():
+    return render_template("iyms_ortak.html", d=iyms_ortak.get_page_data(request.args.get("gun")), active_page="iymsortak")
 
 
 @app.route("/iyms-xv")

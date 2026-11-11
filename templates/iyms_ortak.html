@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}SAHA — İY/MS Ortak Para{% endblock %}
+{% block page_tag %}🤝 İY/MS ORTAK PARA{% endblock %}
+{% block subtitle %}Volkano, Admiral ve 1xbet'in <b>üçünde de</b> son 5 dk oranı olan maçlar. Her sitede İY/MS oranının ilk görüldüğü an → maçtan 1-8 dk önceki son oran karşılaştırılır; <b>en çok para giren 3</b> ve <b>en çok para çıkan 3</b> seçenek bulunur. <b>Ortak</b> = üç sitenin listesinde de olan seçenek. ROI her sitenin kendi son oranıyla, her seçime 1 birim.{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .ust{ display:flex; justify-content:space-between; gap:8px; font-weight:700; font-size:14.5px; }
+  .meta{ color:var(--chalk-faint); font-size:12px; margin-top:2px; }
+  .g9{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:10px; }
+  .gb{ border-radius:10px; padding:7px 6px 4px; background:var(--navy-deep); min-width:0; }
+  .gb h4{ margin:0 0 6px; font-size:10px; letter-spacing:.06em; color:#e0a030; font-weight:800; text-align:center; }
+  .sl{ padding:5px 5px; border-radius:7px; margin-bottom:4px; background:rgba(255,255,255,.03); font-family:'Space Grotesk',sans-serif; }
+  .sl .r1{ display:flex; justify-content:space-between; align-items:baseline; gap:4px; }
+  .sl .sc{ font-size:14px; font-weight:800; }
+  .sl .fk{ font-size:11px; font-weight:700; padding:0 5px; border-radius:6px; }
+  .sl .fk.a{ color:#3ccf7a; background:rgba(60,207,122,.12); } .sl .fk.e{ color:#ff8a80; background:rgba(255,90,79,.12); } .sl .fk.s{ color:var(--chalk-faint); }
+  .sl .r2{ display:flex; justify-content:space-between; font-size:11px; color:var(--chalk-faint); margin-top:2px; white-space:nowrap; }
+  .sl .r2 b{ color:var(--chalk); font-weight:600; }
+  .sl.ok{ background:rgba(40,160,90,.30); box-shadow:inset 0 0 0 1px rgba(60,207,122,.6); }
+  .lj{ text-align:right; font-size:10.5px; color:var(--chalk-faint); margin-top:6px; }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+  .hd1{ display:flex; align-items:flex-start; gap:8px; }
+  .hd1 .saat{ font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:13px; color:#e0a030; padding:2px 7px; border-radius:7px; background:rgba(224,160,48,.12); flex:none; margin-top:1px; }
+  .hd1 .tk{ flex:1; min-width:0; font-weight:800; font-size:15px; line-height:1.25; }
+  .hd1 .sk{ flex:none; text-align:right; font-weight:800; font-size:15px; line-height:1.2; }
+  .hd1 .sk small{ display:block; font-size:10.5px; color:var(--chalk-faint); font-weight:600; }
+  .hd1 .sk b{ color:#3ccf7a; }
+  .hd2{ color:var(--chalk-faint); font-size:11.5px; margin:3px 0 6px; }
+  .hd3{ display:flex; flex-wrap:wrap; gap:5px; }
+  .pl{ font-size:10.5px; padding:2px 7px; border-radius:10px; background:rgba(255,255,255,.05); color:var(--chalk-faint); white-space:nowrap; }
+  .pl.ok{ color:#3ccf7a; background:rgba(60,207,122,.12); } .pl.bek{ color:#e0a030; background:rgba(224,160,48,.12); }
+  .pr{ display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-top:7px; }
+  .pr .pt{ font-size:11px; color:var(--chalk-faint); width:100%; }
+  .pr .c{ font-size:11.5px; padding:3px 7px; border-radius:8px; background:var(--navy-deep); white-space:nowrap; }
+  .pr .c b{ font-weight:800; } .pr .c i{ font-style:normal; color:var(--chalk-faint); font-size:10.5px; }
+  .pr .c.gir b{ color:#3ccf7a; } .pr .c.cik b{ color:#ff8a80; }
+  .pr .c.ok{ box-shadow:inset 0 0 0 1px rgba(60,207,122,.7); background:rgba(40,160,90,.25); }
+  .sr{ display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:4px; font-size:11px; }
+  .sr .sa{ width:58px; color:var(--chalk-faint); font-size:10.5px; flex:none; }
+  .sr .c{ font-size:10.5px; padding:2px 6px; } .sr .c.ort{ box-shadow:inset 0 0 0 1px rgba(224,160,48,.8); }
+  .yok{ color:var(--chalk-faint); font-size:11.5px; }
+</style>
+<meta http-equiv="refresh" content="300">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% block content %}
+<div class="section-sub">Üç sitede de son 5 dk oranı olan {{ d.toplam or 0 }} maç · biten {{ d.biten or 0 }}{% if d.hata %} · ⚠ {{ d.hata }}{% endif %}</div>
+
+<h2 class="section">📈 TÜM ZAMANLAR ({{ d.biten or 0 }} biten maç)</h2>
+{% if d.biten %}
+<table class="tt"><tr><th>seçenek</th><th>seçim</th><th>tuttu</th><th>Volkano ROI</th><th>Admiral ROI</th><th>1xbet ROI</th></tr>
+{% for x in d.tablo %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ roi(x.roi_V) }}</td><td>{{ roi(x.roi_A) }}</td><td>{{ roi(x.roi_X) }}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten ve üç sitede de son 5 dk oranı olan maç yok.</div>{% endif %}
+
+<h2 class="section">📅 GÜN GÜN</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/iyms-ortak?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+
+{% for x in d.L %}
+<div class="kc">
+  <div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>{% if x.sonuc %}<span class="sk">{{ x.skor }} <b>{{ x.sonuc }}</b><small>İY {{ x.iy }}</small></span>{% endif %}</div>
+  <div class="hd2">{{ x.lig or '' }}</div>
+  <div class="pr"><span class="pt">🤝 ortak para giren (üç sitede de ilk 3'te){% if x.bir %} · <b style="color:#e0a030">üçünde de 1 numara: {{ x.bir[0] }}</b>{% endif %}</span>{% for s in x.ortak_gir %}<span class="c gir {{ 'ok' if s == x.sonuc else '' }}"><b>{{ s }}</b> <i>V {{ x.son.V[s] }} · A {{ x.son.A[s] }} · X {{ x.son.X[s] }}</i></span>{% else %}<span class="yok">ortak yok</span>{% endfor %}</div>
+  <div class="pr"><span class="pt">🔻 ortak para çıkan (üç sitede de ilk 3'te)</span>{% for s in x.ortak_cik %}<span class="c cik {{ 'ok' if s == x.sonuc else '' }}"><b>{{ s }}</b> <i>V {{ x.son.V[s] }} · A {{ x.son.A[s] }} · X {{ x.son.X[s] }}</i></span>{% else %}<span class="yok">ortak yok</span>{% endfor %}</div>
+  <div style="margin-top:8px">
+  {% for st in x.site %}<div class="sr"><span class="sa">{{ st.ad }}</span>{% for p in st.gir %}<span class="c gir {{ 'ort' if p.sec in x.ortak_gir else '' }} {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b></span>{% endfor %}<span class="yok">·</span>{% for p in st.cik %}<span class="c cik {{ 'ort' if p.sec in x.ortak_cik else '' }} {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b></span>{% endfor %}</div>{% endfor %}
+  </div>
+  <div class="lj">yeşil = para giren · kırmızı = para çıkan · turuncu çerçeve = üç sitede ortak · yeşil çerçeve = tuttu</div>
+</div>
+{% else %}<div class="section-sub">Bu gün için üç sitede de son 5 dk oranı olan maç yok.</div>{% endfor %}
+{% endblock %}
