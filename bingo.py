@@ -13,6 +13,7 @@ Karşılaştırılan seçenekler (aynı maç, aynı çizgi):
 ilk görülen oran ROI'de kullanılır, en iyi oran ve fırsatın kaç saniye açık kaldığı ayrıca tutulur). Dakika ≤ 85.
 Sonuç: 1xbet canlı skoru. Üst kazanınca hemen, diğerleri maç akıştan düşünce (son görülen dakika ≥ 85) işaretlenir; erken düşerse 'belirsiz'.
   python3 bingo.py        (özet)"""
+import gzip
 import json
 import os
 import sqlite3
@@ -48,7 +49,10 @@ _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 
 SIRA = ("Tümü", "Pazar", "oran / adil", "oran", "Dakika")
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
 _vesle = {}                 # 1xbet I -> Volkano ai ("" = yok)
-_vbekle = {}                # (xid, sec) -> ilk görüldüğü Volkano taramasının zamanı (onay için)
+_SITE = {   # 1xbet'e göre geride kalan oynanabilir siteler — her biri ayrı sinyal/kasa tablosu
+    "volkano": {"ad": "Volkano", "s": "vsinyal", "b": "vbahis", "sn": 20, "bekle": {}, "esle": _vesle},
+    "admiral": {"ad": "Admiral", "s": "asinyal", "b": "abahis", "sn": 20, "bekle": {}, "esle": {}},
+}
 _skor = {}                  # xid -> (skor, değiştiği an)
 _K = {}                     # kaynak durumu: {ad: {t, ara, taban, veri, vt, hata, ardisik}}
 
@@ -97,6 +101,10 @@ def db():
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, v_oran REAL, x_adil REAL, v_adil REAL, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS vbahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
                  getiri REAL, PRIMARY KEY (xid, sec))""")
+    c.execute("CREATE TABLE IF NOT EXISTS asinyal AS SELECT * FROM vsinyal WHERE 0")
+    c.execute("CREATE TABLE IF NOT EXISTS abahis AS SELECT * FROM vbahis WHERE 0")
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS asinyal_k ON asinyal(xid, sec)")
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS abahis_k ON abahis(xid, sec)")
     return c
 
 
@@ -214,7 +222,70 @@ def volkano():
     return V
 
 
-def _v_eslestir(x, F):
+A_SN = 20
+A_URL = "https://cgoffer.admiralbet.me/api/offer/livetree/5/null/true/true/false"
+AH = {"language": "sr-Latn", "officeid": "1175", "Accept": "application/json, text/plain, */*", "Origin": "https://admiralbet.me",
+      "Referer": "https://admiralbet.me/", "User-Agent": H["User-Agent"]}
+
+
+def _a_cizgi(b, o):
+    for d in (o, b):
+        for k in ("sBV", "sbv", "specialBetValue", "specialValue", "sv", "line"):
+            v = (d or {}).get(k)
+            if v not in (None, ""):
+                try:
+                    return float(str(v).replace(",", "."))
+                except ValueError:
+                    pass
+    return None
+
+
+def admiral():
+    """Admiral canlı ağaç (tek istek): ({id: {ev, dep, S}}, {id: {ms, au}}) — yalnız futbol. 56 = MS, 22 = toplam gol (Vise/Manje)."""
+    with urllib.request.urlopen(urllib.request.Request(A_URL, headers=dict(AH, **{"Accept-Encoding": "gzip"})), timeout=30) as f:
+        ham = f.read()
+        if f.headers.get("Content-Encoding") == "gzip" or ham[:2] == b"\x1f\x8b":
+            ham = gzip.decompress(ham)
+        T = json.loads(ham.decode("utf-8"))
+    F, V = {}, {}
+    for s in T if isinstance(T, list) else []:
+        if s.get("id") != 1:
+            continue
+        for rg in s.get("regions") or []:
+            for cp in rg.get("competitions") or []:
+                for e in cp.get("events") or []:
+                    if " - " not in (e.get("name") or ""):
+                        continue
+                    ev, dep = e["name"].split(" - ", 1)
+                    try:
+                        S = int(datetime.fromisoformat(e["dateTime"]).replace(tzinfo=timezone.utc).timestamp())
+                    except (KeyError, ValueError):
+                        S = 0
+                    ms, au = {}, {}
+                    for b in e.get("bets") or []:
+                        bt = b.get("betTypeId")
+                        if bt == 56:
+                            for o in b.get("betOutcomes") or []:
+                                n = str(o.get("name", "")).upper()
+                                if n in ("1", "X", "2") and o.get("odd") and o.get("isPlayable", True) is not False:
+                                    ms[n] = float(o["odd"])
+                        elif bt == 22:
+                            for o in b.get("betOutcomes") or []:
+                                cz = _a_cizgi(b, o)
+                                n = str(o.get("name", "")).lower()
+                                if cz is None or not o.get("odd") or o.get("isPlayable", True) is False:
+                                    continue
+                                if n.startswith("vi"):
+                                    au.setdefault(cz, {})["ust"] = float(o["odd"])
+                                elif n.startswith("ma"):
+                                    au.setdefault(cz, {})["alt"] = float(o["odd"])
+                    F[e["id"]] = {"ev": ev.strip(), "dep": dep.strip(), "S": S}
+                    V[e["id"]] = {"ms": ms, "au": au}
+    return F, V
+
+
+def _v_eslestir(x, F, cache=None):
+    _vesle = _SITE["volkano"]["esle"] if cache is None else cache
     if x["I"] in _vesle:
         return _vesle[x["I"]] or None
     best = None
@@ -340,31 +411,39 @@ def tur():
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
     bahis_kapat(c)
-    yv, acik_v = volkano_tur(c, X, VF, V, now, at)
-    sonuclandir(c, X, now, "vsinyal")
-    bahis_kapat(c, "vsinyal", "vbahis")
+    for x in X.values():
+        sk = (x["s1"], x["s2"])
+        if _skor.get(x["I"], (None, 0))[0] != sk:
+            _skor[x["I"]] = (sk, time.time())
+    if len(_skor) > 5000:
+        _skor.clear()
+    yv, acik_v = site_tur(c, X, VF, V, now, at, "volkano")
+    AD = _kaynak("admiral", admiral, A_SN) or ({}, {})
+    ya, acik_a = site_tur(c, X, AD[0], AD[1], now, at, "admiral")
+    for st in ("volkano", "admiral"):
+        sonuclandir(c, X, now, _SITE[st]["s"])
+        bahis_kapat(c, _SITE[st]["s"], _SITE[st]["b"])
     c.commit()
     c.close()
-    _last.update(vacik=acik_v, eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
+    _last.update(vacik=acik_v, aacik=acik_a, admiral=len(AD[1]), eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
                  kaynak={k: {"ara": v["ara"], "hata": v["hata"], "yas": round(time.time() - v["vt"]) if v["vt"] else None} for k, v in _K.items()})
-    return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO açık {len(acik_v)} yeni {yv}"
+    return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, açık {len(acik_a)} yeni {ya}"
 
 
-def volkano_tur(c, X, VF, V, now, at):
-    """Volkano geride: Volkano oranı ≥ 1.30 ve Volkano / 1xbet adil ≥ 1.05. Yanlış alarm koruması: aynı fark iki ayrı Volkano
-    taramasında (≥ 20 sn arayla) görülmeli; skor son 90 sn içinde değiştiyse bakılmaz."""
-    vt = (_K.get("volkano") or {}).get("vt") or 0
+def site_tur(c, X, VF, V, now, at, site):
+    """SITE geride (Volkano / Admiral): site oranı 1.30–10 ve site / 1xbet adil ≥ 1.05. Yanlış alarm koruması: aynı fark iki ayrı
+    site taramasında (≥ 20 sn arayla) görülmeli; skor son 90 sn içinde değiştiyse bakılmaz."""
+    S_ = _SITE[site]
+    _vbekle, s_tab, b_tab = S_["bekle"], S_["s"], S_["b"]
+    vt = (_K.get(site) or {}).get("vt") or 0
     yeni, acik, gor = 0, [], set()
     if not V or not VF:
         _vbekle.clear()
         return 0, []
     for x in X.values():
-        sk = (x["s1"], x["s2"])
-        if _skor.get(x["I"], (None, 0))[0] != sk:
-            _skor[x["I"]] = (sk, time.time())
-        if x["dk"] > MAX_DK or time.time() - _skor[x["I"]][1] < 90:
+        if x["dk"] > MAX_DK or time.time() - _skor.get(x["I"], (None, 0))[1] < 90:
             continue
-        ai = _v_eslestir(x, VF)
+        ai = _v_eslestir(x, VF, S_["esle"])
         v = V.get(ai) if ai else None
         if not v:
             continue
@@ -397,24 +476,22 @@ def volkano_tur(c, X, VF, V, now, at):
             adil = 1 / p
             acik.append({"ev": x["ev"], "dep": x["dep"], "sec": sec, "iddaa": vo, "adil": round(adil, 2), "deger": round(d, 3), "dk": x["dk"],
                          "x_oran": xo, "v_oran": vo})
-            r = c.execute("SELECT son_at, sure FROM vsinyal WHERE xid=? AND sec=?", key).fetchone()
+            r = c.execute(f"SELECT son_at, sure FROM {s_tab} WHERE xid=? AND sec=?", key).fetchone()
             if r is None:
                 yeni += 1
-                c.execute("""INSERT INTO vsinyal (xid, sec, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
+                c.execute(f"""INSERT INTO {s_tab} (xid, sec, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
                              max_iddaa, max_deger, son_at, sure, v_oran, x_adil) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)""",
                           (x["I"], sec, at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            vo, xo, round(adil, 3), round(d, 4), vo, round(d, 4), at, vo, round(adil, 3)))
-                _bahis_ac(c, x["I"], sec, vo, p, at, "vbahis")
+                _bahis_ac(c, x["I"], sec, vo, p, at, b_tab)
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
-                sure = (r[1] or 0) + (ek if ek <= 3 * V_SN else 0)
-                c.execute("""UPDATE vsinyal SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
+                sure = (r[1] or 0) + (ek if ek <= 3 * S_["sn"] else 0)
+                c.execute(f"""UPDATE {s_tab} SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, vo, round(d, 4), x["I"], sec))
     for k in list(_vbekle):
         if k not in gor:
             del _vbekle[k]
-    if len(_skor) > 5000:
-        _skor.clear()
     return yeni, acik
 
 
@@ -458,9 +535,9 @@ def _kova(v, sinir, adlar):
 
 
 def get_page_data(gun=None, kaynak="iddaa"):
-    s_tab, b_tab = ("vsinyal", "vbahis") if kaynak == "volkano" else ("sinyal", "bahis")
+    s_tab, b_tab = (_SITE[kaynak]["s"], _SITE[kaynak]["b"]) if kaynak in _SITE else ("sinyal", "bahis")
     out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun, "kasa": kasa(None, b_tab), "K": [],
-           "acik": _last.get("vacik" if kaynak == "volkano" else "acik") or []}
+           "acik": _last.get({"volkano": "vacik", "admiral": "aacik"}.get(kaynak, "acik")) or []}
     if not os.path.exists(DB):
         return out
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
@@ -509,7 +586,11 @@ def get_page_data(gun=None, kaynak="iddaa"):
 def ozet():
     d = get_page_data()
     v = get_page_data(None, "volkano")
-    return {"last": {k: v for k, v in d["last"].items() if k not in ("acik", "vacik")}, "kasa": d["kasa"], "acik": d["acik"][:10], "ozet": d["ozet"],
+    ad = get_page_data(None, "admiral")
+    return {"admiral": {"kasa": ad["kasa"], "acik": ad["acik"][:10], "ozet": ad["ozet"][:6],
+                        "son": [{k: r.get(k) for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "x_oran", "adil", "deger", "sure", "sonuc", "final")}
+                                for r in ad["L"][:10]]},
+            "last": {k: v for k, v in d["last"].items() if k not in ("acik", "vacik", "aacik")}, "kasa": d["kasa"], "acik": d["acik"][:10], "ozet": d["ozet"],
             "volkano": {"kasa": v["kasa"], "acik": v["acik"][:10], "ozet": v["ozet"][:6],
                         "son": [{k: r.get(k) for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "x_oran", "adil", "deger", "sure", "sonuc", "final")}
                                 for r in v["L"][:10]]},
@@ -526,8 +607,9 @@ def _loop():
             _last["hata"] = f"{type(e).__name__}: {str(e)[:200]}"
         if len(_esle) > 5000:
             _esle.clear()
-        if len(_vesle) > 5000:
-            _vesle.clear()
+        for st in _SITE.values():
+            if len(st["esle"]) > 5000:
+                st["esle"].clear()
         time.sleep(SN)
 
 

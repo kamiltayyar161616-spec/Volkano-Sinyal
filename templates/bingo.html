@@ -27,10 +27,10 @@
 {% block content %}
 <div class="section-sub">{{ d.last.log or 'başlıyor…' }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}
 {% for k, v in (d.last.kaynak or {}).items() %}{% if v.hata or v.ara > 20 or (k in ('iddaa','1xbet') and v.ara > 10) %}<br>⚠ {{ k }}: {{ v.ara }} sn'ye yavaşladı{% if v.hata %} · {{ v.hata }}{% endif %}{% endif %}{% endfor %}</div>
-{% set V = sekme in ('volkano', 'vkupon') %}{% set ad = 'Volkano' if V else 'iddaa' %}
-<div style="margin:8px 16px 4px"><a class="chip {{ 'on' if not sekme else '' }}" href="/bingo">🎱 iddaa Sinyal</a><a class="chip {{ 'on' if sekme == 'kupon' else '' }}" href="/bingo?sekme=kupon">🎫 iddaa Kupon</a><a class="chip {{ 'on' if sekme == 'volkano' else '' }}" href="/bingo?sekme=volkano">🌋 Volkano Sinyal</a><a class="chip {{ 'on' if sekme == 'vkupon' else '' }}" href="/bingo?sekme=vkupon">🎫 Volkano Kupon</a></div>
-{% if V %}<div class="section-sub">🌋 <b>Volkano geride</b>: Volkano'nun canlı oranı 1xbet'in aynı andaki marjsız adil oranından ≥ %5 yüksek (Volkano 1.30–10). Yanlış alarm olmasın diye fark iki ayrı Volkano taramasında (20 sn arayla) görülmeli; gol sonrası 90 sn beklenir. iddaa sinyallerinden tamamen ayrı kasa ve karne.</div>{% endif %}
-{% if sekme in ('kupon', 'vkupon') %}{% set k = d.kasa %}
+{% set V = sekme in ('volkano', 'vkupon', 'admiral', 'akupon') %}{% set ad = 'Admiral' if sekme in ('admiral', 'akupon') else 'Volkano' if V else 'iddaa' %}{% set kp = 'akupon' if ad == 'Admiral' else 'vkupon' %}{% set sg = 'admiral' if ad == 'Admiral' else 'volkano' %}
+<div style="margin:8px 16px 4px"><a class="chip {{ 'on' if not sekme else '' }}" href="/bingo">🎱 iddaa Sinyal</a><a class="chip {{ 'on' if sekme == 'kupon' else '' }}" href="/bingo?sekme=kupon">🎫 iddaa Kupon</a><a class="chip {{ 'on' if sekme == 'volkano' else '' }}" href="/bingo?sekme=volkano">🌋 Volkano Sinyal</a><a class="chip {{ 'on' if sekme == 'vkupon' else '' }}" href="/bingo?sekme=vkupon">🎫 Volkano Kupon</a><a class="chip {{ 'on' if sekme == 'admiral' else '' }}" href="/bingo?sekme=admiral">🟦 Admiral Sinyal</a><a class="chip {{ 'on' if sekme == 'akupon' else '' }}" href="/bingo?sekme=akupon">🎫 Admiral Kupon</a></div>
+{% if V %}<div class="section-sub">{{ '🟦' if ad == 'Admiral' else '🌋' }} <b>{{ ad }} geride</b>: {{ ad }}'{{ 'in' if ad == 'Admiral' else 'nun' }} canlı oranı 1xbet'in aynı andaki marjsız adil oranından ≥ %5 yüksek ({{ ad }} 1.30–10). Yanlış alarm olmasın diye fark iki ayrı {{ ad }} taramasında (20 sn arayla) görülmeli; gol sonrası 90 sn beklenir. Diğer sekmelerden tamamen ayrı kasa ve karne.</div>{% endif %}
+{% if sekme in ('kupon', 'vkupon', 'akupon') %}{% set k = d.kasa %}
 <div class="kasa"><div class="r1"><span class="tk">Bakiye <b style="font-size:20px">{{ '%.2f'|format(k.bakiye) }} ₺</b></span>
 <span class="sn {{ 'p' if k.kar > 0 else 'n' if k.kar < 0 else '' }}" style="font-size:16px">{{ '%+.2f'|format(k.kar) }} ₺</span></div>
 <div class="r2" style="margin-left:0">ROI {{ roi(k.roi) }} · biten {{ k.biten }} kupon ({{ k.kazanan }} ✓ / {{ k.biten - k.kazanan }} ✗) · oynanan {{ '%.0f'|format(k.oynanan) }} ₺ · açık {{ k.n - k.biten }} kupon {{ '%.0f'|format(k.acik) }} ₺ · serbest {{ '%.2f'|format(k.serbest) }} ₺</div>
@@ -51,7 +51,7 @@
 {% for x in d.acik %}
 <div class="kc canli"><div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span></div>
 <div class="r3" style="margin-top:6px"><span class="sec">{{ x.sec }}</span><span class="o">{{ ad }} <b>{{ x.iddaa }}</b></span><span class="o">1xbet {{ x.x_oran or '-' }}{% if not V %} · Volkano {{ x.v_oran or '-' }}{% endif %}</span><span class="o">adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span></div></div>
-{% else %}<div class="section-sub">Şu an {{ "Volkano'nun" if V else "iddaa'nın" }} geride kaldığı seçenek yok.</div>{% endfor %}
+{% else %}<div class="section-sub">Şu an {{ "Admiral'in" if ad == 'Admiral' else "Volkano'nun" if V else "iddaa'nın" }} geride kaldığı seçenek yok.</div>{% endfor %}
 
 <h2 class="section">📈 KARNE (biten sinyaller)</h2>
 {% if d.ozet %}
@@ -62,7 +62,7 @@
 {% else %}<div class="section-sub">Henüz biten sinyal yok.</div>{% endif %}
 
 <h2 class="section">📅 GÜN GÜN</h2>
-<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/bingo?gun={{ g }}{% if V %}&sekme=volkano{% endif %}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/bingo?gun={{ g }}{% if V %}&sekme={{ sg }}{% endif %}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
 {% for x in d.L %}
 <div class="kc {{ 'ok' if x.sonuc == 'tuttu' else 'no' if x.sonuc == 'yattı' else '' }}">
   <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>
