@@ -27,6 +27,7 @@ MS_T = {1: "1", 2: "X", 3: "2"}
 LIG_SN = 1800
 SIK_SN, YAKIN_SN, YAKIN_H = 1800, 600, 2
 SON5 = (1, 8)
+ZORLA_SN = 300                  # bos donen mac icin bulteni en fazla 5 dk'da bir zorla yenile
 GUN = 3
 DIGER_SAAT = 12                 # Volkano'su olmayan NowGoal maclari (kupon ajani icin): maca 12 saat kala izlenir
 _last = {"at": None, "log": "", "hata": None, "lig": ""}
@@ -143,6 +144,7 @@ def kaydet():
     s5 = {m for (m,) in c.execute("SELECT DISTINCT mid FROM s WHERE tur='son5'")}
     L = c.execute("SELECT mid, xid, ko, son_bakis FROM e WHERE ko > ?", ((now + timedelta(minutes=SON5[0] - 1)).isoformat(),)).fetchall()
     n_bak = n_yaz = n_s5 = 0
+    bos = []
     for m, xid, ko, sb in L:
         kalan = (_dt(ko) - now).total_seconds()
         son5 = SON5[0] * 60 <= kalan <= SON5[1] * 60 and m not in s5
@@ -152,11 +154,13 @@ def kaydet():
         try:
             ms, iy, au, dn = oranlar(xid)
         except Exception:
+            bos.append(m)
+            continue
+        if not (ms or iy or au):                      # bos cevap: 1xbet maca yeni numara vermis olabilir -> asagida hemen yeniden esle
+            bos.append(m)
             continue
         n_bak += 1
         c.execute("UPDATE e SET son_bakis=? WHERE mid=?", (now.isoformat(), m))
-        if not (ms or iy or au):
-            continue
         J = tuple(json.dumps(x, sort_keys=True) if x else None for x in (ms, iy, au, dn))
         tur = "son5" if son5 else "ilk" if m not in son else "tur"
         if son5 or J != son.get(m):
@@ -166,7 +170,45 @@ def kaydet():
         time.sleep(0.4)
     c.commit()
     c.close()
-    return f"yeni eşleşen {yeni} · bakılan {n_bak} · değişen/yeni satır {n_yaz} · son5 {n_s5}"
+    if bos and time.time() - _E.get("zorla", 0) > ZORLA_SN:     # bos donen mac varsa bulteni beklemeden yenile, yeni numarayla tekrar oku
+        _E["zorla"] = time.time()
+        _E["t"] = 0
+        esle(now)
+        _last["zorla"] = f"{datetime.now(timezone.utc):%H:%M} UTC {len(bos)} maç boş döndü, bülten yenilendi"
+        return f"yeni eşleşen {yeni} · bakılan {n_bak} · değişen/yeni satır {n_yaz} · son5 {n_s5} · boş {len(bos)} → yeniden eşlendi · " + kaydet_tekrar(bos)
+    return f"yeni eşleşen {yeni} · bakılan {n_bak} · değişen/yeni satır {n_yaz} · son5 {n_s5}" + (f" · boş {len(bos)}" if bos else "")
+
+
+def kaydet_tekrar(mids):
+    """bulten yenilendikten sonra bos donen maclari yeni numarayla hemen bir kez daha oku"""
+    now = datetime.now(timezone.utc)
+    c = db()
+    son = {m: (ms, iy, au, dn) for m, ms, iy, au, dn in c.execute(
+        "SELECT mid, ms, iyms, au, dnb FROM s WHERE rowid IN (SELECT MAX(rowid) FROM s GROUP BY mid)")}
+    s5 = {m for (m,) in c.execute("SELECT DISTINCT mid FROM s WHERE tur='son5'")}
+    n = 0
+    for m in mids:
+        r = c.execute("SELECT xid, ko FROM e WHERE mid=?", (m,)).fetchone()
+        if not r:
+            continue
+        try:
+            ms, iy, au, dn = oranlar(r[0])
+        except Exception:
+            continue
+        if not (ms or iy or au):
+            continue
+        kalan = (_dt(r[1]) - now).total_seconds()
+        son5 = SON5[0] * 60 <= kalan <= SON5[1] * 60 and m not in s5
+        J = tuple(json.dumps(x, sort_keys=True) if x else None for x in (ms, iy, au, dn))
+        c.execute("UPDATE e SET son_bakis=? WHERE mid=?", (now.isoformat(), m))
+        if son5 or J != son.get(m):
+            c.execute("INSERT INTO s (mid, at, tur, ms, iyms, au, dnb) VALUES (?,?,?,?,?,?,?)",
+                      (m, now.isoformat(), "son5" if son5 else "ilk" if m not in son else "tur", *J))
+            n += 1
+        time.sleep(0.4)
+    c.commit()
+    c.close()
+    return f"kurtarılan {n}"
 
 
 def ozet():
@@ -177,7 +219,12 @@ def ozet():
          "satir": c.execute("SELECT COUNT(*) FROM s").fetchone()[0],
          "iyms_olan": c.execute("SELECT COUNT(DISTINCT mid) FROM s WHERE iyms IS NOT NULL").fetchone()[0],
          "son5": c.execute("SELECT COUNT(*) FROM s WHERE tur='son5'").fetchone()[0],
-         "son_satir": c.execute("SELECT MAX(at) FROM s").fetchone()[0]}
+         "son_satir": c.execute("SELECT MAX(at) FROM s").fetchone()[0],
+         "son1s_baslayan": c.execute("SELECT COUNT(*) FROM e WHERE ko BETWEEN ? AND ?", (
+             (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(), datetime.now(timezone.utc).isoformat())).fetchone()[0],
+         "son1s_son5_kacan": [r[0] for r in c.execute("""SELECT ev || ' - ' || dep FROM e WHERE ko BETWEEN ? AND ?
+                                AND mid NOT IN (SELECT mid FROM s WHERE tur='son5')""", (
+             (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(), datetime.now(timezone.utc).isoformat()))]}
     c.close()
     return o
 
