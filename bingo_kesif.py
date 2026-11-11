@@ -88,7 +88,7 @@ def volkano():
     return out
 
 
-_VC = {"durum": "başlamadı"}
+_VC = {"durum": "başlamadı", "s": 3}
 _VSCRIPT = r'''
 import asyncio, json, sys
 from playwright.async_api import async_playwright
@@ -97,15 +97,20 @@ async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
         pg = await b.new_page()
-        pg.on("request", lambda r: U.append(r.url) if ("xtreme" in r.url or "/api/" in r.url) else None)
-        for u in ("https://www.volcanobet.me/sport-v2/live", "https://www.volcanobet.me/sport-v2/live/events"):
+        pg.on("request", lambda r: U.append(r.url) if ("sportdata" in r.url) else None)
+        def ws(w):
+            U.append("WS " + w.url)
+            w.on("framereceived", lambda f: U.append("RX " + (f if isinstance(f, str) else str(f))[:700]))
+            w.on("framesent", lambda f: U.append("TX " + (f if isinstance(f, str) else str(f))[:400]))
+        pg.on("websocket", ws)
+        for u in ("https://www.volcanobet.me/sport-v2/live",):
             try:
                 await pg.goto(u, timeout=45000)
-                await pg.wait_for_timeout(12000)
+                await pg.wait_for_timeout(25000)
             except Exception as e:
                 U.append("HATA " + u + " " + str(e)[:100])
         await b.close()
-    print(json.dumps(U[:120]))
+    print(json.dumps(U[:160]))
 asyncio.run(main())
 '''
 
@@ -120,7 +125,7 @@ def _vcanli():
                     continue
                 r = subprocess.run([py, "-c", _VSCRIPT], capture_output=True, text=True, timeout=150)
                 if r.returncode == 0:
-                    _VC.update(durum="tamam", py=py, urller=sorted(set(json.loads(r.stdout.strip().splitlines()[-1]))))
+                    _VC.update(durum="tamam", py=py, urller=json.loads(r.stdout.strip().splitlines()[-1]))
                     return
                 _VC[py] = r.stderr[-300:]
             _VC["durum"] = "olmadı"
