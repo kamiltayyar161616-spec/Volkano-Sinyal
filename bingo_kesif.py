@@ -137,5 +137,42 @@ def _vcanli():
     return _VC
 
 
+VB = "https://sportdataproviderv3-volcano.xtreme.bet/api/public"
+VQ = "clientType=WebConsumer&dpId=d4e045a4-860c-465a-8fc4-cf2b1c4ddac3-V3&lang=sr-Latn-ME&t=b7a855b8-4f88-4d95-8f7b-c4527826bb08&v=1.1.4384"
+
+
+def vsnap():
+    out = {}
+    for ad, u in (("a", f"{VB}/Offer/GetSnapshotEventMarkets?sportId=1&phaseFilter=L&{VQ}"),
+                  ("b", f"{VB}/Offer/GetSnapshotEventMarkets?sportId=1&phaseFilter=L&marketIds=1&{VQ}"),
+                  ("c", f"{VB}/Offer/GetSnapshotEventMarkets?sportId=1&phaseFilter=L&marketIds=1,18,19,20&{VQ}")):
+        try:
+            r = _get(u)
+            s = json.dumps(r)
+            E = r if isinstance(r, list) else (r.get("e") or r.get("events") or r.get("Value") or [])
+            o = {"tip": type(r).__name__, "uzun": len(s), "anahtar": sorted(r.keys())[:30] if isinstance(r, dict) else None, "n": len(E) if isinstance(E, list) else None}
+            if isinstance(E, list) and E:
+                o["ornek"] = json.dumps(E[0])[:2500]
+                mk = {}
+                for e in E[:80]:
+                    for m in (e.get("m") or []) if isinstance(e, dict) else []:
+                        mk.setdefault(str(m.get("id")), [m.get("d"), [(b.get("n"), b.get("od")) for b in m.get("b") or []][:6]])
+                o["marketler"] = mk
+            else:
+                o["ham"] = s[:1500]
+            out[ad] = o
+        except Exception as e:
+            out[ad] = f"{type(e).__name__}: {str(e)[:150]}"
+    try:
+        F = _get(f"{VB}/offer/GetFixtures?{VQ}".replace("dpId=", "dp="))
+        L = F if isinstance(F, list) else (F.get("e") or F.get("f") or [])
+        out["fix"] = {"tip": type(F).__name__, "anahtar": sorted(F.keys())[:30] if isinstance(F, dict) else None, "n": len(L) if isinstance(L, list) else None,
+                      "canli": [json.dumps(x)[:600] for x in (L if isinstance(L, list) else []) if isinstance(x, dict) and x.get("s") == "InProgress"][:3],
+                      "ham": json.dumps(F)[:800]}
+    except Exception as e:
+        out["fix"] = f"{type(e).__name__}: {str(e)[:150]}"
+    return out
+
+
 def rapor():
-    return {"iddaa": _g(iddaa), "xbet": _g(xbet), "volkano": _g(volkano), "vcanli": _g(_vcanli)}
+    return {"vsnap": _g(vsnap)}
