@@ -109,11 +109,9 @@ def esle(now):
         _E["E"], _E["t"] = bulten(), time.time()
         _last["lig"] = f"{datetime.now(timezone.utc):%H:%M} UTC 1xbet bülteni {len(_E['E'])} maç"
     c = db()
-    var = {m for (m,) in c.execute("SELECT mid FROM e")}
+    var = {m: x for m, x in c.execute("SELECT mid, xid FROM e")}
     yeni = 0
     for m, ko, h, a, lg in _maclar(now):
-        if m in var:
-            continue
         t, best = _dt(ko).timestamp(), None
         for g in _E["E"]:
             if abs(g["S"] - t) > 1200:
@@ -121,10 +119,16 @@ def esle(now):
             s1, s2 = IS._benz(h, g["O1"]), IS._benz(a, g["O2"])
             if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
                 best = (s1 + s2, g)
-        if best:
-            g = best[1]
-            c.execute("INSERT OR IGNORE INTO e VALUES (?,?,?,?,?,?,?,?,?)", (m, g["I"], ko, h, a, lg, f"{g['O1']} - {g['O2']}", g["L"], None))
-            yeni += 1
+        if not best:
+            continue
+        g = best[1]
+        if m in var:                                  # 1xbet maca yeni numara verdiyse guncelle (eski numara bos doner)
+            if var[m] != g["I"]:
+                c.execute("UPDATE e SET xid=?, x_ad=?, x_lig=?, son_bakis=NULL WHERE mid=?", (g["I"], f"{g['O1']} - {g['O2']}", g["L"], m))
+                _last["xid_degisen"] = _last.get("xid_degisen", 0) + 1
+            continue
+        c.execute("INSERT OR IGNORE INTO e VALUES (?,?,?,?,?,?,?,?,?)", (m, g["I"], ko, h, a, lg, f"{g['O1']} - {g['O2']}", g["L"], None))
+        yeni += 1
     c.commit()
     c.close()
     return yeni
