@@ -202,6 +202,7 @@ def get_page_data(gun=None):
     for x in H["maclar"]:
         t = _dt(x["ko"]).astimezone(TR)
         x["gun"], x["saat"] = t.date().isoformat(), t.strftime("%H:%M")
+        x["ilk_kisa"] = _dt(x["ilk_at"]).astimezone(TR).strftime("%d.%m %H:%M") if x.get("ilk_at") else ""
     gunler = sorted({x["gun"] for x in H["maclar"]}, reverse=True)
     bugun = datetime.now(TR).date().isoformat()
     if gun not in gunler:
