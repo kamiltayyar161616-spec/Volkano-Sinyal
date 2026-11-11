@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Bingo{% endblock %}
 {% block page_tag %}🎱 BINGO{% endblock %}
-{% block subtitle %}Canlı maçta <b>iddaa geride kalınca</b> yakalar. 10 sn'de bir iddaa canlı oranı, 1xbet'in aynı andaki <b>marjsız adil oranıyla</b> karşılaştırılır (MS, Alt/Üst aynı çizgi, Gol olmaz). iddaa ≥ 1.30 ve iddaa / adil ≥ 1.05 ise BINGO. ROI ilk görülen iddaa oranıyla, her sinyale 1 birim. Volkano yakında eklenecek.{% endblock %}
+{% block subtitle %}Canlı maçta <b>iddaa geride kalınca</b> yakalar. 10 sn'de bir iddaa canlı oranı, <b>1xbet ve Volkano'nun</b> aynı andaki <b>marjsız adil oranıyla</b> (ikisinin ortalaması) karşılaştırılır (MS, Alt/Üst aynı çizgi, Gol olmaz). iddaa ≥ 1.30 ve iddaa / adil ≥ 1.05 ise BINGO. ROI ilk görülen iddaa oranıyla, her sinyale 1 birim. Bir site engel/aşırı istek uyarısı verirse o site için tarama kendiliğinden 20 → 60 sn'ye yavaşlar.{% endblock %}
 {% block extra_style %}
 <style>
   .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
@@ -25,20 +25,21 @@
 {% endblock %}
 {% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
 {% block content %}
-<div class="section-sub">{{ d.last.log or 'başlıyor…' }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}</div>
+<div class="section-sub">{{ d.last.log or 'başlıyor…' }}{% if d.last.hata %} · ⚠ {{ d.last.hata }}{% endif %}
+{% for k, v in (d.last.kaynak or {}).items() %}{% if v.hata or v.ara > 20 or (k in ('iddaa','1xbet') and v.ara > 10) %}<br>⚠ {{ k }}: {{ v.ara }} sn'ye yavaşladı{% if v.hata %} · {{ v.hata }}{% endif %}{% endif %}{% endfor %}</div>
 <div style="margin:8px 16px 4px"><a class="chip {{ '' if sekme == 'kupon' else 'on' }}" href="/bingo">🎱 Sinyaller</a><a class="chip {{ 'on' if sekme == 'kupon' else '' }}" href="/bingo?sekme=kupon">🎫 Kupon</a></div>
 {% if sekme == 'kupon' %}{% set k = d.kasa %}
 <div class="kasa"><div class="r1"><span class="tk">Bakiye <b style="font-size:20px">{{ '%.2f'|format(k.bakiye) }} ₺</b></span>
 <span class="sn {{ 'p' if k.kar > 0 else 'n' if k.kar < 0 else '' }}" style="font-size:16px">{{ '%+.2f'|format(k.kar) }} ₺</span></div>
 <div class="r2" style="margin-left:0">ROI {{ roi(k.roi) }} · biten {{ k.biten }} kupon ({{ k.kazanan }} ✓ / {{ k.biten - k.kazanan }} ✗) · oynanan {{ '%.0f'|format(k.oynanan) }} ₺ · açık {{ k.n - k.biten }} kupon {{ '%.0f'|format(k.acik) }} ₺ · serbest {{ '%.2f'|format(k.serbest) }} ₺</div>
-<div class="r2" style="margin-left:0">sanal kasa · 5000 ₺ başlangıç · her BINGO sinyaline o anki iddaa oranıyla tek maç kupon · tutar = serbest kasa × Kelly × ½, 100–500 ₺ (5'e yuvarlı) · ihtimal = 1xbet marjsız adil</div></div>
+<div class="r2" style="margin-left:0">sanal kasa · 5000 ₺ başlangıç · her BINGO sinyaline o anki iddaa oranıyla tek maç kupon · tutar = serbest kasa × Kelly × ½, 100–500 ₺ (5'e yuvarlı) · ihtimal = 1xbet ve Volkano marjsız adil ortalaması</div></div>
 {% for x in d.K %}{% set b = x.bahis %}
 <div class="kc {{ 'ok' if b.durum == 'kazandı' else 'no' if b.durum == 'kaybetti' else '' }}">
   <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>
     <span class="sn {{ 'p' if b.durum == 'kazandı' else 'n' if b.durum == 'kaybetti' else '' }}">{{ b.durum }}{% if b.net is not none %} {{ '%+.0f'|format(b.net) }} ₺{% endif %}</span></div>
   <div class="r2">{{ x.gun[8:10] }}.{{ x.gun[5:7] }} {{ x.saat }} · o an {{ x.skor }}{% if x.final %} · son {{ x.final }}{% endif %}</div>
   <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o"><b>{{ '%.0f'|format(b.tutar) }} ₺</b> @ <b>{{ b.oran }}</b></span>{% if b.durum == 'kazandı' %}<span class="o">ödeme <b class="p">{{ '%.2f'|format(b.getiri) }} ₺</b></span>{% endif %}</div>
-  <div class="r3" style="margin-top:5px"><span class="o">gerçek ihtimal (1xbet adil) <b>%{{ b.p_adil }}</b></span><span class="o">iddaa ihtimali <b>%{{ b.p_iddaa }}</b></span>
+  <div class="r3" style="margin-top:5px"><span class="o">gerçek ihtimal (1xbet+Volkano adil) <b>%{{ b.p_adil }}</b></span><span class="o">iddaa ihtimali <b>%{{ b.p_iddaa }}</b></span>
     <span class="o">beklenen kâr <b class="p">%{{ '%+.1f'|format(b.fark) }}</b></span><span class="o">Kelly %{{ b.kelly_y }} → ½ = %{{ b.pay_y }}</span></div>
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok — ilk BINGO sinyalinde otomatik açılacak.</div>{% endfor %}
@@ -47,7 +48,7 @@
 <h2 class="section">🔴 ŞU AN AÇIK ({{ d.acik|length }})</h2>
 {% for x in d.acik %}
 <div class="kc canli"><div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span></div>
-<div class="r3" style="margin-top:6px"><span class="sec">{{ x.sec }}</span><span class="o">iddaa <b>{{ x.iddaa }}</b></span><span class="o">1xbet adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span></div></div>
+<div class="r3" style="margin-top:6px"><span class="sec">{{ x.sec }}</span><span class="o">iddaa <b>{{ x.iddaa }}</b></span><span class="o">1xbet {{ x.x_oran or '-' }} · Volkano {{ x.v_oran or '-' }}</span><span class="o">adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span></div></div>
 {% else %}<div class="section-sub">Şu an iddaa'nın geride kaldığı seçenek yok.</div>{% endfor %}
 
 <h2 class="section">📈 KARNE (biten sinyaller)</h2>
@@ -66,7 +67,7 @@
     <span class="sn {{ 'p' if x.sonuc == 'tuttu' else 'n' if x.sonuc == 'yattı' else '' }}">{{ x.sonuc or 'bekliyor' }}{% if x.final %} · {{ x.final }}{% endif %}</span></div>
   <div class="r2">{{ x.saat }} · {{ x.lig or '' }} · o an {{ x.skor }} · {{ x.pazar }}</div>
   <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o">iddaa <b>{{ x.iddaa }}</b>{% if x.max_iddaa and x.max_iddaa > x.iddaa %} (en iyi {{ x.max_iddaa }}){% endif %}</span>
-    <span class="o">1xbet {{ x.x_oran }} · adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span>
+    <span class="o">1xbet {{ x.x_oran or '-' }} · Volkano {{ x.v_oran or '-' }} · adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span>
     <span class="o">açık kaldı ~{{ ((x.sure or 0) + 10) // 60 }} dk</span></div>
 </div>
 {% else %}<div class="section-sub">Bu gün sinyal yok.</div>{% endfor %}
