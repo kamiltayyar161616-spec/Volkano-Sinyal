@@ -56,7 +56,36 @@ def _r():
     return out
 
 
+def _r2():
+    out = {}
+    for ad, u in (("t1", f"{A}/api/offer/livetree/1/null/true/true/false"), ("t5", f"{A}/api/offer/livetree/5/null/true/true/false"),
+                  ("t1f", f"{A}/api/offer/livetree/1/null/true/false/false"), ("s1", f"{A}/api/offer/livetree/5/1/true/true/false")):
+        try:
+            T = _get(u)
+            ev = [e for s in T for r in s.get("regions") or [] for c in r.get("competitions") or [] for e in c.get("events") or []] if isinstance(T, list) else []
+            o = {"boy": len(json.dumps(T)), "spor": [s.get("id") for s in T] if isinstance(T, list) else None, "ev": len(ev)}
+            fb = [e for e in ev if e.get("sportId") == 1]
+            if fb:
+                b = next((b for e in fb for b in e.get("bets") or [] if b.get("betTypeId") == 22), None)
+                if b:
+                    o["bet22"] = {k: v for k, v in b.items() if k != "betOutcomes"}
+                    o["bet22_o"] = (b.get("betOutcomes") or [])[:2]
+            out[ad] = o
+        except Exception as e:
+            out[ad] = f"{type(e).__name__}: {str(e)[:120]}"
+    return out
+
+
 def rapor():
+    if not _C.get("v2"):
+        try:
+            _C["v2"] = _r2()
+        except Exception as e:
+            _C["v2"] = f"HATA {e}"
+    return {"v2": _C["v2"]}
+
+
+def rapor_eski():
     if time.time() - _C["t"] > 600 or not _C["v"]:
         try:
             _C["v"] = _r()
