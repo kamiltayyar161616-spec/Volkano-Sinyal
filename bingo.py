@@ -442,13 +442,13 @@ def site_tur(c, X, VF, V, now, at, site):
         _vbekle.clear()
         return 0, []
     for x in X.values():
-        if x["dk"] > MAX_DK or time.time() - _skor.get(x["I"], (None, 0))[1] < 90:
-            continue
         ai = _v_eslestir(x, VF, S_["esle"])
         v = V.get(ai) if ai else None
         if not v:
             continue
         S_["eslesen"] += 1
+        if x["dk"] > MAX_DK or time.time() - _skor.get(x["I"], (None, 0))[1] < 90:
+            continue
         gol = x["s1"] + x["s2"]
         A = []
         nv = _novig(x["ms"].get("1"), x["ms"].get("X"), x["ms"].get("2"))

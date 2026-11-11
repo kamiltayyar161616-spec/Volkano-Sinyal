@@ -92,6 +92,45 @@ _komsu_denendi = set()       # NowGoal'da yoklanan komsu mac numaralari
 KOMSU = 80                   # eslesen Toto maclarinin numarasinin ±80 komsusu yoklanir (ayni turnuvanin maclari ardisik numarali)
 
 
+def _lig(h):
+    """Eslesmemis Toto maci varsa: eslesen Toto maclarinin NowGoal ligini (ng_match.lid, or. Uluslar Ligi) ac, lig fikstur
+    json'undan Toto maclarinin gunlerine denk gelen maclari ng_match'e ekle (NowGoal lig taramasi 48 saatten ilerisini eklemiyor)."""
+    if all(m.get("mid") for m in h["maclar"]):
+        return 0
+    tarihler = [t for t in (_ko_utc((m.get("iddaa") or {}).get("tarih")) for m in h["maclar"] if not m.get("mid")) if t]
+    bilinen = [m["mid"] for m in h["maclar"] if m.get("mid")]
+    if not tarihler or not bilinen:
+        return 0
+    lo, hi = min(tarihler) - timedelta(hours=1), max(tarihler) + timedelta(hours=1)
+    with ng._db_lock:
+        c = ng._conn()
+        lids = {r[0] for r in c.execute(f"SELECT DISTINCT lid FROM ng_match WHERE lid IS NOT NULL AND mid IN ({','.join(map(str, bilinen))})")}
+        yol = {r[0]: r[1] for r in c.execute(f"SELECT lid, path FROM ng_league WHERE lid IN ({','.join(map(str, lids)) or '0'})")}
+        var = {r[0] for r in c.execute("SELECT mid FROM ng_match")}
+        c.close()
+    eklenen = 0
+    for lid in lids:
+        path = yol.get(lid)
+        if not path:
+            m = re.search(r"/jsData/matchResult/json/[^\"'`\s]+?_en\.json", ng._lg_get(f"/league/{lid}"))
+            path = m.group(0) if m else None
+            time.sleep(ng.BEKLE)
+        if not path:
+            continue
+        found = {}
+        ng._lg_matches(json.loads(ng._lg_get(path)), found)
+        time.sleep(ng.BEKLE)
+        add = [(mid, ng._iso(ko), ng._iso(ng._now()), "new") for mid, ko in found.items() if lo <= ko <= hi and mid not in var]
+        with ng._db_lock:
+            c = ng._conn()
+            c.executemany("INSERT OR IGNORE INTO ng_match (mid, kickoff_utc, first_seen, status) VALUES (?,?,?,?)", add)
+            c.executemany("UPDATE ng_match SET lid=? WHERE mid=? AND lid IS NULL", [(lid, x[0]) for x in add])
+            c.commit()
+            c.close()
+        eklenen += len(add)
+    return eklenen
+
+
 def _komsu(h):
     """Eslesmemis Toto maci varsa: eslesen Toto maclarinin NowGoal numaralarinin komsularini yokla; NowGoal'in listesinde
     henuz olmayan (1-2 gunden ileri) maclari ng_match'e ekle (NowGoal'in kendi komsu yoklamasiyla ayni kayit)."""
@@ -216,7 +255,11 @@ def tur():
         try:
             n2, ck = _gun_gun(h)
             log.append(f"gün gün: {ck} NowGoal maçının adı çekildi, +{n2} eşleşme")
-            k = _komsu(h)
+            k = _lig(h)
+            if k:
+                n3, ck3 = _gun_gun(h)
+                log.append(f"lig fikstürü: +{k} ileri tarihli NowGoal maçı, {ck3} ad çekildi, +{n3} eşleşme")
+            k = _komsu(h) if not all(m.get("mid") for m in h["maclar"]) else 0
             if k:
                 n3, ck3 = _gun_gun(h)
                 log.append(f"komşu yoklama: +{k} ileri tarihli NowGoal maçı, {ck3} ad çekildi, +{n3} eşleşme")
