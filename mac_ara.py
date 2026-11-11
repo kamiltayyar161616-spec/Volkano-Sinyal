@@ -10,7 +10,7 @@ import nowgoal as ng
 import oto_tahmin as O
 import xbet as X
 
-ARA = ("Silifke", "Mersin")
+ARA = ("Onhaye", "Habay")
 
 
 def ara():
@@ -36,4 +36,10 @@ def ara():
     V = AV._volkano()
     out["volkano_iyms"] = {m: (V[m][0], V[m][6]) for m in [r[0] for r in N] if m in V}
     out["xbet_last"] = {k: str(v)[:300] for k, v in X._last.items()}
+    now = datetime.now(timezone.utc).timestamp()
+    E12 = [g for g in E if now < g["S"] < now + 12 * 3600]
+    x = sqlite3.connect(f"file:{X.DB}?mode=ro", uri=True)
+    izlenen = {r[0] for r in x.execute("SELECT xid FROM e")}
+    x.close()
+    out["kapsam_12s"] = {"bulten_12s": len(E12), "izlenen": sum(1 for g in E12 if g["I"] in izlenen)}
     return out
