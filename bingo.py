@@ -1,5 +1,5 @@
 """BINGO — canlı maçta iddaa geride kalınca yakalar. Sadece okur, bahis yok.
-Her 30 sn: iddaa canlı bülteni (sportsbookv2.iddaa.com, tek istek) + 1xbet canlı akışı (1xbet.mobi service-api/LiveFeed Get1x2_VZip, tek istek).
+Her 10 sn: iddaa canlı bülteni (sportsbookv2.iddaa.com, tek istek) + 1xbet canlı akışı (1xbet.mobi service-api/LiveFeed Get1x2_VZip, tek istek).
 Karşılaştırılan seçenekler (aynı maç, aynı çizgi):
   MS 1/X/2        iddaa st=4   ↔ 1xbet G1 T1/T2/T3
   Üst/Alt X.5     iddaa st=14  ↔ 1xbet G17 T9 (üst) / T10 (alt), aynı P
@@ -26,7 +26,7 @@ IDDAA_URL = "https://sportsbookv2.iddaa.com/sportsbook/events?st=1&type=1&versio
 X_URL = "https://1xbet.mobi/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&getEmpty=true"
 H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
      "Accept": "application/json, text/plain, */*"}
-SN = 30
+SN = 10
 MIN_ORAN = 1.30
 ESIK = 1.05                 # iddaa / 1xbet adil
 MAX_DK = 85
