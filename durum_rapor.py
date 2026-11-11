@@ -180,7 +180,8 @@ def rapor():
             "iyms_dun": _guvenli(lambda: __import__("iyms_bugun").ozet(1)),
             "iyms_sekme_dun": _guvenli(lambda: __import__("iyms_bugun").sekmeler((datetime.now(timezone.utc) - timedelta(hours=21)).date().isoformat())),
             "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7()),
-            "bingo": _guvenli(lambda: __import__("bingo").ozet())}
+            "bingo": _guvenli(lambda: __import__("bingo").ozet()),
+            "admiral_canli_kesif": _guvenli(lambda: __import__("admiral_canli_kesif").rapor())}
 
 
 def gonder():
