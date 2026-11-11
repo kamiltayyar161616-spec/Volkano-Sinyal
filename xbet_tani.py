@@ -64,3 +64,23 @@ def tani2():
     out["translate"] = L[-2:]
     out["translate_n"] = len(L)
     return out
+
+
+def tani3():
+    """baslamamis kupa maclarinda alt oyunlar (SG): adlari ve gruplari"""
+    E = X._E.get("E") or X.bulten()
+    now = datetime.now(timezone.utc).timestamp()
+    K = [g for g in E if g["S"] > now + 600 and any(w in (g.get("L") or "") for w in ("Cup", "Copa", "Coupe", "Pokal", "Coppa", "Trophy"))][:4]
+    out = []
+    for g in K:
+        V = X._get(f"{X.B}/GetGameZip?id={g['I']}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode=4&partner=1&topGroups=&marketType=1").get("Value") or {}
+        y = {"mac": f"{g['O1']} - {g['O2']}", "lig": g["L"], "ana": [(e.get("G"), sum(len(a) for a in e.get("E") or [])) for e in V.get("GE") or []],
+             "SG": [{k: s.get(k) for k in ("I", "TG", "PN", "TI", "N", "GN") if s.get(k) is not None} for s in V.get("SG") or []][:12]}
+        for s in (V.get("SG") or [])[:6]:
+            try:
+                W = X._get(f"{X.B}/GetGameZip?id={s['I']}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode=4&partner=1&topGroups=&marketType=1").get("Value") or {}
+                y.setdefault("sg_grup", {})[str(s.get("TG") or s.get("PN") or s["I"])] = [(e.get("G"), sum(len(a) for a in e.get("E") or [])) for e in W.get("GE") or []][:15]
+            except Exception as e:
+                y.setdefault("sg_grup", {})[str(s["I"])] = str(e)[:80]
+        out.append(y)
+    return out
