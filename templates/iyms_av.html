@@ -25,6 +25,22 @@
   .lj{ text-align:right; font-size:10.5px; color:var(--chalk-faint); margin-top:6px; }
   .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
   .chip.on{ border-color:#e0a030; color:#e0a030; }
+  .hd1{ display:flex; align-items:flex-start; gap:8px; }
+  .hd1 .saat{ font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:13px; color:#e0a030; padding:2px 7px; border-radius:7px; background:rgba(224,160,48,.12); flex:none; margin-top:1px; }
+  .hd1 .tk{ flex:1; min-width:0; font-weight:800; font-size:15px; line-height:1.25; }
+  .hd1 .sk{ flex:none; text-align:right; font-weight:800; font-size:15px; line-height:1.2; }
+  .hd1 .sk small{ display:block; font-size:10.5px; color:var(--chalk-faint); font-weight:600; }
+  .hd1 .sk b{ color:#3ccf7a; }
+  .hd2{ color:var(--chalk-faint); font-size:11.5px; margin:3px 0 6px; }
+  .hd3{ display:flex; flex-wrap:wrap; gap:5px; }
+  .pl{ font-size:10.5px; padding:2px 7px; border-radius:10px; background:rgba(255,255,255,.05); color:var(--chalk-faint); white-space:nowrap; }
+  .pl.ok{ color:#3ccf7a; background:rgba(60,207,122,.12); } .pl.bek{ color:#e0a030; background:rgba(224,160,48,.12); }
+  .pr{ display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-top:7px; }
+  .pr .pt{ font-size:11px; color:var(--chalk-faint); width:100%; }
+  .pr .c{ font-size:11.5px; padding:3px 7px; border-radius:8px; background:var(--navy-deep); white-space:nowrap; }
+  .pr .c b{ font-weight:800; } .pr .c i{ font-style:normal; color:var(--chalk-faint); font-size:10.5px; }
+  .pr .c.gir b{ color:#3ccf7a; } .pr .c.cik b{ color:#ff8a80; }
+  .pr .c.ok{ box-shadow:inset 0 0 0 1px rgba(60,207,122,.7); background:rgba(40,160,90,.25); }
 </style>
 <meta http-equiv="refresh" content="300">
 {% endblock %}
@@ -48,10 +64,11 @@
 
 {% for x in d.L %}
 <div class="kc">
-  <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
-  <div class="meta">{{ x.lig or '' }} · Admiral: {{ x.a_ad }} · Volkano ilk: {{ 'bülten açılışı' if x.v_kaynak == 'açılış' else '~12 saat önce' }} {{ (x.v_at[:19] ~ '+00:00') | localdatetime }} · Admiral ilk {{ (x.a_at[:19] ~ '+00:00') | localdatetime }} · son: {{ '5 dk önce' if x.son5 else 'Admiral ilk oranı (son 5 dk bekleniyor)' }}</div>
-  {% if x.para %}<div class="meta">💸 Admiral en çok düşen (para giren): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
-  {% if x.cikan %}<div class="meta">🔻 Admiral en çok yükselen (para çıkan): {% for p in x.cikan %}<b style="{{ 'color:#3ccf7a' if p.tuttu else 'color:#ff8a80' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
+  <div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>{% if x.sonuc %}<span class="sk">{{ x.skor }} <b>{{ x.sonuc }}</b><small>İY {{ x.iy }}</small></span>{% endif %}</div>
+  <div class="hd2">{{ x.lig or '' }}</div>
+  <div class="hd3"><span class="pl">V ilk · {{ 'açılış ' if x.v_kaynak == 'açılış' else '~12 sa önce ' }}{{ x.v_kisa }}</span><span class="pl">A ilk · {{ x.a_kisa }}</span>{% if x.son5 %}<span class="pl ok">✓ A son 5 dk alındı</span>{% else %}<span class="pl bek">⏳ A son 5 dk bekleniyor</span>{% endif %}</div>
+  {% if x.para %}<div class="pr"><span class="pt">💸 Admiral para giren (oranı en çok düşen)</span>{% for p in x.para %}<span class="c gir {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b> <i>{{ p.ilk }}→{{ p.son }}</i></span>{% endfor %}</div>{% endif %}
+  {% if x.cikan %}<div class="pr"><span class="pt">🔻 Admiral para çıkan (oranı en çok yükselen)</span>{% for p in x.cikan %}<span class="c cik {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b> <i>{{ p.ilk }}→{{ p.son }}</i></span>{% endfor %}</div>{% endif %}
   <div class="g9">{% for g in ('en yakın 3', 'kalan 3', 'en uzak 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
     {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><div class="r1"><span class="sc">{{ s.sec }}{{ ' ✓' if s.tuttu else '' }}</span><span class="fk {{ 'a' if s.fark >= 1 else 'e' if s.fark <= -1 else 's' }}">{{ '%+d'|format(s.fark) }}%</span></div><div class="r2"><span>A <b>{{ s.a }}</b></span><span>V <b>{{ s.v }}</b></span></div></div>{% endfor %}
   </div>{% endfor %}</div>
