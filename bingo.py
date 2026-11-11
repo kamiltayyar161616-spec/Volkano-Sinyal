@@ -427,7 +427,7 @@ def tur():
     c.close()
     _last.update(vacik=acik_v, aacik=acik_a, admiral=len(AD[1]), eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
                  kaynak={k: {"ara": v["ara"], "hata": v["hata"], "yas": round(time.time() - v["vt"]) if v["vt"] else None} for k, v in _K.items()})
-    return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, açık {len(acik_a)} yeni {ya}"
+    return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO {len(V)} maç, 1xbet ile eşleşen {_SITE['volkano']['eslesen']}, açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, 1xbet ile eşleşen {_SITE['admiral']['eslesen']}, açık {len(acik_a)} yeni {ya}"
 
 
 def site_tur(c, X, VF, V, now, at, site):
@@ -437,6 +437,7 @@ def site_tur(c, X, VF, V, now, at, site):
     _vbekle, s_tab, b_tab = S_["bekle"], S_["s"], S_["b"]
     vt = (_K.get(site) or {}).get("vt") or 0
     yeni, acik, gor = 0, [], set()
+    S_["eslesen"] = 0
     if not V or not VF:
         _vbekle.clear()
         return 0, []
@@ -447,6 +448,7 @@ def site_tur(c, X, VF, V, now, at, site):
         v = V.get(ai) if ai else None
         if not v:
             continue
+        S_["eslesen"] += 1
         gol = x["s1"] + x["s2"]
         A = []
         nv = _novig(x["ms"].get("1"), x["ms"].get("X"), x["ms"].get("2"))
