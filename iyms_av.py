@@ -239,7 +239,9 @@ def hesap():
                        "S": [{"sec": k, "a": ason[k], "ai": ai[k], "v": vo[k], "fark": round(fark[k]), "grup": grup[k], "tuttu": k == sonuc}
                              for k in sira],
                        "para": [{"sec": k, "d": round(100 * d[k]), "ilk": ai[k], "son": ason[k], "tuttu": k == sonuc}
-                                for k in sorted(S9, key=lambda k: -d[k])[:3]] if son5 else []})
+                                for k in sorted(S9, key=lambda k: -d[k])[:3]] if son5 else [],
+                       "cikan": [{"sec": k, "d": round(100 * d[k]), "ilk": ai[k], "son": ason[k], "tuttu": k == sonuc}
+                                 for k in sorted(S9, key=lambda k: d[k])[:3]] if son5 else []})
         if not bitti or not son5:
             continue
         n += 1
