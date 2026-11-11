@@ -126,6 +126,35 @@ def log_hatalari():
     return out
 
 
+_SAYFA = {"t": 0, "v": None}
+SAYFALAR = ["/", "/alt-ust", "/canli-ajan", "/desen", "/gunun-ozeti", "/ht-ft", "/istatistik", "/iy-ms-v", "/iyms-av", "/iyms-kars", "/iyms-vk",
+            "/iyms-xv", "/kelly", "/kupon", "/kupon-gunluk", "/nowgoal", "/oracle", "/oracle-cift-tavan", "/oracle3", "/oracle9", "/oranlar",
+            "/oto-tahmin", "/oynanabilir", "/patron", "/patron?sekme=canli", "/patron?sekme=kupon", "/patron?sekme=avci", "/sd-oran",
+            "/son-dakika", "/strateji", "/toto", "/toto-bulten", "/vip-kupon", "/kelly/gec-para"]
+
+
+def sayfa_testi():
+    """30 dk'da bir: butun sekmeler uygulamanin icinden acilir (salt okunur GET) — durum kodu, sure, boyut, hata/bos isareti"""
+    if _SAYFA["v"] is not None and time.time() - _SAYFA["t"] < 1800:
+        return _SAYFA["v"]
+    a = getattr(sys.modules.get("__main__"), "app", None)
+    if a is None:
+        return {"HATA": "uygulama nesnesi yok"}
+    out = {}
+    with a.test_client() as cl:
+        for u in SAYFALAR:
+            t0 = time.time()
+            try:
+                r = cl.get(u)
+                h = r.get_data(as_text=True)
+                isaret = [k for k in ("Traceback", "⚠", "HATA", "Internal Server Error", "henüz yok", "hesaplanıyor") if k in h]
+                out[u] = [r.status_code, round(time.time() - t0, 1), len(h) // 1024, isaret]
+            except Exception as e:
+                out[u] = [0, round(time.time() - t0, 1), 0, [f"{type(e).__name__}: {str(e)[:120]}"]]
+    _SAYFA.update(t=time.time(), v=out)
+    return out
+
+
 def rapor():
     return {"at": datetime.now(timezone.utc).isoformat(),
             "arka_plan": {m: _mod_last(m) for m in ("oto_tahmin", "canli_ajan", "iyms_kars", "iyms_vk", "toto_tab", "kelly_tab",
@@ -135,6 +164,7 @@ def rapor():
             "monsure_bakim": _guvenli(lambda: __import__("monsure_bakim").rapor()),
             "monsure_bakim2": _guvenli(lambda: __import__("monsure_bakim").rapor2()),
             "monsure_tazelik": _guvenli(lambda: __import__("monsure_bakim")._tazelik()),
+            "sayfalar": _guvenli(sayfa_testi),
             "kupon_temizle": _guvenli(lambda: __import__("kupon_temizle").rapor()),
             "avci": _guvenli(lambda: {"kasa": __import__("avci").kasa(), "son": [{k: x.get(k) for k in ("saat", "ev", "dep", "taraf", "pin", "pin_adil", "xb", "fark", "yakalandi", "kalan", "b_tutar", "b_oran", "b_durum", "durum")} for x in __import__("avci").get_page_data()["L"][:8]]}),
             "iyms_bugun": _guvenli(lambda: __import__("iyms_bugun").ozet()),
