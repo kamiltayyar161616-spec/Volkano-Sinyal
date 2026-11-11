@@ -28,3 +28,39 @@ def tani():
     out["e_kayit"] = x.execute("SELECT mid, ev, dep, ko FROM e WHERE ev LIKE '%Kobe%' OR ev LIKE '%Kawasaki%' OR ev LIKE '%Urawa%'").fetchall()
     x.close()
     return out
+
+
+def tani2():
+    import glob
+    import json
+    import os
+    out = {}
+    x = sqlite3.connect(f"file:{X.DB}?mode=ro", uri=True)
+    for m, xid, ev in x.execute("SELECT mid, xid, ev FROM e WHERE mid IN (3110400, 3110401, 3110403)").fetchall():
+        S = x.execute("SELECT at, tur, ms IS NOT NULL, iyms IS NOT NULL, au IS NOT NULL FROM s WHERE mid=? ORDER BY at", (m,)).fetchall()
+        y = {"xid": xid, "satir": S[-4:], "n": len(S)}
+        for gm in (4, 2, 1):
+            try:
+                G = X._get(f"{X.B}/GetGameZip?id={xid}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode={gm}&partner=1&topGroups=&marketType=1").get("Value") or {}
+                GE = G.get("GE") or []
+                y[f"gm{gm}"] = [(e.get("G"), sum(len(a) for a in e.get("E") or [])) for e in GE]
+                g11 = [e for e in GE if e.get("G") == 11]
+                if g11:
+                    y[f"gm{gm}_g11"] = [(o.get("T"), o.get("C")) for a in g11[0].get("E") or [] for o in a]
+            except Exception as e:
+                y[f"gm{gm}"] = str(e)[:100]
+        out[ev] = y
+    x.close()
+    E = X.bulten() if not X._E.get("E") else X._E["E"]
+    out["yokohama"] = [(g["O1"], g["O2"], datetime.fromtimestamp(g["S"], timezone.utc).isoformat()) for g in E if "Yokohama" in g["O1"] or "Kashima" in g["O2"]][:5]
+    L = []
+    for f in glob.glob(os.path.expanduser("~/.pm2/logs/*sinyal*error*")):
+        with open(f, "rb") as h:
+            h.seek(max(0, os.path.getsize(f) - 400_000))
+            T = h.read().decode("utf-8", "replace").splitlines()
+        for i, l in enumerate(T):
+            if "translate" in l:
+                L.append(T[max(0, i - 8):i + 1])
+    out["translate"] = L[-2:]
+    out["translate_n"] = len(L)
+    return out

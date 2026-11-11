@@ -138,7 +138,7 @@ def rapor():
             "kupon_temizle": _guvenli(lambda: __import__("kupon_temizle").rapor()),
             "avci": _guvenli(lambda: {"kasa": __import__("avci").kasa(), "son": [{k: x.get(k) for k in ("saat", "ev", "dep", "taraf", "pin", "pin_adil", "xb", "fark", "yakalandi", "kalan", "b_tutar", "b_oran", "b_durum", "durum")} for x in __import__("avci").get_page_data()["L"][:8]]}),
             "iyms_bugun": _guvenli(lambda: __import__("iyms_bugun").ozet()),
-            "xbet_tani": _guvenli(lambda: __import__("xbet_tani").tani()),
+            "xbet_tani": _guvenli(lambda: __import__("xbet_tani").tani2()),
             "iyms_dun": _guvenli(lambda: __import__("iyms_bugun").ozet(1)),
             "iyms_sekme_dun": _guvenli(lambda: __import__("iyms_bugun").sekmeler((datetime.now(timezone.utc) - timedelta(hours=21)).date().isoformat())),
             "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7())}
