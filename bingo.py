@@ -9,7 +9,7 @@ Karşılaştırılan seçenekler (aynı maç, aynı çizgi):
   MS 1/X/2        iddaa st=4   ↔ 1xbet G1 T1/T2/T3
   Üst/Alt X.5     iddaa st=14  ↔ 1xbet G17 T9 (üst) / T10 (alt), aynı P
   Gol olmaz       iddaa st=34 'Olmaz' ↔ 1xbet Alt (skor toplamı + 0.5)
-1xbet'in marjsız (adil) oranı hesaplanır. iddaa oranı ≥ 1.30 ve iddaa / adil ≥ 1.05 ise BINGO (maç + seçenek başına bir kayıt;
+1xbet'in marjsız (adil) oranı hesaplanır. iddaa oranı 1.30–10 ve iddaa / adil ≥ 1.05 ise BINGO (maç + seçenek başına bir kayıt;
 ilk görülen oran ROI'de kullanılır, en iyi oran ve fırsatın kaç saniye açık kaldığı ayrıca tutulur). Dakika ≤ 85.
 Sonuç: 1xbet canlı skoru. Üst kazanınca hemen, diğerleri maç akıştan düşünce (son görülen dakika ≥ 85) işaretlenir; erken düşerse 'belirsiz'.
   python3 bingo.py        (özet)"""
@@ -39,14 +39,17 @@ VDP = "d4e045a4-860c-465a-8fc4-cf2b1c4ddac3-V3"
 V_URL = f"{VB}/Offer/GetSnapshotEventMarkets?sportId=1&phaseFilter=L&dpId={VDP}&{VQ}"
 FIX_URL = f"{VB}/offer/GetFixtures?dp={VDP}&{VQ}"
 MIN_ORAN = 1.30
+MAX_ORAN = 10.0             # çok uç sürpriz oranlar (gürültü) alınmaz
 ESIK = 1.05                 # iddaa / 1xbet adil
 MAX_DK = 85
 KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet+Volkano adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Pazar", "iddaa / adil", "iddaa oranı", "Dakika")
+SIRA = ("Tümü", "Pazar", "oran / adil", "oran", "Dakika")
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
 _vesle = {}                 # 1xbet I -> Volkano ai ("" = yok)
+_vbekle = {}                # (xid, sec) -> ilk görüldüğü Volkano taramasının zamanı (onay için)
+_skor = {}                  # xid -> (skor, değiştiği an)
 _K = {}                     # kaynak durumu: {ad: {t, ara, taban, veri, vt, hata, ardisik}}
 
 
@@ -88,17 +91,23 @@ def db():
             pass
     c.execute("""CREATE TABLE IF NOT EXISTS bahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
                  getiri REAL, PRIMARY KEY (xid, sec))""")
+    # VOLKANO sekmesi: aynı yapı; 'iddaa' sütunu burada oynanan Volkano oranını tutar, adil = yalnız 1xbet
+    c.execute("""CREATE TABLE IF NOT EXISTS vsinyal (xid INTEGER, sec TEXT, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT, pazar TEXT,
+                 cizgi REAL, dk INTEGER, skor TEXT, iddaa REAL, x_oran REAL, adil REAL, deger REAL, max_iddaa REAL, max_deger REAL,
+                 son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, v_oran REAL, x_adil REAL, v_adil REAL, PRIMARY KEY (xid, sec))""")
+    c.execute("""CREATE TABLE IF NOT EXISTS vbahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
+                 getiri REAL, PRIMARY KEY (xid, sec))""")
     return c
 
 
-def kasa(c=None):
+def kasa(c=None, b="bahis"):
     kapat = c is None
     if c is None:
         if not os.path.exists(DB):
             return {"bakiye": KASA0, "serbest": KASA0, "acik": 0.0, "n": 0, "biten": 0, "kazanan": 0, "kar": 0.0, "roi": None, "oynanan": 0.0}
         c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
     try:
-        R = c.execute("SELECT tutar, durum, getiri FROM bahis").fetchall()
+        R = c.execute(f"SELECT tutar, durum, getiri FROM {b}").fetchall()
     except sqlite3.OperationalError:
         R = []
     if kapat:
@@ -112,24 +121,24 @@ def kasa(c=None):
             "roi": round(100 * kar / oyn, 1) if oyn else None, "oynanan": round(oyn, 2)}
 
 
-def _bahis_ac(c, xid, sec, oran, p, at):
+def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis"):
     b = oran - 1
     f = (b * p - (1 - p)) / b if b > 0 else 0
     if f <= 0:
         return
-    k = kasa(c)
+    k = kasa(c, b_tab)
     t = max(MIN_BAHIS, min(MAX_BAHIS, round(k["serbest"] * f * KELLY_PAY / 5) * 5))
     if t > k["serbest"]:
         return
-    c.execute("INSERT OR IGNORE INTO bahis (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
+    c.execute(f"INSERT OR IGNORE INTO {b_tab} (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
               (xid, sec, at, oran, round(p, 4), round(f, 4), t))
 
 
-def bahis_kapat(c):
-    for xid, sec, oran, tutar, sonuc in c.execute("""SELECT b.xid, b.sec, b.oran, b.tutar, s.sonuc FROM bahis b JOIN sinyal s
+def bahis_kapat(c, s_tab="sinyal", b_tab="bahis"):
+    for xid, sec, oran, tutar, sonuc in c.execute(f"""SELECT b.xid, b.sec, b.oran, b.tutar, s.sonuc FROM {b_tab} b JOIN {s_tab} s
                                                      ON s.xid=b.xid AND s.sec=b.sec WHERE b.durum='açık' AND s.sonuc IS NOT NULL""").fetchall():
         d, g = {"tuttu": ("kazandı", tutar * oran), "yattı": ("kaybetti", 0.0)}.get(sonuc, ("iade", tutar))
-        c.execute("UPDATE bahis SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
+        c.execute(f"UPDATE {b_tab} SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
 
 
 def _novig(*o):
@@ -308,7 +317,7 @@ def tur():
             p = sum(q for _, q in S.values()) / len(S)
             adil = 1 / p
             d = io / adil
-            if io < MIN_ORAN or d < ESIK:
+            if io < MIN_ORAN or io > MAX_ORAN or d < ESIK:
                 continue
             xo, vo = S.get("X", (None, None)), S.get("V", (None, None))
             r = c.execute("SELECT son_at, sure FROM sinyal WHERE xid=? AND sec=?", (x["I"], sec)).fetchone()
@@ -329,11 +338,82 @@ def tur():
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
     bahis_kapat(c)
+    yv, acik_v = volkano_tur(c, X, VF, V, now, at)
+    sonuclandir(c, X, now, "vsinyal")
+    bahis_kapat(c, "vsinyal", "vbahis")
     c.commit()
     c.close()
-    _last.update(eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
+    _last.update(vacik=acik_v, eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
                  kaynak={k: {"ara": v["ara"], "hata": v["hata"], "yas": round(time.time() - v["vt"]) if v["vt"] else None} for k, v in _K.items()})
-    return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni}"
+    return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO açık {len(acik_v)} yeni {yv}"
+
+
+def volkano_tur(c, X, VF, V, now, at):
+    """Volkano geride: Volkano oranı ≥ 1.30 ve Volkano / 1xbet adil ≥ 1.05. Yanlış alarm koruması: aynı fark iki ayrı Volkano
+    taramasında (≥ 20 sn arayla) görülmeli; skor son 90 sn içinde değiştiyse bakılmaz."""
+    vt = (_K.get("volkano") or {}).get("vt") or 0
+    yeni, acik, gor = 0, [], set()
+    if not V or not VF:
+        _vbekle.clear()
+        return 0, []
+    for x in X.values():
+        sk = (x["s1"], x["s2"])
+        if _skor.get(x["I"], (None, 0))[0] != sk:
+            _skor[x["I"]] = (sk, time.time())
+        if x["dk"] > MAX_DK or time.time() - _skor[x["I"]][1] < 90:
+            continue
+        ai = _v_eslestir(x, VF)
+        v = V.get(ai) if ai else None
+        if not v:
+            continue
+        gol = x["s1"] + x["s2"]
+        A = []
+        nv = _novig(x["ms"].get("1"), x["ms"].get("X"), x["ms"].get("2"))
+        if nv:
+            for k, p in zip(("1", "X", "2"), nv):
+                if v["ms"].get(k):
+                    A.append(("MS", f"MS {k}", None, v["ms"][k], x["ms"][k], p))
+        for cz, xo in x["au"].items():
+            vo = v["au"].get(cz) or {}
+            nv = _novig(xo.get("ust"), xo.get("alt"))
+            if not nv or cz < gol:
+                continue
+            if vo.get("ust"):
+                A.append(("A/Ü", f"Üst {cz:g}", cz, vo["ust"], xo["ust"], nv[0]))
+            if vo.get("alt"):
+                A.append(("A/Ü", f"Alt {cz:g}", cz, vo["alt"], xo["alt"], nv[1]))
+        for pazar, sec, cz, vo, xo, p in A:
+            d = vo * p
+            if vo < MIN_ORAN or vo > MAX_ORAN or d < ESIK:
+                continue
+            key = (x["I"], sec)
+            gor.add(key)
+            if key not in _vbekle:
+                _vbekle[key] = vt
+            if _vbekle[key] == vt:
+                continue                       # henüz tek Volkano taramasında görüldü — onay bekliyor
+            adil = 1 / p
+            acik.append({"ev": x["ev"], "dep": x["dep"], "sec": sec, "iddaa": vo, "adil": round(adil, 2), "deger": round(d, 3), "dk": x["dk"],
+                         "x_oran": xo, "v_oran": vo})
+            r = c.execute("SELECT son_at, sure FROM vsinyal WHERE xid=? AND sec=?", key).fetchone()
+            if r is None:
+                yeni += 1
+                c.execute("""INSERT INTO vsinyal (xid, sec, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
+                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)""",
+                          (x["I"], sec, at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
+                           vo, xo, round(adil, 3), round(d, 4), vo, round(d, 4), at, vo, round(adil, 3)))
+                _bahis_ac(c, x["I"], sec, vo, p, at, "vbahis")
+            else:
+                ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
+                sure = (r[1] or 0) + (ek if ek <= 3 * V_SN else 0)
+                c.execute("""UPDATE vsinyal SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
+                             WHERE xid=? AND sec=?""", (at, sure, vo, round(d, 4), x["I"], sec))
+    for k in list(_vbekle):
+        if k not in gor:
+            del _vbekle[k]
+    if len(_skor) > 5000:
+        _skor.clear()
+    return yeni, acik
 
 
 def _kazandi(sec, s1, s2):
@@ -344,27 +424,27 @@ def _kazandi(sec, s1, s2):
     return (s1 + s2 > c) if sec.startswith("Üst") else (s1 + s2 < c)
 
 
-def sonuclandir(c, X, now):
-    for xid, sec in c.execute("SELECT xid, sec FROM sinyal WHERE sonuc IS NULL").fetchall():
+def sonuclandir(c, X, now, s_tab="sinyal"):
+    for xid, sec in c.execute(f"SELECT xid, sec FROM {s_tab} WHERE sonuc IS NULL").fetchall():
         m = c.execute("SELECT s1, s2, dk, son_at FROM mac WHERE xid=?", (xid,)).fetchone()
         if not m:
             continue
         s1, s2, dk, son = m
         if xid in X:
             if sec.startswith("Üst") and s1 + s2 > float(sec.split()[1]):
-                c.execute("UPDATE sinyal SET sonuc='tuttu', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
+                c.execute(f"UPDATE {s_tab} SET sonuc='tuttu', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
             elif sec.startswith("Alt") and s1 + s2 > float(sec.split()[1]):
-                c.execute("UPDATE sinyal SET sonuc='yattı', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
+                c.execute(f"UPDATE {s_tab} SET sonuc='yattı', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
             continue
         gecen = (now - datetime.fromisoformat(son)).total_seconds()
         if gecen < 2 * SN:
             continue
         if dk >= BITIS_DK:
-            c.execute("UPDATE sinyal SET sonuc=?, final=? WHERE xid=? AND sec=?",
+            c.execute(f"UPDATE {s_tab} SET sonuc=?, final=? WHERE xid=? AND sec=?",
                       ("tuttu" if _kazandi(sec, s1, s2) else "yattı", f"{s1}-{s2}", xid, sec))
             c.execute("UPDATE mac SET bitti=1 WHERE xid=?", (xid,))
         elif gecen > 3 * 3600:
-            c.execute("UPDATE sinyal SET sonuc='belirsiz', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
+            c.execute(f"UPDATE {s_tab} SET sonuc='belirsiz', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
 
 
 # ---------- sayfa ----------
@@ -375,17 +455,19 @@ def _kova(v, sinir, adlar):
     return adlar[-1]
 
 
-def get_page_data(gun=None):
-    out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun, "acik": _last.get("acik") or [], "kasa": kasa(), "K": []}
+def get_page_data(gun=None, kaynak="iddaa"):
+    s_tab, b_tab = ("vsinyal", "vbahis") if kaynak == "volkano" else ("sinyal", "bahis")
+    out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun, "kasa": kasa(None, b_tab), "K": [],
+           "acik": _last.get("vacik" if kaynak == "volkano" else "acik") or []}
     if not os.path.exists(DB):
         return out
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
     c.row_factory = sqlite3.Row
-    R = [dict(r) for r in c.execute("SELECT * FROM sinyal ORDER BY at DESC")]
     try:
-        B = {(r["xid"], r["sec"]): dict(r) for r in c.execute("SELECT * FROM bahis")}
+        R = [dict(r) for r in c.execute(f"SELECT * FROM {s_tab} ORDER BY at DESC")]
+        B = {(r["xid"], r["sec"]): dict(r) for r in c.execute(f"SELECT * FROM {b_tab}")}
     except sqlite3.OperationalError:
-        B = {}
+        R, B = [], {}
     c.close()
     for r in R:
         b = B.get((r["xid"], r["sec"]))
@@ -409,8 +491,8 @@ def get_page_data(gun=None):
             continue
         ekle("Tümü", "tüm sinyaller", r)
         ekle("Pazar", r["pazar"] if r["pazar"] != "A/Ü" else ("Üst" if r["sec"].startswith("Üst") else "Alt"), r)
-        ekle("iddaa / adil", _kova(r["deger"], (1.10, 1.20), ("1.05–1.10", "1.10–1.20", "1.20+")), r)
-        ekle("iddaa oranı", _kova(r["iddaa"], (1.60, 2.20, 3.50), ("1.30–1.60", "1.60–2.20", "2.20–3.50", "3.50+")), r)
+        ekle("oran / adil", _kova(r["deger"], (1.10, 1.20), ("1.05–1.10", "1.10–1.20", "1.20+")), r)
+        ekle("oran", _kova(r["iddaa"], (1.60, 2.20, 3.50), ("1.30–1.60", "1.60–2.20", "2.20–3.50", "3.50+")), r)
         ekle("Dakika", _kova(r["dk"], (30, 60, 75), ("0–29", "30–59", "60–74", "75–85")), r)
     out["ozet"] = [{"grup": k[0], "ad": k[1], "n": v[0], "w": v[1], "isabet": round(100 * v[1] / v[0]), "roi": round(100 * v[2] / v[0], 1),
                     "kar": round(v[2], 2)} for k, v in sorted(G.items(), key=lambda kv: (SIRA.index(kv[0][0]), kv[0][1]))]
@@ -424,7 +506,11 @@ def get_page_data(gun=None):
 
 def ozet():
     d = get_page_data()
-    return {"last": {k: v for k, v in d["last"].items() if k != "acik"}, "kasa": d["kasa"], "acik": d["acik"][:10], "ozet": d["ozet"],
+    v = get_page_data(None, "volkano")
+    return {"last": {k: v for k, v in d["last"].items() if k not in ("acik", "vacik")}, "kasa": d["kasa"], "acik": d["acik"][:10], "ozet": d["ozet"],
+            "volkano": {"kasa": v["kasa"], "acik": v["acik"][:10], "ozet": v["ozet"][:6],
+                        "son": [{k: r.get(k) for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "x_oran", "adil", "deger", "sure", "sonuc", "final")}
+                                for r in v["L"][:10]]},
             "son": [{k: r.get(k) for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "x_oran", "v_oran", "adil", "deger", "max_iddaa", "sure", "sonuc", "final")}
                     for r in d["L"][:10]]}
 

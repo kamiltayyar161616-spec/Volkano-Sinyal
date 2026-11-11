@@ -501,7 +501,8 @@ def iyms_av_page():
 
 @app.route("/bingo")
 def bingo_page():
-    return render_template("bingo.html", d=bingo.get_page_data(request.args.get("gun")), sekme=request.args.get("sekme"), active_page="bingo")
+    return render_template("bingo.html", d=bingo.get_page_data(request.args.get("gun"), "volkano" if request.args.get("sekme") in ("volkano", "vkupon") else "iddaa"),
+                           sekme=request.args.get("sekme"), active_page="bingo")
 
 
 @app.route("/iyms-ortak")
