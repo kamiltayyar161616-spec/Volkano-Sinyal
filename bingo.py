@@ -30,6 +30,7 @@ SN = 30
 MIN_ORAN = 1.30
 ESIK = 1.05                 # iddaa / 1xbet adil
 MAX_DK = 85
+KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
 SIRA = ("Tümü", "Pazar", "iddaa / adil", "iddaa oranı", "Dakika")
@@ -49,7 +50,50 @@ def db():
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS mac (xid INTEGER PRIMARY KEY, ev TEXT, dep TEXT, lig TEXT, s1 INTEGER, s2 INTEGER, dk INTEGER,
                  son_at TEXT, bitti INTEGER DEFAULT 0)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS bahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
+                 getiri REAL, PRIMARY KEY (xid, sec))""")
     return c
+
+
+def kasa(c=None):
+    kapat = c is None
+    if c is None:
+        if not os.path.exists(DB):
+            return {"bakiye": KASA0, "serbest": KASA0, "acik": 0.0, "n": 0, "biten": 0, "kazanan": 0, "kar": 0.0, "roi": None, "oynanan": 0.0}
+        c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+    try:
+        R = c.execute("SELECT tutar, durum, getiri FROM bahis").fetchall()
+    except sqlite3.OperationalError:
+        R = []
+    if kapat:
+        c.close()
+    bit = [r for r in R if r[1] != "açık"]
+    kar = sum((r[2] or 0) - r[0] for r in bit)
+    acik = sum(r[0] for r in R if r[1] == "açık")
+    oyn = sum(r[0] for r in bit if r[1] != "iade")
+    return {"bakiye": round(KASA0 + kar, 2), "serbest": round(KASA0 + kar - acik, 2), "acik": round(acik, 2), "n": len(R),
+            "biten": len(bit), "kazanan": sum(1 for r in bit if r[1] == "kazandı"), "kar": round(kar, 2),
+            "roi": round(100 * kar / oyn, 1) if oyn else None, "oynanan": round(oyn, 2)}
+
+
+def _bahis_ac(c, xid, sec, oran, p, at):
+    b = oran - 1
+    f = (b * p - (1 - p)) / b if b > 0 else 0
+    if f <= 0:
+        return
+    k = kasa(c)
+    t = max(MIN_BAHIS, min(MAX_BAHIS, round(k["serbest"] * f * KELLY_PAY / 5) * 5))
+    if t > k["serbest"]:
+        return
+    c.execute("INSERT OR IGNORE INTO bahis (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
+              (xid, sec, at, oran, round(p, 4), round(f, 4), t))
+
+
+def bahis_kapat(c):
+    for xid, sec, oran, tutar, sonuc in c.execute("""SELECT b.xid, b.sec, b.oran, b.tutar, s.sonuc FROM bahis b JOIN sinyal s
+                                                     ON s.xid=b.xid AND s.sec=b.sec WHERE b.durum='açık' AND s.sonuc IS NOT NULL""").fetchall():
+        d, g = {"tuttu": ("kazandı", tutar * oran), "yattı": ("kaybetti", 0.0)}.get(sonuc, ("iade", tutar))
+        c.execute("UPDATE bahis SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
 
 
 def _novig(*o):
@@ -179,12 +223,14 @@ def tur():
                              max_iddaa, max_deger, son_at, sure) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)""",
                           (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            io, xo, round(adil, 3), round(d, 4), io, round(d, 4), at))
+                _bahis_ac(c, x["I"], sec, io, 1 / adil, at)
             else:
                 ek = int((now - datetime.fromisoformat(r[1])).total_seconds())
                 sure = (r[2] or 0) + (ek if ek <= 3 * SN else 0)
                 c.execute("""UPDATE sinyal SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
+    bahis_kapat(c)
     c.commit()
     c.close()
     _last.update(eslesen=n_es, iddaa=len(I), xbet=len(X), acik=acik)
@@ -231,13 +277,24 @@ def _kova(v, sinir, adlar):
 
 
 def get_page_data(gun=None):
-    out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun, "acik": _last.get("acik") or []}
+    out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun, "acik": _last.get("acik") or [], "kasa": kasa(), "K": []}
     if not os.path.exists(DB):
         return out
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
     c.row_factory = sqlite3.Row
     R = [dict(r) for r in c.execute("SELECT * FROM sinyal ORDER BY at DESC")]
+    try:
+        B = {(r["xid"], r["sec"]): dict(r) for r in c.execute("SELECT * FROM bahis")}
+    except sqlite3.OperationalError:
+        B = {}
     c.close()
+    for r in R:
+        b = B.get((r["xid"], r["sec"]))
+        if b:
+            b.update(p_adil=round(100 * b["p"], 1), p_iddaa=round(100 / b["oran"], 1), fark=round(100 * (b["oran"] * b["p"] - 1), 1),
+                     kelly_y=round(100 * b["kelly"], 1), pay_y=round(100 * b["kelly"] * KELLY_PAY, 1),
+                     net=round((b["getiri"] or 0) - b["tutar"], 2) if b["durum"] != "açık" else None)
+            r["bahis"] = b
     G = {}
 
     def ekle(grup, ad, r):
@@ -262,13 +319,13 @@ def get_page_data(gun=None):
     bugun = datetime.now(TR).date().isoformat()
     if gun not in gunler:
         gun = bugun if bugun in gunler or not gunler else gunler[0]
-    out.update(gunler=gunler, gun=gun, L=[r for r in R if r["gun"] == gun])
+    out.update(gunler=gunler, gun=gun, L=[r for r in R if r["gun"] == gun], K=[r for r in R if r.get("bahis")][:200])
     return out
 
 
 def ozet():
     d = get_page_data()
-    return {"last": {k: v for k, v in d["last"].items() if k != "acik"}, "acik": d["acik"][:10], "ozet": d["ozet"],
+    return {"last": {k: v for k, v in d["last"].items() if k != "acik"}, "kasa": d["kasa"], "acik": d["acik"][:10], "ozet": d["ozet"],
             "son": [{k: r[k] for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "adil", "deger", "max_iddaa", "sure", "sonuc", "final")}
                     for r in d["L"][:10]]}
 
