@@ -127,6 +127,7 @@ def log_hatalari():
 
 
 _SAYFA = {"t": 0, "v": None}
+_BASLA = time.time()
 SAYFALAR = ["/", "/alt-ust", "/canli-ajan", "/desen", "/gunun-ozeti", "/ht-ft", "/istatistik", "/iy-ms-v", "/iyms-av", "/iyms-kars", "/iyms-vk",
             "/iyms-xv", "/kelly", "/kupon", "/kupon-gunluk", "/nowgoal", "/oracle", "/oracle-cift-tavan", "/oracle3", "/oracle9", "/oranlar",
             "/oto-tahmin", "/oynanabilir", "/patron", "/patron?sekme=canli", "/patron?sekme=kupon", "/patron?sekme=avci", "/sd-oran",
@@ -137,6 +138,8 @@ def sayfa_testi():
     """30 dk'da bir: butun sekmeler uygulamanin icinden acilir (salt okunur GET) — durum kodu, sure, boyut, hata/bos isareti"""
     if _SAYFA["v"] is not None and time.time() - _SAYFA["t"] < 1800:
         return _SAYFA["v"]
+    if time.time() - _BASLA < 900:
+        return {"durum": "uygulama açılalı 15 dk olmadı, ilk turlar bekleniyor"}
     a = getattr(sys.modules.get("__main__"), "app", None)
     if a is None:
         return {"HATA": "uygulama nesnesi yok"}
@@ -147,7 +150,13 @@ def sayfa_testi():
             try:
                 r = cl.get(u)
                 h = r.get_data(as_text=True)
-                isaret = [k for k in ("Traceback", "⚠", "HATA", "Internal Server Error", "henüz yok", "hesaplanıyor") if k in h]
+                import re as _re
+                metin = _re.sub(r"\s+", " ", _re.sub(r"<[^>]+>", " ", _re.sub(r"<(script|style).*?</\1>", " ", h, flags=_re.S)))
+                isaret = []
+                for k in ("Traceback", "⚠", "HATA", "Internal Server Error", "henüz yok", "hesaplanıyor"):
+                    i = metin.find(k)
+                    if i >= 0:
+                        isaret.append(metin[max(0, i - 60):i + 140])
                 out[u] = [r.status_code, round(time.time() - t0, 1), len(h) // 1024, isaret]
             except Exception as e:
                 out[u] = [0, round(time.time() - t0, 1), 0, [f"{type(e).__name__}: {str(e)[:120]}"]]
