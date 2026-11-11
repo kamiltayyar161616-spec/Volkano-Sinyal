@@ -19,3 +19,32 @@ def ara():
     x.close()
     out["last"] = {k: str(v)[:250] for k, v in X._last.items()}
     return out
+
+
+def ham():
+    """baslamamis 12 macta 1xbet detay cevabinin ham hali + bultendeki numara"""
+    import json as J
+    import urllib.request
+    now = datetime.now(timezone.utc)
+    x = sqlite3.connect(f"file:{X.DB}?mode=ro", uri=True)
+    L = x.execute("SELECT mid, xid, ko, ev, dep, son_bakis FROM e WHERE ko > ? ORDER BY ko LIMIT 12", (now.isoformat(),)).fetchall()
+    x.close()
+    E = {g["I"]: g for g in (X._E.get("E") or [])}
+    out = {"bulten": len(E), "bulten_yas_dk": round((datetime.now().timestamp() - X._E.get("t", 0)) / 60, 1), "zorla": X._last.get("zorla"), "maclar": []}
+    for m, xid, ko, ev, dep, sb in L:
+        u = f"{X.B}/GetGameZip?id={xid}&lng=en&isSubGames=true&GroupEvents=true&countevents=500&grMode=4&partner=1&topGroups=&marketType=1"
+        try:
+            with urllib.request.urlopen(urllib.request.Request(u, headers=X.H), timeout=30) as f:
+                b = f.read().decode("utf-8", "replace")
+                st = f.status
+            D = J.loads(b)
+            V = D.get("Value") or {}
+            y = {"durum": st, "boy": len(b), "anahtar": list(D.keys())[:8], "Success": D.get("Success"), "Error": str(D.get("Error"))[:80],
+                 "grup": len(V.get("GE") or []) if isinstance(V, dict) else None}
+        except Exception as e:
+            y = {"hata": f"{type(e).__name__}: {str(e)[:100]}"}
+        y.update(mac=f"{ev} - {dep}", ko=ko, xid=xid, bultende=xid in E, son_bakis=sb)
+        out["maclar"].append(y)
+        import time
+        time.sleep(0.5)
+    return out
