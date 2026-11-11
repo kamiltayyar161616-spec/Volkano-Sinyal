@@ -87,6 +87,59 @@ def _esle_ek(h):
     return n
 
 
+_ad_denendi = {}             # mid -> zaman (ad cekme denemesi, 6 saatte bir tekrar)
+
+
+def _ko_utc(s):
+    try:
+        t = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (t if t.tzinfo else t.replace(tzinfo=TRZ)).astimezone(timezone.utc)
+
+
+def _gun_gun(h):
+    """Eslesmeyen Toto maclari icin GUN GUN: iddaa'nin verdigi mac saatinde (±20 dk) baslayan, NowGoal'da adi henuz
+    cekilmemis maclarin (NowGoal adlari sadece 36 saat icin ceker) adini h2h sayfasinin basligindan al, sonra eslestir.
+    Sadece home/away/league_ng yazilir; macin durumu (status) ve istatistik akisi degismez."""
+    n, cekilen = 0, 0
+    for m in h["maclar"]:
+        if m.get("mid"):
+            continue
+        t = _ko_utc((m.get("iddaa") or {}).get("tarih"))
+        if not t:
+            continue
+        with ng._db_lock:
+            c = ng._conn()
+            rows = [r["mid"] for r in c.execute("""SELECT mid FROM ng_match WHERE kickoff_utc BETWEEN ? AND ? AND (home IS NULL OR home='')""",
+                                                 (ng._iso(t - timedelta(minutes=20)), ng._iso(t + timedelta(minutes=20))))]
+            c.close()
+        for mid in rows:
+            if time.time() - _ad_denendi.get(mid, 0) < 6 * 3600 or cekilen >= 150:
+                continue
+            _ad_denendi[mid] = time.time()
+            cekilen += 1
+            try:
+                pg = ng._get(f"/match/h2h-{mid}", valid=lambda b: "<title>" in b.lower())
+                ev, dep = ng._title_teams(pg)
+            except Exception:
+                continue
+            if ev and dep:
+                with ng._db_lock:
+                    c = ng._conn()
+                    c.execute("UPDATE ng_match SET home=?, away=? WHERE mid=? AND (home IS NULL OR home='')", (ev, dep, mid))
+                    c.commit()
+                    c.close()
+            time.sleep(ng.BEKLE)
+        for e1, d1 in ((m["ev"], m["dep"]), (_ing(m["ev"]), _ing(m["dep"]))):
+            r = T._eslestir(e1, d1, t - timedelta(hours=1), t + timedelta(hours=1))
+            if r:
+                m.update(mid=r["mid"], ng=f"{r['home']} - {r['away']}", ko=r["kickoff_utc"])
+                n += 1
+                break
+    return n, cekilen
+
+
 def _sonuc_yaz(m, e):
     """iddaa sonucu ('2-0' / winner) -> m['skor'] (NowGoal sonucu yoksa sayfa bunu kullanir)"""
     r = str(e.get("result") or "").replace(" ", "")
@@ -120,6 +173,11 @@ def tur():
         n = _esle_ek(h)
         if n:
             log.append(f"{ad}: ülke adı çevirisiyle +{n} eşleşme")
+        try:
+            n2, ck = _gun_gun(h)
+            log.append(f"gün gün: {ck} NowGoal maçının adı çekildi, +{n2} eşleşme")
+        except Exception as e:
+            log.append(f"gün gün hata {type(e).__name__}: {str(e)[:100]}")
         degisti = True
     for x in H.values():                              # elle yuklenmis eski haftalar: "14. hafta" -> devre 366
         mm = re.search(r"(\d+)\. hafta", x.get("hafta") or "")
