@@ -20,7 +20,7 @@ import toto_tab as T
 
 B = "https://sportotov2.iddaa.com/SporToto"
 FARK = 352                    # devre no - FARK = oyun programi no (367 -> 15)
-TUR_SN = 3 * 3600
+TUR_SN = 3600
 TRZ = timezone(timedelta(hours=3))
 _last = {"at": None, "log": "", "hata": None}
 
@@ -88,6 +88,46 @@ def _esle_ek(h):
 
 
 _ad_denendi = {}             # mid -> zaman (ad cekme denemesi, 6 saatte bir tekrar)
+_komsu_denendi = set()       # NowGoal'da yoklanan komsu mac numaralari
+KOMSU = 80                   # eslesen Toto maclarinin numarasinin ±80 komsusu yoklanir (ayni turnuvanin maclari ardisik numarali)
+
+
+def _komsu(h):
+    """Eslesmemis Toto maci varsa: eslesen Toto maclarinin NowGoal numaralarinin komsularini yokla; NowGoal'in listesinde
+    henuz olmayan (1-2 gunden ileri) maclari ng_match'e ekle (NowGoal'in kendi komsu yoklamasiyla ayni kayit)."""
+    if all(m.get("mid") for m in h["maclar"]):
+        return 0
+    tarihler = [_ko_utc((m.get("iddaa") or {}).get("tarih")) for m in h["maclar"] if not m.get("mid")]
+    tarihler = [t for t in tarihler if t]
+    if not tarihler:
+        return 0
+    lo, hi = min(tarihler) - timedelta(hours=1), max(tarihler) + timedelta(hours=1)
+    bilinen = [m["mid"] for m in h["maclar"] if m.get("mid")]
+    with ng._db_lock:
+        c = ng._conn()
+        var = {r[0] for r in c.execute("SELECT mid FROM ng_match")}
+        c.close()
+    aday = sorted({b + k for b in bilinen for k in range(-KOMSU, KOMSU + 1)} - var - _komsu_denendi)[:250]
+    eklenen = 0
+    for mid in aday:
+        _komsu_denendi.add(mid)
+        try:
+            ko, _, _ = ng._flash(mid)
+        except Exception:
+            ko = None
+        time.sleep(ng.BEKLE)
+        if not ko:
+            continue
+        t = datetime.fromisoformat(ko)
+        if not lo <= t <= hi:
+            continue
+        with ng._db_lock:
+            c = ng._conn()
+            c.execute("INSERT OR IGNORE INTO ng_match (mid, kickoff_utc, first_seen, status) VALUES (?,?,?,?)", (mid, ko, ng._iso(ng._now()), "new"))
+            c.commit()
+            c.close()
+        eklenen += 1
+    return eklenen
 
 
 def _ko_utc(s):
@@ -176,6 +216,10 @@ def tur():
         try:
             n2, ck = _gun_gun(h)
             log.append(f"gün gün: {ck} NowGoal maçının adı çekildi, +{n2} eşleşme")
+            k = _komsu(h)
+            if k:
+                n3, ck3 = _gun_gun(h)
+                log.append(f"komşu yoklama: +{k} ileri tarihli NowGoal maçı, {ck3} ad çekildi, +{n3} eşleşme")
         except Exception as e:
             log.append(f"gün gün hata {type(e).__name__}: {str(e)[:100]}")
         degisti = True
