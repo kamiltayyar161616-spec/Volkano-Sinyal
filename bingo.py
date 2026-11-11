@@ -2,7 +2,7 @@
 Her 10 sn: iddaa canlı bülteni (sportsbookv2.iddaa.com, tek istek) + 1xbet canlı akışı (1xbet.mobi service-api/LiveFeed Get1x2_VZip, tek istek)
 + 20 sn'de bir Volkano canlı oranları (sportdataproviderv3-volcano.xtreme.bet Offer/GetSnapshotEventMarkets phaseFilter=L, tek istek;
 maç adları GetFixtures, 5 dk'da bir). Volkano: pazar 1 = MS, pazar 18 = toplam gol Alt/Üst (bl = çizgi).
-Adil oran = 1xbet ve Volkano'nun marjsız ihtimallerinin ortalaması (hangisi varsa).
+Adil oran = yalnız 1xbet'in marjsız ihtimali (Volkano oranı kartta bilgi olarak gösterilir).
 Koruma: bir kaynak engel/aşırı istek (403/429/503) ya da üst üste 3 hata verirse o kaynağın aralığı 10 → 20 → 60 sn'ye çıkar,
 ilk başarılı istekte normale döner. Kaynaklar birbirinden bağımsız; 1xbet yoksa (skor kaynağı) o tur atlanır.
 Karşılaştırılan seçenekler (aynı maç, aynı çizgi):
@@ -42,7 +42,7 @@ MIN_ORAN = 1.30
 MAX_ORAN = 10.0             # çok uç sürpriz oranlar (gürültü) alınmaz
 ESIK = 1.05                 # iddaa / 1xbet adil
 MAX_DK = 85
-KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet+Volkano adil)
+KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
 SIRA = ("Tümü", "Pazar", "oran / adil", "oran", "Dakika")
@@ -314,7 +314,9 @@ def tur():
         if x["dk"] > MAX_DK:
             continue
         for pazar, sec, cz, io, S in adaylar(i, x, v):
-            p = sum(q for _, q in S.values()) / len(S)
+            if "X" not in S:
+                continue
+            p = S["X"][1]                      # referans yalnız 1xbet (Volkano oranı sadece bilgi)
             adil = 1 / p
             d = io / adil
             if io < MIN_ORAN or io > MAX_ORAN or d < ESIK:

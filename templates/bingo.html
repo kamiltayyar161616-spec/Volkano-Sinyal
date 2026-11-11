@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Bingo{% endblock %}
 {% block page_tag %}🎱 BINGO{% endblock %}
-{% block subtitle %}Canlı maçta <b>iddaa geride kalınca</b> yakalar. 10 sn'de bir iddaa canlı oranı, <b>1xbet ve Volkano'nun</b> aynı andaki <b>marjsız adil oranıyla</b> (ikisinin ortalaması) karşılaştırılır (MS, Alt/Üst aynı çizgi, Gol olmaz). iddaa 1.30–10 arası ve iddaa / adil ≥ 1.05 ise BINGO. ROI ilk görülen iddaa oranıyla, her sinyale 1 birim. Bir site engel/aşırı istek uyarısı verirse o site için tarama kendiliğinden 20 → 60 sn'ye yavaşlar.{% endblock %}
+{% block subtitle %}Canlı maçta <b>iddaa geride kalınca</b> yakalar. 10 sn'de bir iddaa canlı oranı, <b>1xbet'in</b> aynı andaki <b>marjsız adil oranıyla</b> (Volkano oranı bilgi olarak yazılır) karşılaştırılır (MS, Alt/Üst aynı çizgi, Gol olmaz). iddaa 1.30–10 arası ve iddaa / adil ≥ 1.05 ise BINGO. ROI ilk görülen iddaa oranıyla, her sinyale 1 birim. Bir site engel/aşırı istek uyarısı verirse o site için tarama kendiliğinden 20 → 60 sn'ye yavaşlar.{% endblock %}
 {% block extra_style %}
 <style>
   .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
@@ -34,14 +34,14 @@
 <div class="kasa"><div class="r1"><span class="tk">Bakiye <b style="font-size:20px">{{ '%.2f'|format(k.bakiye) }} ₺</b></span>
 <span class="sn {{ 'p' if k.kar > 0 else 'n' if k.kar < 0 else '' }}" style="font-size:16px">{{ '%+.2f'|format(k.kar) }} ₺</span></div>
 <div class="r2" style="margin-left:0">ROI {{ roi(k.roi) }} · biten {{ k.biten }} kupon ({{ k.kazanan }} ✓ / {{ k.biten - k.kazanan }} ✗) · oynanan {{ '%.0f'|format(k.oynanan) }} ₺ · açık {{ k.n - k.biten }} kupon {{ '%.0f'|format(k.acik) }} ₺ · serbest {{ '%.2f'|format(k.serbest) }} ₺</div>
-<div class="r2" style="margin-left:0">sanal kasa · 5000 ₺ başlangıç · her {{ ad }} sinyaline o anki {{ ad }} oranıyla tek maç kupon · tutar = serbest kasa × Kelly × ½, 100–500 ₺ (5'e yuvarlı) · ihtimal = {{ '1xbet marjsız adil' if V else '1xbet ve Volkano marjsız adil ortalaması' }}</div></div>
+<div class="r2" style="margin-left:0">sanal kasa · 5000 ₺ başlangıç · her {{ ad }} sinyaline o anki {{ ad }} oranıyla tek maç kupon · tutar = serbest kasa × Kelly × ½, 100–500 ₺ (5'e yuvarlı) · ihtimal = 1xbet marjsız adil</div></div>
 {% for x in d.K %}{% set b = x.bahis %}
 <div class="kc {{ 'ok' if b.durum == 'kazandı' else 'no' if b.durum == 'kaybetti' else '' }}">
   <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>
     <span class="sn {{ 'p' if b.durum == 'kazandı' else 'n' if b.durum == 'kaybetti' else '' }}">{{ b.durum }}{% if b.net is not none %} {{ '%+.0f'|format(b.net) }} ₺{% endif %}</span></div>
   <div class="r2">{{ x.gun[8:10] }}.{{ x.gun[5:7] }} {{ x.saat }} · o an {{ x.skor }}{% if x.final %} · son {{ x.final }}{% endif %}</div>
   <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o"><b>{{ '%.0f'|format(b.tutar) }} ₺</b> @ <b>{{ b.oran }}</b></span>{% if b.durum == 'kazandı' %}<span class="o">ödeme <b class="p">{{ '%.2f'|format(b.getiri) }} ₺</b></span>{% endif %}</div>
-  <div class="r3" style="margin-top:5px"><span class="o">gerçek ihtimal ({{ '1xbet' if V else '1xbet+Volkano' }} adil) <b>%{{ b.p_adil }}</b></span><span class="o">{{ ad }} ihtimali <b>%{{ b.p_iddaa }}</b></span>
+  <div class="r3" style="margin-top:5px"><span class="o">gerçek ihtimal (1xbet adil) <b>%{{ b.p_adil }}</b></span><span class="o">{{ ad }} ihtimali <b>%{{ b.p_iddaa }}</b></span>
     <span class="o">beklenen kâr <b class="p">%{{ '%+.1f'|format(b.fark) }}</b></span><span class="o">Kelly %{{ b.kelly_y }} → ½ = %{{ b.pay_y }}</span></div>
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok — ilk BINGO sinyalinde otomatik açılacak.</div>{% endfor %}
