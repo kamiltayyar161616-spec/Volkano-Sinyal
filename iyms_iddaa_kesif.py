@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import istat_ajan as IS
 import iyms_kars as K
 
-_C = {"t": 0, "v": None}
+_C = {"t": 0, "v": None, "s": 2}
 
 
 def _r():
@@ -21,6 +21,14 @@ def _r():
     out = {"iyv_aday": len(R), "yakin": len(gel), "yakin_47": sum('"47"' in (r[4] or "") for r in gel),
            "volkano_ornek": [f"{r[2]} - {r[3]} {r[1]} 47={'\"47\"' in (r[4] or '')}" for r in gel][:40],
            "iddaa_iyms_acik": [f"{e.get('hn')} - {e.get('an')} {datetime.fromtimestamp(e['d'], timezone.utc):%m-%d %H:%M} | {K._ing(e.get('hn',''))} - {K._ing(e.get('an',''))}" for e in milli][:40]}
+    try:
+        import re
+        t = open("/root/defter/iyv.py", encoding="utf-8").read()
+        L = t.splitlines()
+        out["iyv_py"] = {"satir": len(L), "doc": L[:25],
+                         "ilgili": [f"{i}: {L[i][:180]}" for i in range(len(L)) if re.search(r"hours|saat|SAAT|lig|LIG|league|filtre|ng_match|mid|def |WHERE|GetOffer|Fixtures|marketIds|47", L[i])][:90]}
+    except Exception as e:
+        out["iyv_py"] = str(e)[:150]
     return out
 
 
