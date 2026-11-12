@@ -93,14 +93,29 @@ def son5_kaydet():
     n = 0
     if L:
         V = O.vk_taze([str(m) for m in L])
+        kac = []
         for m in L:
             o = (V.get(str(m)) or {}).get("47")
             if o and all(k in o for k in S9):
                 c.execute("INSERT OR REPLACE INTO son5 VALUES (?,?,?)", (m, now.isoformat(), json.dumps(o)))
                 n += 1
+            else:
+                kac.append(f"{m}:{'eşleşmedi' if str(m) not in V else 'İY/MS yok'}")
         c.commit()
+        if kac:   # sessiz kacis yok: durum raporunda gorunur
+            _last["kacan"] = f"{now.strftime('%H:%M')} UTC son5 alınamadı {len(kac)}/{len(L)}: " + ", ".join(kac[:10])
     c.close()
     return n
+
+
+def _temizle_12kasim():
+    """12 Kasim: Senegal-Sudan (3001109) son5 kaydi 16 Kasim'daki baska maca baglanmisti -> sil (tek seferlik, tekrar calissa da zararsiz)"""
+    if not os.path.exists(O.SERI_DB):
+        return
+    c = db()
+    c.execute("DELETE FROM son5 WHERE mid=3001109")
+    c.commit()
+    c.close()
 
 
 def _novig(o):
@@ -226,6 +241,10 @@ def get_page_data(gun=None):
 
 def _loop():
     time.sleep(200)
+    try:
+        _temizle_12kasim()
+    except Exception as e:
+        _last["hata"] = "temizlik: " + str(e)[:150]
     t_ac = 0
     while True:
         if time.time() - t_ac > ACILIS_SN:

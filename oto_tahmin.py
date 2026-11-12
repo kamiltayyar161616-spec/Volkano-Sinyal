@@ -164,6 +164,82 @@ def vk_oranlar(mids):
 _vkfx = {"t": 0, "v": None, "fx": None}
 VK_PZ = ("1", "18", "47", "60", "68")
 
+# --- Volkano fikstur eslesmesi (12 Kasim duzeltmesi) ---
+# Volkano oran kaydi (volkano_json) Karadagca ad tasir (Engleska, Obala Slonovace), GetFixtures Ingilizce (England, Ivory Coast).
+# Eski defter._fx_bul: birebir ad tutunca TARIHE BAKMADAN donuyordu (Senegal-Sudan 12 Kasim -> 16 Kasim maci), ad dili farkliysa hic bulamiyordu.
+# Yeni kural: aday SADECE baslama saati NowGoal'dan en fazla VK_FX_DK dk sapan fiksturler; once Volkano adlari, sonra NowGoal (Ingilizce) adlari;
+# ikisi de tutmazsa: penceredeki tek aday bir takim adiyla tutuyorsa kabul. Hicbiri yoksa None (yanlis mac yerine hic mac).
+VK_FX_DK = 20
+_VK_ON = ("fc ", "cf ", "fk ", "sk ", "ac ", "cd ", "ca ", "sc ")
+
+
+def _vk_ad(x):
+    import unicodedata
+    x = unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
+    x = x.replace("-", " ").replace(".", " ").replace("'", "")
+    x = " ".join(x.split())
+    for o in _VK_ON:
+        if x.startswith(o):
+            x = x[len(o):]
+        if x.endswith(" " + o.strip()):
+            x = x[: -len(o)]
+    return x.strip()
+
+
+def _vk_ayni(a, b):
+    import difflib
+    a, b = _vk_ad(a), _vk_ad(b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if min(len(a), len(b)) >= 4 and (a in b.split() or b in a.split() or a.startswith(b + " ") or b.startswith(a + " ")):
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.85
+
+
+def _vk_genc(ad):
+    a = str(ad or "").strip().lower()
+    return a[:2].isdigit() and a[2:3] == "/" or a.startswith("w/")
+
+
+def vk_fx_esle(fx, adlar, ko):
+    """adlar: [(ev, dep), ...] sirayla denenir. Sadece baslamasi ko'ya +-VK_FX_DK dk olan fiksturler aday."""
+    try:
+        t0 = datetime.fromisoformat(str(ko).replace("Z", "+00:00"))
+        if t0.tzinfo is None:
+            t0 = t0.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+    ad_genc = any(_vk_genc(h) or _vk_genc(a) for h, a in adlar)
+    aday = []
+    for m in fx or []:
+        try:
+            dk = abs((datetime.fromisoformat(str(m.get("baslama")).replace("Z", "+00:00")) - t0).total_seconds()) / 60
+        except (ValueError, TypeError):
+            continue
+        if dk > VK_FX_DK:
+            continue
+        if not ad_genc and (_vk_genc(m.get("ev")) or _vk_genc(m.get("dep"))):
+            continue                                  # U20/kadin takimi, A takimina baglanmasin
+        aday.append((dk, m))
+    if not aday:
+        return None
+    aday.sort(key=lambda x: x[0])
+    for h, a in adlar:
+        if not h or not a:
+            continue
+        for dk, m in aday:
+            if _vk_ayni(h, m.get("ev")) and _vk_ayni(a, m.get("dep")):
+                return m
+    for h, a in adlar:                                # tek takim tutuyor: penceredeki TEK aday olmali
+        if not h or not a:
+            continue
+        tut = [m for dk, m in aday if _vk_ayni(h, m.get("ev")) or _vk_ayni(a, m.get("dep"))]
+        if len(tut) == 1:
+            return tut[0]
+    return None
+
 
 def vk_taze(mids):
     """Volkano'dan ANLIK oran (iyv.db maci 15 dk kala kilitleyip guncellemeyi birakiyor): {mid: pazarlar}; cifte sans -> 'dc'"""
@@ -176,7 +252,7 @@ def vk_taze(mids):
         return {}
     c = _ng()
     q = ",".join("?" * len(mids))
-    rows = c.execute(f"SELECT mid, kickoff_utc, volkano_json FROM ng_match WHERE volkano_json IS NOT NULL AND mid IN ({q})",
+    rows = c.execute(f"SELECT mid, kickoff_utc, volkano_json, home, away FROM ng_match WHERE volkano_json IS NOT NULL AND mid IN ({q})",
                      [int(x) for x in mids]).fetchall()
     c.close()
     if not rows:
@@ -186,11 +262,11 @@ def vk_taze(mids):
         _vkfx["t"] = time.time()
     v, fx = _vkfx["v"], _vkfx["fx"]
     R = {}
-    for mid, ko, vj in rows:
+    for mid, ko, vj, ng_h, ng_a in rows:
         try:
             vj = json.loads(vj) or {}
-            m = D._fx_bul(fx, vj.get("home", ""), vj.get("away", ""), ko) if vj.get("home") else None
-            i = next((m[k] for k in ("id", "mac_id", "ai", "event_id") if k in m), None) if m else None
+            m = vk_fx_esle(fx, [(vj.get("home", ""), vj.get("away", "")), (ng_h or "", ng_a or "")], ko)
+            i = next((m[k] for k in ("id", "mac_id", "ai", "event_id") if m.get(k)), None) if m else None
             if i is None:
                 continue
             d = v.get("Offer/GetEventMarkets", [("eventIds", i), ("dpId", v.DP_ID)])
