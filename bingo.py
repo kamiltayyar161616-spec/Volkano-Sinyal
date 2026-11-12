@@ -60,7 +60,9 @@ def _seri_gun(key, ara):
 KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika")
+SIRA = ("Tümü", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika")
+SUPHELI = 1.30                  # oran/adil bunun ustu: buyuk ihtimalle veri/cizgi hatasi (gercek gecikme degil), bahis iptal riski
+VERGI = 0.12                    # vergili ROI satiri: net kazancin %12si (iyms_analiz ile ayni kural)
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
 _vesle = {}                 # 1xbet I -> Volkano ai ("" = yok)
 _SITE = {   # 1xbet'e göre geride kalan oynanabilir siteler — her biri ayrı sinyal/kasa tablosu
@@ -613,24 +615,30 @@ def get_page_data(gun=None, kaynak="iddaa"):
     G = {}
 
     def ekle(grup, ad, r):
-        g = G.setdefault((grup, ad), [0, 0, 0.0])
+        g = G.setdefault((grup, ad), [0, 0, 0.0, 0.0])
         g[0] += 1
         g[1] += r["sonuc"] == "tuttu"
         g[2] += (r["iddaa"] - 1) if r["sonuc"] == "tuttu" else -1
+        g[3] += (r["iddaa"] - 1) * (1 - VERGI) if r["sonuc"] == "tuttu" else -1
 
     for r in R:
         t = datetime.fromisoformat(r["at"]).astimezone(TR)
         r["gun"], r["saat"] = t.date().isoformat(), t.strftime("%H:%M")
+        r["supheli"] = (r["deger"] or 0) > SUPHELI
         if r["sonuc"] not in ("tuttu", "yattı"):
             continue
         ekle("Tümü", "tüm sinyaller", r)
         ekle("Pazar", r["pazar"] if r["pazar"] != "A/Ü" else ("Üst" if r["sec"].startswith("Üst") else "Alt"), r)
-        ekle("oran / adil", _kova(r["deger"], (1.10, 1.20), ("1.05–1.10", "1.10–1.20", "1.20+")), r)
+        ekle("oran / adil", _kova(r["deger"], (1.10, 1.20, SUPHELI), ("1.05–1.10", "1.10–1.20", "1.20–1.30", "1.30+ ⚠ şüpheli veri")), r)
+        if not r["supheli"]:
+            ekle("Filtre", "şüpheli hariç (fark ≤ %30)", r)
+            if 60 <= (r["sure"] or 0) < 180:
+                ekle("Filtre", "önerilen: 1–3 dk açık + fark ≤ %30", r)
         ekle("oran", _kova(r["iddaa"], (1.60, 2.20, 3.50), ("1.30–1.60", "1.60–2.20", "2.20–3.50", "3.50+")), r)
         ekle("Dakika", _kova(r["dk"], (30, 60, 75), ("0–29", "30–59", "60–74", "75–85")), r)
         ekle("Açık kalma süresi", _kova(r["sure"] or 0, (10, 30, 60, 180), ("<10 sn (tek tarama)", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+")), r)
     out["ozet"] = [{"grup": k[0], "ad": k[1], "n": v[0], "w": v[1], "isabet": round(100 * v[1] / v[0]), "roi": round(100 * v[2] / v[0], 1),
-                    "kar": round(v[2], 2)} for k, v in sorted(G.items(), key=lambda kv: (SIRA.index(kv[0][0]), kv[0][1]))]
+                    "roi_v": round(100 * v[3] / v[0], 1), "kar": round(v[2], 2)} for k, v in sorted(G.items(), key=lambda kv: (SIRA.index(kv[0][0]), kv[0][1]))]
     gunler = sorted({r["gun"] for r in R}, reverse=True)
     bugun = datetime.now(TR).date().isoformat()
     if gun not in gunler:
@@ -647,7 +655,7 @@ def ozet():
                         "son": [{k: r.get(k) for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "x_oran", "adil", "deger", "sure", "sonuc", "final")}
                                 for r in ad["L"][:10]]},
             "last": {k: v for k, v in d["last"].items() if k not in ("acik", "vacik", "aacik")}, "kasa": d["kasa"], "acik": d["acik"][:10], "ozet": d["ozet"],
-            "volkano": {"kasa": v["kasa"], "acik": v["acik"][:10], "ozet": v["ozet"][:6],
+            "volkano": {"kasa": v["kasa"], "acik": v["acik"][:10], "ozet": v["ozet"],
                         "son": [{k: r.get(k) for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "x_oran", "adil", "deger", "sure", "sonuc", "final")}
                                 for r in v["L"][:10]]},
             "son": [{k: r.get(k) for k in ("saat", "ev", "dep", "sec", "dk", "skor", "iddaa", "x_oran", "v_oran", "adil", "deger", "max_iddaa", "sure", "sonuc", "final")}
