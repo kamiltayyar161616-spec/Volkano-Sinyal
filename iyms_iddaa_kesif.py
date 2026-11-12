@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import nowgoal as ng
 import vk_alias as VA
 
-_C = {"t": 0, "v": None}
+_C = {"t": 0, "v": None, "s": 3}
 ARA = ("turk", "belg", "ital", "fran", "engl", "croat", "czech", "spain", "monten", "latvia", "alban", "finl", "marino", "belar", "armen", "cypr")
 
 
@@ -28,7 +28,12 @@ def _r():
             test.append([r[1], r[2], r[3], r[4], r[5], r[6], bool(e), (e or {}).get("home_team")])
         except Exception as ex:
             test.append([r[1], r[2], str(ex)[:80]])
-    return {"ng": test, "vk_nacija": vk, "vk_n": len(mk)}
+    L = open("/root/defter/iyv.py", encoding="utf-8").read().splitlines()
+    v = sqlite3.connect("file:/root/defter/iyv.db?mode=ro", uri=True, timeout=10)
+    ay = [(r[0], r[1], r[2], r[3], r[4], ('"47"' in (r[5] or ""))) for r in v.execute("SELECT mid, at, ko, home, away, vk FROM iyv_aday")]
+    v.close()
+    return {"iyv_kod": [f"{i}: {L[i][:200]}" for i in list(range(30, 66)) + list(range(124, 172)) if i < len(L)],
+            "iyv_aday_milli": [x for x in ay if any(k in f"{x[3]} {x[4]}".lower() for k in ARA)], "iyv_aday_n": len(ay)}
 
 
 def rapor():
