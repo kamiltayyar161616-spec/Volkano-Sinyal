@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import nowgoal as ng
 import vk_alias as VA
 
-_C = {"t": 0, "v": None, "s": 5}
+_C = {"t": 0, "v": None, "s": 6}
 ARA = ("turk", "belg", "ital", "fran", "engl", "croat", "czech", "spain", "monten", "latvia", "alban", "finl", "marino", "belar", "armen", "cypr")
 
 
@@ -39,7 +39,19 @@ def _r():
     def blok(ad):
         m = _re.search(r"\ndef " + ad + r"\(.*?(?=\ndef |\Z)", Ds, _re.S)
         return m.group(0)[:2500] if m else None
-    fxb = {"_fx_bul": blok("_fx_bul"), "vk_fikstur": blok("vk_fikstur")}
+    fxb = {}
+    try:
+        import sys as _s
+        _s.path.insert(0, "/root/defter")
+        import defter as _D
+        _v, _fx = _D.vk_fikstur()
+        fxb["fx_n"] = len(_fx)
+        fxb["fx_milli"] = [{k: m.get(k) for k in ("ev", "dep", "baslama", "lig", "id", "ai")} for m in _fx
+                           if any(k in f"{m.get('ev')} {m.get('dep')}".lower() for k in ("ital", "turs", "turk", "engl", "franc", "česk", "czech", "alban"))][:12]
+        fxb["test_ita"] = bool(_D._fx_bul(_fx, "Italy", "France", "2026-11-12T19:45:00+00:00"))
+        fxb["test_ita_sr"] = bool(_D._fx_bul(_fx, "Italija", "Francuska", "2026-11-12T19:45:00+00:00"))
+    except Exception as e:
+        fxb["hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     return {"fxb": fxb, "iyv_kod": [f"{i}: {L[i][:200]}" for i in list(range(30, 66)) + list(range(124, 172)) if i < len(L)],
             "iyv_aday_milli": [x for x in ay if any(k in f"{x[3]} {x[4]}".lower() for k in ARA)], "iyv_aday_n": len(ay), "ornek47": ornek47}
 
