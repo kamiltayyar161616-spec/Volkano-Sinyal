@@ -43,6 +43,20 @@ MIN_ORAN = 1.30
 MAX_ORAN = 10.0             # çok uç sürpriz oranlar (gürültü) alınmaz
 ESIK = 1.05                 # iddaa / 1xbet adil
 MAX_DK = 85
+OYNA_SN = 50                # sanal kupon: fark en az bu kadar saniye kesintisiz açık kalırsa, o anki oranla açılır (kullanıcının oynama süresi)
+_seri = {}                  # (tablo, xid, sec) -> (kesintisiz görülmeye başladığı an, son görüldüğü an)
+
+
+def _seri_gun(key, ara):
+    """kesintisiz açık kalma süresi (sn); ara = o kaynağın tarama aralığı, 3 tarama kaçarsa seri sıfırlanır"""
+    t = time.time()
+    p = _seri.get(key)
+    bas = p[0] if p and t - p[1] <= 3 * ara else t
+    _seri[key] = (bas, t)
+    if len(_seri) > 20000:
+        for k in [k for k, v in _seri.items() if t - v[1] > 600]:
+            del _seri[k]
+    return t - bas
 KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
@@ -101,10 +115,22 @@ def db():
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, v_oran REAL, x_adil REAL, v_adil REAL, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS vbahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
                  getiri REAL, PRIMARY KEY (xid, sec))""")
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_50sn'").fetchone():
+        # kural değişti (12.11.2026): eski kuponlar (ilk görüldüğü an açılanlar) arşive, kasalar 5000'den yeniden başlar
+        c.execute("CREATE TABLE kural_50sn (at TEXT)")
+        c.execute("INSERT INTO kural_50sn VALUES (datetime('now'))")
+        for t in ("bahis", "vbahis", "abahis"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone():
+                c.execute(f"ALTER TABLE {t} RENAME TO {t}_eski")
+        c.execute("""CREATE TABLE IF NOT EXISTS bahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
+                     getiri REAL, PRIMARY KEY (xid, sec))""")
+        c.execute("""CREATE TABLE IF NOT EXISTS vbahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
+                     getiri REAL, PRIMARY KEY (xid, sec))""")
     c.execute("CREATE TABLE IF NOT EXISTS asinyal AS SELECT * FROM vsinyal WHERE 0")
     c.execute("CREATE TABLE IF NOT EXISTS abahis AS SELECT * FROM vbahis WHERE 0")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS asinyal_k ON asinyal(xid, sec)")
-    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS abahis_k ON abahis(xid, sec)")
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS abahis_k2 ON abahis(xid, sec)")
+    c.commit()
     return c
 
 
@@ -406,15 +432,17 @@ def tur():
                          "x_oran": xo[0], "v_oran": vo[0]})
             if r is None:
                 yeni += 1
+                _seri_gun(("sinyal", x["I"], sec), SN)
                 c.execute("""INSERT INTO sinyal (xid, sec, iid, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
                              max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)""",
                           (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            io, xo[0], round(adil, 3), round(d, 4), io, round(d, 4), at, vo[0],
                            round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None))
-                _bahis_ac(c, x["I"], sec, io, p, at)
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * SN else 0)
+                if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
+                    _bahis_ac(c, x["I"], sec, io, p, at)
                 c.execute("""UPDATE sinyal SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
@@ -489,14 +517,16 @@ def site_tur(c, X, VF, V, now, at, site):
             r = c.execute(f"SELECT son_at, sure FROM {s_tab} WHERE xid=? AND sec=?", key).fetchone()
             if r is None:
                 yeni += 1
+                _seri_gun((s_tab, x["I"], sec), S_["sn"])
                 c.execute(f"""INSERT INTO {s_tab} (xid, sec, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
                              max_iddaa, max_deger, son_at, sure, v_oran, x_adil) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)""",
                           (x["I"], sec, at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            vo, xo, round(adil, 3), round(d, 4), vo, round(d, 4), at, vo, round(adil, 3)))
-                _bahis_ac(c, x["I"], sec, vo, p, at, b_tab)
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * S_["sn"] else 0)
+                if _seri_gun((s_tab, x["I"], sec), S_["sn"]) >= OYNA_SN:
+                    _bahis_ac(c, x["I"], sec, vo, p, at, b_tab)
                 c.execute(f"""UPDATE {s_tab} SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, vo, round(d, 4), x["I"], sec))
     for k in list(_vbekle):
