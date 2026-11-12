@@ -109,7 +109,45 @@ def learn(ng, vk):
         _dirty += 1
 
 
+# Milli takimlar: NowGoal Ingilizce, Volkano Sirpca/Crnogorski yazar (Turkey <-> Turska). 12.11.2026 — Uluslar Ligi maclari eslesmiyordu.
+ULKE_SR = {
+    "Turkey": ["Turska"], "Belgium": ["Belgija"], "Italy": ["Italija"], "France": ["Francuska"], "England": ["Engleska"],
+    "Croatia": ["Hrvatska"], "Czech Republic": ["Češka", "Ceska Republika"], "Czechia": ["Češka"], "Spain": ["Španija", "Spanija"],
+    "Montenegro": ["Crna Gora"], "Latvia": ["Letonija"], "Albania": ["Albanija"], "Finland": ["Finska"], "San Marino": ["San Marino"],
+    "Belarus": ["Bjelorusija", "Belorusija"], "Armenia": ["Jermenija", "Armenija"], "Cyprus": ["Kipar"], "Moldova": ["Moldavija", "Moldova"],
+    "Kazakhstan": ["Kazahstan", "Kazakstan"], "Germany": ["Njemačka", "Nemačka"], "Netherlands": ["Holandija"], "Portugal": ["Portugal"],
+    "Denmark": ["Danska"], "Norway": ["Norveška"], "Wales": ["Vels"], "Georgia": ["Gruzija"], "Hungary": ["Mađarska"], "Slovakia": ["Slovačka"],
+    "Faroe Islands": ["Farska Ostrva", "Farski Otoci"], "Luxembourg": ["Luksemburg"], "Estonia": ["Estonija"],
+    "Liechtenstein": ["Lihtenštajn"], "Azerbaijan": ["Azerbejdžan", "Azerbajdžan"], "Bulgaria": ["Bugarska"], "Iceland": ["Island"],
+    "North Macedonia": ["Sjeverna Makedonija", "S.Makedonija", "S. Makedonija", "Makedonija"], "Slovenia": ["Slovenija"],
+    "Greece": ["Grčka"], "Serbia": ["Srbija"], "Switzerland": ["Švajcarska"], "Scotland": ["Škotska"], "Austria": ["Austrija"],
+    "Poland": ["Poljska"], "Sweden": ["Švedska"], "Ireland": ["Irska", "Republika Irska"], "Republic of Ireland": ["Irska"],
+    "Northern Ireland": ["Sjeverna Irska", "S.Irska", "S. Irska"], "Romania": ["Rumunija"], "Ukraine": ["Ukrajina"], "Russia": ["Rusija"],
+    "Bosnia-Herzegovina": ["BiH", "Bosna i Hercegovina"], "Bosnia and Herzegovina": ["BiH", "Bosna i Hercegovina"], "Kosovo": ["Kosovo"],
+    "Lithuania": ["Litvanija"], "Israel": ["Izrael"], "Malta": ["Malta"], "Andorra": ["Andora"], "Gibraltar": ["Gibraltar"],
+    "Brazil": ["Brazil"], "Argentina": ["Argentina"], "Uruguay": ["Urugvaj"], "Colombia": ["Kolumbija"], "Mexico": ["Meksiko"],
+    "USA": ["SAD"], "United States": ["SAD"], "Japan": ["Japan"], "South Korea": ["Južna Koreja", "J.Koreja"], "Morocco": ["Maroko"],
+    "Egypt": ["Egipat"], "Senegal": ["Senegal"], "Nigeria": ["Nigerija"], "Guinea": ["Gvineja"], "Guinea-Bissau": ["Gvineja Bisao"],
+    "Eritrea": ["Eritreja"], "Sudan": ["Sudan"], "Madagascar": ["Madagaskar"], "Panama": ["Panama"], "Cuba": ["Kuba"],
+    "Curacao": ["Kurasao"], "Algeria": ["Alžir"], "Tunisia": ["Tunis"], "Cameroon": ["Kamerun"], "Ghana": ["Gana"], "Somalia": ["Somalija"],
+    "Ivory Coast": ["Obala Slonovače"], "Chile": ["Čile"], "Peru": ["Peru"], "Ecuador": ["Ekvador"], "Paraguay": ["Paragvaj"],
+    "Bolivia": ["Bolivija"], "Venezuela": ["Venecuela"], "Canada": ["Kanada"], "Australia": ["Australija"], "Saudi Arabia": ["Saudijska Arabija"],
+    "Iran": ["Iran"], "Qatar": ["Katar"], "China": ["Kina"], "Uzbekistan": ["Uzbekistan"], "Lithuania U21": ["Litvanija U21"],
+}
+_UN = None
+
+
+def _ulke(ng, vk):
+    global _UN
+    if _UN is None:
+        _UN = {_norm(k): {_norm(x) for x in v} for k, v in ULKE_SR.items()}
+    s = _UN.get(_norm(ng or ""))
+    return bool(s) and _norm(vk or "") in s
+
+
 def _alias(ng, vk):
+    if _ulke(ng, vk):
+        return True
     m = _load().get(_norm(ng or ""))
     return bool(m) and _norm(vk or "") in m
 
