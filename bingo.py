@@ -191,7 +191,9 @@ def iddaa():
             continue
         P = {}
         for m in e["m"]:
-            o = {str(x.get("n")): x.get("odd") for x in m.get("o", []) if x.get("odd")}
+            if m.get("s") != 1:            # pazar kilitli (s = -2: gol/tehlike sonrası askıda) — oynanamaz, sinyal sayılmaz
+                continue
+            o = {str(x.get("n")): x.get("odd") for x in m.get("o", []) if x.get("odd") and x["odd"] > 1.0}
             st = m.get("st")
             if st == 4:
                 P["ms"] = o
