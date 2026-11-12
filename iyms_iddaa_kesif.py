@@ -29,6 +29,29 @@ def _r():
                          "ilgili": [f"{i}: {L[i][:180]}" for i in range(len(L)) if re.search(r"hours|saat|SAAT|lig|LIG|league|filtre|ng_match|mid|def |WHERE|GetOffer|Fixtures|marketIds|47", L[i])][:90]}
     except Exception as e:
         out["iyv_py"] = str(e)[:150]
+    try:
+        import glob, re
+        vk = {}
+        for p in sorted(glob.glob("/root/volcanobet/*.py")) + sorted(glob.glob("/root/volcanobet/*.json"))[:6]:
+            t = open(p, encoding="utf-8", errors="ignore").read()
+            if p.endswith(".json"):
+                vk[p] = t[:400] if len(t) < 200000 else f"{len(t)} bayt, ilk: {t[:200]}"
+                continue
+            L = t.splitlines()
+            vk[p] = [f"{i}: {L[i][:170]}" for i in range(len(L)) if re.search(r"league|Liga|liga|lig|sport|filter|whitelist|WHITE|BLACK|skip|exclude|national|Nations|reprez|tournament|competition|categor", L[i])][:45]
+        try:
+            V = json.load(open("/root/volcanobet/volcanobet.json", encoding="utf-8"))
+            L = V if isinstance(V, list) else (V.get("matches") or V.get("events") or [])
+            ligs = {}
+            for m in L:
+                lg = m.get("league") or m.get("lig") or ""
+                ligs[lg] = ligs.get(lg, 0) + 1
+            vk["ligler"] = sorted(ligs.items(), key=lambda x: -x[1])[:80]
+        except Exception as e:
+            vk["ligler"] = str(e)[:100]
+        out["volcanobet"] = vk
+    except Exception as e:
+        out["volcanobet"] = str(e)[:150]
     return out
 
 
