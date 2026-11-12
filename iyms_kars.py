@@ -134,6 +134,7 @@ def kaydet():
     E = [e for e in _get(f"{B}/events?st=1&type=0&version=0")["data"]["events"] if e.get("sid") == 1 and e.get("d")]
     c = db()
     var = {r[0]: r[1] for r in c.execute("SELECT mid, i FROM k")}
+    ivar = {i: m for m, i in var.items()}
     n_es = n_or = 0
     for mid, ko, h, a, lg in V:
         t = _dt(ko).timestamp()
@@ -165,13 +166,38 @@ def kaydet():
             continue
         n_or += 1
         js, at = json.dumps(o), now.isoformat()
+        if mid not in var and ivar.get(i, 0) < 0:
+            # bültenden önceden (Volkano'dan bağımsız) kaydedilmiş: ilk oranı koru, NowGoal mid'ine taşı
+            c.execute("UPDATE k SET mid=?, ko=?, ev=?, dep=?, lig=? WHERE mid=?", (mid, ko, h, a, lg, ivar[i]))
+            var[mid] = i
         if mid in var:
             c.execute("UPDATE k SET at_son=?, idd_son=? WHERE mid=?", (at, js, mid))
         else:
             c.execute("INSERT INTO k (mid, i, ko, ev, dep, lig, at_ilk, idd_ilk, at_son, idd_son) VALUES (?,?,?,?,?,?,?,?,?,?)", (mid, i, ko, h, a, lg, at, js, at, js))
+    # TÜM BÜLTEN (12.11.2026, kullanıcı isteği): iddaa İY/MS açtığı her maçın İLK oranı yayınlandığı an kaydedilir
+    # (Volkano listesine 12 saat kala girmesini beklemeden; önümüzdeki 4 gün). NowGoal mid'i yokken mid = -iddaa_id.
+    var = {r[0]: r[1] for r in c.execute("SELECT mid, i FROM k")}
+    ivar = {i: m for m, i in var.items()}
+    n_b = n_bs = 0
+    for e in E:
+        if not now.timestamp() + 600 < e["d"] < now.timestamp() + 4 * 86400:
+            continue
+        o = _iyms(e)
+        if not o:
+            continue
+        js, at = json.dumps(o), now.isoformat()
+        m = ivar.get(e["i"])
+        if m is None:
+            ko = datetime.fromtimestamp(e["d"], timezone.utc).isoformat()
+            c.execute("INSERT OR IGNORE INTO k (mid, i, ko, ev, dep, lig, at_ilk, idd_ilk, at_son, idd_son) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (-e["i"], e["i"], ko, e.get("hn"), e.get("an"), None, at, js, at, js))
+            n_b += 1
+        elif m < 0:
+            c.execute("UPDATE k SET at_son=?, idd_son=? WHERE mid=?", (at, js, m))
+            n_bs += 1
     c.commit()
     c.close()
-    return f"Volkano İY/MS {len(V)} maç · iddaa eşleşen {n_es} · İY/MS oranı yazılan {n_or}"
+    return f"Volkano İY/MS {len(V)} maç · iddaa eşleşen {n_es} · İY/MS oranı yazılan {n_or} · tüm bülten: yeni ilk oran {n_b}, güncellenen {n_bs}"
 
 
 def _novig(o):
