@@ -181,6 +181,7 @@ def rapor():
             "iyms_sekme_dun": _guvenli(lambda: __import__("iyms_bugun").sekmeler((datetime.now(timezone.utc) - timedelta(hours=21)).date().isoformat())),
             "monsure_bakim7": _guvenli(lambda: __import__("monsure_bakim").rapor7()),
             "bingo": _guvenli(lambda: __import__("bingo").ozet()),
+            "iddaa_durum_kesif": _guvenli(lambda: __import__("iddaa_durum_kesif").rapor()),
             "toto_hafta": _guvenli(lambda: (lambda h: {"hafta": h["hafta"], "kapanis": h["kapanis"], "toto_iddaa": __import__("toto_iddaa")._last,
                                                         "maclar": [{k: x.get(k) for k in ("no", "ad", "ng", "ko", "simdi", "simdi_at", "m7", "pin", "kupon", "iddaa")} for x in h["maclar"]]} if h else None)(__import__("toto_tab").toto_hafta()))}
 

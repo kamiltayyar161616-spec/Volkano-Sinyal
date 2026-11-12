@@ -70,7 +70,7 @@
   <div class="r2">{{ x.saat }} · {{ x.lig or '' }} · o an {{ x.skor }} · {{ x.pazar }}</div>
   <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o">{{ ad }} <b>{{ x.iddaa }}</b>{% if x.max_iddaa and x.max_iddaa > x.iddaa %} (en iyi {{ x.max_iddaa }}){% endif %}</span>
     <span class="o">1xbet {{ x.x_oran or '-' }}{% if not V %} · Volkano {{ x.v_oran or '-' }}{% endif %} · adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span>
-    <span class="o">açık kaldı ~{{ ((x.sure or 0) + 10) // 60 }} dk</span></div>
+    <span class="o">açık kaldı {% set s = x.sure or 0 %}{% if s < 10 %}<b class="n">&lt;10 sn (tek tarama)</b>{% elif s < 60 %}<b>{{ s }} sn</b>{% else %}<b class="p">{{ s // 60 }} dk {{ s % 60 }} sn</b>{% endif %}</span></div>
 </div>
 {% else %}<div class="section-sub">Bu gün sinyal yok.</div>{% endfor %}
 {% endif %}

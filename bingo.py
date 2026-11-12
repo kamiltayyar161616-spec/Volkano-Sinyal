@@ -46,7 +46,7 @@ MAX_DK = 85
 KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Pazar", "oran / adil", "oran", "Dakika")
+SIRA = ("Tümü", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika")
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
 _vesle = {}                 # 1xbet I -> Volkano ai ("" = yok)
 _SITE = {   # 1xbet'e göre geride kalan oynanabilir siteler — her biri ayrı sinyal/kasa tablosu
@@ -583,6 +583,7 @@ def get_page_data(gun=None, kaynak="iddaa"):
         ekle("oran / adil", _kova(r["deger"], (1.10, 1.20), ("1.05–1.10", "1.10–1.20", "1.20+")), r)
         ekle("oran", _kova(r["iddaa"], (1.60, 2.20, 3.50), ("1.30–1.60", "1.60–2.20", "2.20–3.50", "3.50+")), r)
         ekle("Dakika", _kova(r["dk"], (30, 60, 75), ("0–29", "30–59", "60–74", "75–85")), r)
+        ekle("Açık kalma süresi", _kova(r["sure"] or 0, (10, 30, 60, 180), ("<10 sn (tek tarama)", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+")), r)
     out["ozet"] = [{"grup": k[0], "ad": k[1], "n": v[0], "w": v[1], "isabet": round(100 * v[1] / v[0]), "roi": round(100 * v[2] / v[0], 1),
                     "kar": round(v[2], 2)} for k, v in sorted(G.items(), key=lambda kv: (SIRA.index(kv[0][0]), kv[0][1]))]
     gunler = sorted({r["gun"] for r in R}, reverse=True)
