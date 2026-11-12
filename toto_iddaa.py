@@ -34,7 +34,7 @@ ULKE = {"fransa": "France", "turkiye": "Turkey", "bulgaristan": "Bulgaria", "izl
         "irlanda": "Ireland", "kuzey irlanda": "Northern Ireland", "romanya": "Romania", "ukrayna": "Ukraine", "rusya": "Russia",
         "bosna hersek": "Bosnia-Herzegovina", "karadag": "Montenegro", "arnavutluk": "Albania", "kosova": "Kosovo", "moldova": "Moldova",
         "beyaz rusya": "Belarus", "belarus": "Belarus", "litvanya": "Lithuania", "letonya": "Latvia", "ermenistan": "Armenia",
-        "kazakistan": "Kazakhstan", "israil": "Israel", "kibris": "Cyprus", "kibris rum kesimi": "Cyprus", "malta": "Malta",
+        "kazakistan": "Kazakhstan", "israil": "Israel", "kibris": "Cyprus", "kibris rum kesimi": "Cyprus", "g. kibris": "Cyprus", "g kibris": "Cyprus", "guney kibris": "Cyprus", "malta": "Malta",
         "andorra": "Andorra", "san marino": "San Marino", "cebelitarik": "Gibraltar", "brezilya": "Brazil", "arjantin": "Argentina",
         "abd": "USA", "amerika": "USA", "meksika": "Mexico", "japonya": "Japan", "guney kore": "South Korea", "fas": "Morocco",
         "misir": "Egypt", "cezayir": "Algeria", "tunus": "Tunisia", "nijerya": "Nigeria", "senegal": "Senegal", "kolombiya": "Colombia",

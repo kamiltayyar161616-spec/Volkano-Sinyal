@@ -112,6 +112,15 @@ def tani():
     print("kaydet():", kaydet())
 
 
+def _ing(ad):
+    """iddaa milli takim adlari Turkce (Turkiye, Belcika...) -> Ingilizce (Volkano/NowGoal adi) — 12.11.2026 kullanici onayiyla"""
+    try:
+        import toto_iddaa
+        return toto_iddaa._ing(ad)
+    except Exception:
+        return ad
+
+
 def kaydet():
     """Volkano'nun İY/MS verdigi yaklasan maclar <-> iddaa bulteni; iddaa İY/MS oranini yaz (ilk bir kez, son her turda, KO-10 dk'ya kadar)"""
     if not os.path.exists(IYV):
@@ -134,7 +143,8 @@ def kaydet():
             for e in E:
                 if abs(e["d"] - t) > 900:
                     continue
-                s1, s2 = IS._benz(h, e.get("hn", "")), IS._benz(a, e.get("an", ""))
+                s1 = max(IS._benz(h, e.get("hn", "")), IS._benz(h, _ing(e.get("hn", ""))))
+                s2 = max(IS._benz(a, e.get("an", "")), IS._benz(a, _ing(e.get("an", ""))))
                 if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
                     best = (s1 + s2, e)
             if not best:
