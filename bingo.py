@@ -287,7 +287,11 @@ def admiral():
 def _v_eslestir(x, F, cache=None):
     _vesle = _SITE["volkano"]["esle"] if cache is None else cache
     if x["I"] in _vesle:
-        return _vesle[x["I"]] or None
+        v = _vesle[x["I"]]
+        if not isinstance(v, float):
+            return v or None
+        if time.time() - v < 60:          # bulunamadı: 60 sn sonra yeniden dene (site maçı canlıya geç alabiliyor)
+            return None
     best = None
     for ai, f in F.items():
         if abs(f["S"] - (x["S"] or 0)) > 1800:
@@ -295,13 +299,17 @@ def _v_eslestir(x, F, cache=None):
         s1, s2 = IS._benz(x["ev"], f["ev"]), IS._benz(x["dep"], f["dep"])
         if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
             best = (s1 + s2, ai)
-    _vesle[x["I"]] = best[1] if best else ""
+    _vesle[x["I"]] = best[1] if best else time.time()
     return best[1] if best else None
 
 
 def _eslestir(i, X):
     if i["i"] in _esle:
-        return X.get(_esle[i["i"]]) if _esle[i["i"]] else None
+        v = _esle[i["i"]]
+        if not isinstance(v, float):
+            return X.get(v)
+        if time.time() - v < 60:
+            return None
     best = None
     for x in X.values():
         if abs((x["S"] or 0) - i["d"]) > 1800:
@@ -309,7 +317,7 @@ def _eslestir(i, X):
         s1, s2 = IS._benz(i["ev"], x["ev"]), IS._benz(i["dep"], x["dep"])
         if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
             best = (s1 + s2, x)
-    _esle[i["i"]] = best[1]["I"] if best else ""
+    _esle[i["i"]] = best[1]["I"] if best else time.time()
     return best[1] if best else None
 
 
