@@ -126,6 +126,19 @@ def db():
                      getiri REAL, PRIMARY KEY (xid, sec))""")
         c.execute("""CREATE TABLE IF NOT EXISTS vbahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
                      getiri REAL, PRIMARY KEY (xid, sec))""")
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_kilit'").fetchone():
+        # 12.11.2026: kilitli iddaa pazarları ve 50 sn kuralı — tüm geçmiş (sinyal + kupon) arşive, karne ve kasalar sıfırdan
+        c.execute("CREATE TABLE kural_kilit (at TEXT)")
+        c.execute("INSERT INTO kural_kilit VALUES (datetime('now'))")
+        for t in ("sinyal", "vsinyal", "asinyal", "bahis", "vbahis", "abahis"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone():
+                c.execute(f"DROP TABLE IF EXISTS {t}_eski2")
+                c.execute(f"ALTER TABLE {t} RENAME TO {t}_eski2")
+        for ix in ("asinyal_k", "abahis_k2"):
+            c.execute(f"DROP INDEX IF EXISTS {ix}")
+        c.commit()
+        c.close()
+        return db()
     c.execute("CREATE TABLE IF NOT EXISTS asinyal AS SELECT * FROM vsinyal WHERE 0")
     c.execute("CREATE TABLE IF NOT EXISTS abahis AS SELECT * FROM vbahis WHERE 0")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS asinyal_k ON asinyal(xid, sec)")
