@@ -216,6 +216,10 @@ def _novig(*o):
 
 
 # ---------- kaynaklar ----------
+import iddaa_soket as ISK
+_SK = {"bak": 0, "fark": 0}   # soketin REST bültenini düzelttiği pazar sayısı (kontrol)
+
+
 def iddaa():
     E = _get(IDDAA_URL)["data"]["events"]
     L = []
@@ -224,6 +228,21 @@ def iddaa():
             continue
         P = {}
         for m in e["m"]:
+            S = ISK.pazar(m.get("i"))
+            _SK["bak"] += 1
+            if S and ((S["s"] is not None and S["s"] != m.get("s")) or any(
+                    S["o"].get(str(k + 1)) not in (None, x.get("odd")) for k, x in enumerate(m.get("o", [])))):
+                _SK["fark"] += 1
+            # 13.11.2026: iddaa canlı soket — kilit/oran/çizgi değişikliği anında (REST bülteni gecikmeli)
+            if S:
+                m = dict(m)
+                if S["s"] is not None:
+                    m["s"] = S["s"]
+                if S["sov"] is not None:
+                    m["sov"] = S["sov"]
+                if S["o"]:                 # soket seçenek no'su (1, 2, 3) = bültendeki sıra; ad biliniyorsa ayrıca doğrula
+                    m["o"] = [dict(x, odd=S["o"].get(str(k + 1), x.get("odd")))
+                              if S["na"].get(str(k + 1)) in (None, str(x.get("n"))) else x for k, x in enumerate(m.get("o", []))]
             if m.get("s") != 1:            # pazar kilitli (s = -2: gol/tehlike sonrası askıda) — oynanamaz, sinyal sayılmaz
                 continue
             o = {str(x.get("n")): x.get("odd") for x in m.get("o", []) if x.get("odd") and x["odd"] > 1.0}
@@ -507,6 +526,7 @@ def tur():
         bahis_kapat(c, _SITE[st]["s"], _SITE[st]["b"])
     c.commit()
     c.close()
+    _last["soket"] = f"{_SK['fark']}/{_SK['bak']}"
     _last.update(vacik=acik_v, aacik=acik_a, admiral=len(AD[1]), eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
                  kaynak={k: {"ara": v["ara"], "hata": v["hata"], "yas": round(time.time() - v["vt"]) if v["vt"] else None} for k, v in _K.items()})
     return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO {len(V)} maç, 1xbet ile eşleşen {_SITE['volkano']['eslesen']}, açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, 1xbet ile eşleşen {_SITE['admiral']['eslesen']}, açık {len(acik_a)} yeni {ya}"
