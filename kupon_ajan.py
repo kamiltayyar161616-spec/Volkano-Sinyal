@@ -310,10 +310,15 @@ def kupon_sec(A, ks):
             sebep = f"{n} maç: {n - alt} maç yatarsa getiri x{ek:.2f} (< 1)"
             continue
         f = kelly(D)
-        tutar = min(MAX_BAHIS, round(ks["serbest"] * f * KELLY_PAY / 5) * 5)
-        if tutar < MIN_BAHIS:
-            sebep = f"{n} maç: Kelly tutarı {ks['serbest'] * f * KELLY_PAY:.0f} TL (< 100)"
+        if f <= 0:
+            sebep = f"{n} maç: Kelly sıfır (beklenen getiri yok)"
             continue
+        tutar = min(MAX_BAHIS, round(ks["serbest"] * f * KELLY_PAY / 5) * 5)
+        if tutar < MIN_BAHIS:          # 13.11.2026 kullanıcı: Kelly 100 TL altını gösterirse en az 100 TL (sistemde toplam 100, kombinlere bölünür)
+            if ks["serbest"] < MIN_BAHIS:
+                sebep = f"{n} maç: serbest kasa 100 TL altında"
+                continue
+            tutar = MIN_BAHIS
         buyume = sum(p * log(1 + (tutar / ks["serbest"]) * (g - 1)) for p, g in D)
         if not en or buyume > en["buyume"]:
             en = {"S": S, "n": n, "alt": alt, "kombi": kombi, "ev": ev, "tutar": tutar, "buyume": buyume, "en_kotu": ek,
