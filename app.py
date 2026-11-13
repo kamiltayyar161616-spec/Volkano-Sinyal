@@ -57,6 +57,7 @@ import kupon_ajan
 import kupon_temizle
 import avci
 import bingo
+import vk_canli_skor
 import monsure_bakim
 import patron
 import durum_rapor
@@ -661,6 +662,7 @@ if __name__ == "__main__":
     kupon_temizle.start_background()
     avci.start_background()
     bingo.start_background()
+    vk_canli_skor.start_background()
     monsure_bakim.start_background()
     patron.start_background()
     durum_rapor.start_background()
