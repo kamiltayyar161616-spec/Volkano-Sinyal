@@ -184,6 +184,7 @@ def rapor():
             "iyv_yama": _guvenli(lambda: __import__("iyv_yama").rapor()),
             "kupon_tani": _guvenli(lambda: __import__("kupon_tani").rapor()),
             "kars_tani": _guvenli(lambda: __import__("kars_tani").rapor()),
+            "vk_skor_kesif": _guvenli(lambda: __import__("vk_skor_kesif").rapor()),
             "toto_hafta": _guvenli(lambda: (lambda h: {"hafta": h["hafta"], "kapanis": h["kapanis"], "toto_iddaa": __import__("toto_iddaa")._last,
                                                         "maclar": [{k: x.get(k) for k in ("no", "ad", "ng", "ko", "simdi", "simdi_at", "m7", "pin", "kupon", "iddaa")} for x in h["maclar"]]} if h else None)(__import__("toto_tab").toto_hafta()))}
 
