@@ -3,7 +3,7 @@ import re
 import urllib.request
 _S = {}
 UA = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"}
-ARA = ["GetSnapshotEventMarkets", "hubs/", ".withUrl(", "connection.on(", '.on("', "sportDataProvider", "client.url.portSocket", "Subscribe"]
+ARA = ["invokeSubscribeToDefault(){", "liveScoreAggregators", "LiveScore", "liveScore", ".invoke(\"", "subscribeToEventMarkets("]
 
 
 def _al(u):
@@ -26,18 +26,22 @@ def rapor():
         out["chunk_n"] = len(es)
         out["rt_u"] = re.findall(r's\.u=[^;]{0,300}', rt)[:2]
         bag, yol = {}, set()
+        es = {k: v for k, v in es.items() if "sport_offer" in k or "live-score" in k or "livescore" in k.lower() or "scoreboard" in k.lower()}
+        out["secilen"] = list(es)
         for cid, hs in list(es.items())[:400]:
             u = f"{base}{cid}.{hs}.js"
             try:
                 t = _al(u)
             except Exception:
                 continue
+            if "sport_offer_src_index" in cid:
+                out["ham_73400"] = t[73400:78500]
             for a in ARA:
-                for mm in list(re.finditer(re.escape(a), t))[:3]:
+                for mm in list(re.finditer(re.escape(a), t))[:6]:
                     bag.setdefault(a, []).append(f"{cid}@{mm.start()}: " + t[max(0, mm.start() - 300): mm.start() + 500])
             for mm in re.findall(r'["\'`/]((?:Offer|offer|Live|live|Score|score|Stat|stat|Event|event|Fixture|fixture|Subscription|hubs)[A-Za-z]*/[A-Za-z]+)["\'`?]', t):
                 yol.add(f"{cid}:{mm}")
-        out["bag"] = {k: v[:6] for k, v in bag.items()}
+        out["bag"] = {k: v[:8] for k, v in bag.items()}
         out["yollar"] = sorted(yol)[:300]
     except Exception as e:
         out["hata"] = f"{type(e).__name__}: {str(e)[:200]}"
