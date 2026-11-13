@@ -142,6 +142,18 @@ def db():
         c.commit()
         c.close()
         return db()
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_kasa20k'").fetchone():
+        # 13.11.2026 kullanıcı: kasa 20.000, üst limit yok — eski kuponlar (500 ₺ sınırlı) arşive, üç kasa da 20.000'den; sinyal karnesi aynen kalır
+        c.execute("CREATE TABLE kural_kasa20k (at TEXT)")
+        c.execute("INSERT INTO kural_kasa20k VALUES (datetime('now'))")
+        c.execute("DROP INDEX IF EXISTS abahis_k2")      # arşive giden tabloda kalmasın; yeni abahis'te yeniden kurulur
+        for tb in ("bahis", "vbahis", "abahis"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (tb,)).fetchone():
+                c.execute(f"DROP TABLE IF EXISTS {tb}_eski4")
+                c.execute(f"ALTER TABLE {tb} RENAME TO {tb}_eski4")
+        c.commit()
+        c.close()
+        return db()
     if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_canli_oran'").fetchone():
         # 13.11.2026: Volkano oranları artık canlı bağlantıdan (anlık görüntü ~1 dk bayattı) — eski Volkano sinyal/kupon arşive, kasa 5000'den
         c.execute("CREATE TABLE kural_canli_oran (at TEXT)")

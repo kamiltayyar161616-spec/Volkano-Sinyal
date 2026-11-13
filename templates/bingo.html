@@ -34,7 +34,7 @@
 <div class="kasa"><div class="r1"><span class="tk">Bakiye <b style="font-size:20px">{{ '%.2f'|format(k.bakiye) }} ₺</b></span>
 <span class="sn {{ 'p' if k.kar > 0 else 'n' if k.kar < 0 else '' }}" style="font-size:16px">{{ '%+.2f'|format(k.kar) }} ₺</span></div>
 <div class="r2" style="margin-left:0">ROI {{ roi(k.roi) }} · biten {{ k.biten }} kupon ({{ k.kazanan }} ✓ / {{ k.biten - k.kazanan }} ✗) · oynanan {{ '%.0f'|format(k.oynanan) }} ₺ · açık {{ k.n - k.biten }} kupon {{ '%.0f'|format(k.acik) }} ₺ · serbest {{ '%.2f'|format(k.serbest) }} ₺</div>
-<div class="r2" style="margin-left:0">sanal kasa · 20.000 ₺ başlangıç (13.11 18:20 itibarıyla; önce 5000) · fark <b>en az 50 sn kesintisiz</b> açık kalırsa (oynama süresi) o anki {{ ad }} oranıyla tek maç kupon — daha kısa sürenler sadece sinyal karnesinde · 12.11 18:15 öncesi tüm sinyal ve kuponlar arşivde, karne ve kasa yeni kurallarla sıfırdan · tutar = serbest kasa × Kelly × ½, en az 100 ₺, üst limit yok (5'e yuvarlı) · ihtimal = 1xbet marjsız adil</div></div>
+<div class="r2" style="margin-left:0">sanal kasa · 20.000 ₺ başlangıç (13.11 18:25 sıfırlandı; eski 500 ₺ sınırlı kuponlar arşivde) · fark <b>en az 50 sn kesintisiz</b> açık kalırsa (oynama süresi) o anki {{ ad }} oranıyla tek maç kupon — daha kısa sürenler sadece sinyal karnesinde · 12.11 18:15 öncesi tüm sinyal ve kuponlar arşivde, karne ve kasa yeni kurallarla sıfırdan · tutar = serbest kasa × Kelly × ½, en az 100 ₺, üst limit yok (5'e yuvarlı) · ihtimal = 1xbet marjsız adil</div></div>
 {% for x in d.K %}{% set b = x.bahis %}
 <div class="kc {{ 'ok' if b.durum == 'kazandı' else 'no' if b.durum == 'kaybetti' else '' }}">
   <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>
