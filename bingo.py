@@ -57,7 +57,8 @@ def _seri_gun(key, ara):
         for k in [k for k, v in _seri.items() if t - v[1] > 600]:
             del _seri[k]
     return t - bas
-KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
+KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 13.11.2026 kullanıcı: kasa 20.000, üst limit yok
+# eski: 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
 SIRA = ("Tümü", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
