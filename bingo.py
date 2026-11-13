@@ -722,6 +722,10 @@ def get_page_data(gun=None, kaynak="iddaa"):
         t = datetime.fromisoformat(r["at"]).astimezone(TR)
         r["gun"], r["saat"] = t.date().isoformat(), t.strftime("%H:%M")
         r["supheli"] = (r["deger"] or 0) > SUPHELI
+        try:                               # 13.11.2026: fark şu an hâlâ açık mı (son taramada görüldü) — link sadece o zaman gösterilir
+            r["simdi"] = (datetime.now(timezone.utc) - datetime.fromisoformat(r["son_at"])).total_seconds() <= 3 * SN
+        except (TypeError, ValueError):
+            r["simdi"] = False
         if r["sonuc"] not in ("tuttu", "yattı"):
             continue
         ekle("Tümü", "tüm sinyaller", r)

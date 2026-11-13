@@ -21,7 +21,7 @@
   .kasa{ margin:4px 16px 14px; padding:12px 14px; border-radius:14px; background:var(--navy); border:1px solid #e0a030; }
   .chip.on{ border-color:#e0a030; color:#e0a030; }
 </style>
-<meta http-equiv="refresh" content="15">
+<meta http-equiv="refresh" content="10">
 {% endblock %}
 {% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
 {% block content %}
@@ -88,8 +88,9 @@
     <span class="o">açık kaldı {% set s = x.sure or 0 %}{% if s < 10 %}<b class="n">&lt;10 sn (tek tarama)</b>{% elif s < 60 %}<b>{{ s }} sn</b>{% else %}<b class="p">{{ s // 60 }} dk {{ s % 60 }} sn</b>{% endif %}</span></div>
   {% if x.deger and x.deger > 1.30 and V %}<div class="r2 n" style="margin-top:4px">⚠ büyük ihtimalle skor farkı ({{ ad }} golü geç/erken işledi) — fark {{ x.sure or 0 }} sn sürdü; gerçekte {{ ad }} bu bahsi kilitler/iptal eder</div>{% endif %}
   {% if x.v_skor %}<div class="r2 {{ 'n' if x.skor_fark else '' }}" style="margin-top:4px">sinyal anında Volkano skoru <b>{{ x.v_skor }}</b> (1xbet {{ x.skor }}){% if x.skor_fark %} · ⚠ skor {{ x.skor_fark }} sn farklı kaldı{% else %} · aynı ✓{% endif %}</div>{% endif %}
-  {% if not V and x.iid and not x.sonuc %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="https://www.iddaa.com/program/futbol/mac-detay/2/{{ x.iid }}/tum-oranlar" target="_blank">📲 iddaa'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}
-  {% if x.vlink and not x.sonuc %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ x.vlink }}" target="_blank">🌋 Volkano'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}
+  {% if not x.sonuc and not x.simdi %}<div class="r2 meta" style="margin-top:4px">fark kapandı — artık oynanamaz</div>{% endif %}
+  {% if not V and x.iid and not x.sonuc and x.simdi %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="https://www.iddaa.com/program/futbol/mac-detay/2/{{ x.iid }}/tum-oranlar" target="_blank">📲 iddaa'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}
+  {% if x.vlink and not x.sonuc and x.simdi %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ x.vlink }}" target="_blank">🌋 Volkano'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}
 </div>
 {% else %}<div class="section-sub">Bu gün sinyal yok.</div>{% endfor %}
 {% endif %}
