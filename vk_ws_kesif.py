@@ -20,8 +20,9 @@ def rapor():
         h = _al(base + "sport-v2/live?sportId=1")
         rt_ad = re.search(r'src="(runtime[^"]+\.js)"', h).group(1)
         rt = _al(base + rt_ad)
-        m = re.search(r'\{(\s*\d+:"[0-9a-f]{8,}"\s*(?:,\s*\d+:"[0-9a-f]{8,}"\s*)*)\}\[_?[a-z]\]\+"\.js"', rt) or re.search(r'\{((?:\d+:"[0-9a-f]{8,}",?)+)\}', rt)
-        es = dict(re.findall(r'(\d+):"([0-9a-f]{8,})"', m.group(1))) if m else {}
+        i0 = rt.index("s.u=")
+        blok = rt[i0:rt.index("}", i0) + 1]
+        es = dict(re.findall(r'["\']?([A-Za-z0-9_-]+)["\']?:"([0-9a-f]{8,})"', blok))
         out["chunk_n"] = len(es)
         out["rt_u"] = re.findall(r's\.u=[^;]{0,300}', rt)[:2]
         bag, yol = {}, set()
