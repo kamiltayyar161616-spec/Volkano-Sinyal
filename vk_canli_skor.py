@@ -22,6 +22,7 @@ SKOR = {}          # ai -> {"h": int|None, "a": int|None, "t": str, "cp": str, "
 _ham = []          # ilk birkaç ham LS/yanıt örneği (biçim kontrolü için)
 _d = {"durum": "başlamadı", "hata": None, "bag_at": None, "mesaj": 0, "abone": 0, "son_mesaj": None}
 _abone = set()
+_em = {"hedef": {}, "ham": [], "tamam": []}   # oran aboneligi denemesi: gelen hedef sayilari + ham ornekler
 _lock = threading.Lock()
 
 
@@ -97,6 +98,9 @@ def _oturum():
                 if yeni:
                     n += 1
                     _gonder(ws, "SB_LS", [{"events": yeni, "clientType": CLIENT, "lang": LANG}], n)
+                    n += 1
+                    _em["sb_em_id"] = str(n)
+                    _gonder(ws, "SB_EM", [{"events": yeni, "clientType": CLIENT, "lang": LANG}], n)
                     _abone.update(yeni)
                 canli = set(L)
                 with _lock:
@@ -123,6 +127,13 @@ def _oturum():
             except ValueError:
                 continue
             tip = m.get("type")
+            if tip == 1:
+                hd = m.get("target")
+                _em["hedef"][hd] = _em["hedef"].get(hd, 0) + 1
+                if hd in ("EM", "EMD", "IEM") and len(_em["ham"]) < 4:
+                    _em["ham"].append(parca[:2500])
+            if tip == 3 and m.get("invocationId") == _em.get("sb_em_id") and len(_em["tamam"]) < 2:
+                _em["tamam"].append(parca[:2500])
             if tip == 7:
                 raise ConnectionError("sunucu kapattı: " + str(m.get("error"))[:100])
             if tip == 1 and m.get("target") == "LS":
@@ -174,7 +185,7 @@ def skor(ai):
 def rapor():
     with _lock:
         ornek = {k: {kk: v[kk] for kk in ("h", "a", "t", "cp")} for k, v in list(SKOR.items())[:6]}
-    return {**_d, "skor_n": len(SKOR), "ornek": ornek, "ham": _ham[:4]}
+    return {**_d, "skor_n": len(SKOR), "ornek": ornek, "ham": _ham[:2], "em": _em}
 
 
 _started = False
