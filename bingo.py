@@ -60,7 +60,7 @@ def _seri_gun(key, ara):
 KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika")
+SIRA = ("Tümü", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
 SUPHELI = 1.30                  # oran/adil bunun ustu: buyuk ihtimalle veri/cizgi hatasi (gercek gecikme degil), bahis iptal riski
 VERGI = 0.12                    # vergili ROI satiri: net kazancin %12si (iyms_analiz ile ayni kural)
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
@@ -709,6 +709,9 @@ def get_page_data(gun=None, kaynak="iddaa"):
                 ekle("Filtre", "önerilen: 1–3 dk açık + fark ≤ %30", r)
         ekle("oran", _kova(r["iddaa"], (1.60, 2.20, 3.50), ("1.30–1.60", "1.60–2.20", "2.20–3.50", "3.50+")), r)
         ekle("Dakika", _kova(r["dk"], (30, 60, 75), ("0–29", "30–59", "60–74", "75–85")), r)
+        if kaynak == "volkano":              # 13.11.2026: sinyal anında Volkano skoru 1xbet'le aynı mıydı (sadece karne)
+            ekle("Skor (Volkano ↔ 1xbet)", "skor bilinmiyor (13.11 11:00 öncesi)" if not r.get("v_skor") else
+                 "skor farklıyken gelen (gecikme)" if (r.get("skor_fark") or 0) > 0 else "skor aynıyken gelen (gerçek fark)", r)
         ekle("Açık kalma süresi", _kova(r["sure"] or 0, (10, 30, 60, 180), ("<10 sn (tek tarama)", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+")), r)
     out["ozet"] = [{"grup": k[0], "ad": k[1], "n": v[0], "w": v[1], "isabet": round(100 * v[1] / v[0]), "roi": round(100 * v[2] / v[0], 1),
                     "roi_v": round(100 * v[3] / v[0], 1), "kar": round(v[2], 2)} for k, v in sorted(G.items(), key=lambda kv: (SIRA.index(kv[0][0]), kv[0][1]))]
