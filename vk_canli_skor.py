@@ -100,7 +100,7 @@ def _oturum():
                     _gonder(ws, "SB_LS", [{"events": yeni, "clientType": CLIENT, "lang": LANG}], n)
                     n += 1
                     _em["sb_em_id"] = str(n)
-                    _gonder(ws, "SB_EM", [{"events": yeni, "clientType": CLIENT, "lang": LANG}], n)
+                    _gonder(ws, "SB_EM", [{"events": [{"eventId": x, "marketIds": ["1", "18"]} for x in yeni], "clientType": CLIENT, "lang": LANG}], n)
                     _abone.update(yeni)
                 canli = set(L)
                 with _lock:
@@ -133,7 +133,7 @@ def _oturum():
                 if hd in ("EM", "EMD", "IEM") and len(_em["ham"]) < 4:
                     _em["ham"].append(parca[:2500])
             if tip == 3 and m.get("invocationId") == _em.get("sb_em_id") and len(_em["tamam"]) < 2:
-                _em["tamam"].append(parca[:2500])
+                _em["tamam"].append(parca[:3500])
             if tip == 7:
                 raise ConnectionError("sunucu kapattı: " + str(m.get("error"))[:100])
             if tip == 1 and m.get("target") == "LS":
