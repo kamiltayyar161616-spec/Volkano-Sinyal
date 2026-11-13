@@ -3,8 +3,7 @@ import re
 import urllib.request
 _S = {}
 UA = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"}
-ARA = ["hubs/", "client.url.", ".withUrl(", "env.json", "config.json", "environment.json", "/assets/env", "live.statscore.com",
-       "eventChanged", "EventChanged", "OnEvent", '.on("', "scoreInfo", "ScoreInfo", "currentScore", "CurrentScore"]
+ARA = ["GetSnapshotEventMarkets", "sportDataProvider", "sportdataprovider", "GetLiveScore", "Scoreboard/", "scoreboard/", "hubs/", "LiveHub", "liveHub", "OfferHub", "offerHub"]
 
 
 def _al(u):
@@ -34,6 +33,13 @@ def rapor():
                 for m in list(re.finditer(re.escape(a), t))[:4]:
                     bag.setdefault(a, []).append(f"{ad[:6]}@{m.start()}: " + t[max(0, m.start() - 250): m.start() + 350])
         out["bag"] = bag
+        yol = set()
+        for t2 in js.values():
+            for m in re.findall(r'["\'`/]((?:Offer|offer|Live|live|Score|score|Stat|stat|Event|event|Fixture|fixture)[A-Za-z]*/[A-Za-z]+)["\'`?]', t2):
+                yol.add(m)
+            for m in re.findall(r'client\.url\.[A-Za-z]+', t2):
+                yol.add(m)
+        out["yollar"] = sorted(yol)[:300]
         out["hosts"] = sorted(set(re.findall(r'https?://[a-zA-Z0-9.-]+\.[a-z]{2,}', " ".join(js.values()))))[:80]
     except Exception as e:
         out["hata"] = f"{type(e).__name__}: {str(e)[:200]}"
