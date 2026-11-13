@@ -47,17 +47,9 @@ def _int(x):
 
 
 def _skor_cikar(s):
-    """scoreboard (ham 's') -> (ev, dep). sc öğelerinin alan adları sitede eşleniyor; yaygın adlar denenir, bulunamazsa None."""
-    sc = s.get("sc") or []
-    for o in sc:
-        if not isinstance(o, dict):
-            continue
-        tip = str(o.get("t") or o.get("n") or o.get("i") or "").lower()
-        h = next((_int(o.get(k)) for k in ("h", "hs", "home", "s1", "v1") if _int(o.get(k)) is not None), None)
-        a = next((_int(o.get(k)) for k in ("a", "as", "away", "s2", "v2") if _int(o.get(k)) is not None), None)
-        if h is not None and a is not None and (not tip or any(k in tip for k in ("cur", "goal", "score", "ft", "total", "1"))):
-            return h, a
-    return None, None
+    """scoreboard sc: [{"p": "1", "v": "0"}, {"p": "2", "v": "1"}] -> (ev, dep)"""
+    d = {str(o.get("p")): _int(o.get("v")) for o in (s.get("sc") or []) if isinstance(o, dict)}
+    return d.get("1"), d.get("2")
 
 
 def _isle(o):

@@ -52,8 +52,20 @@
 <div class="kc canli"><div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span></div>
 <div class="r3" style="margin-top:6px"><span class="sec">{{ x.sec }}</span><span class="o">{{ ad }} <b>{{ x.iddaa }}</b></span><span class="o">1xbet {{ x.x_oran or '-' }}{% if not V %} · Volkano {{ x.v_oran or '-' }}{% endif %}</span><span class="o">adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span>{% if x.deger and x.deger > 1.30 %}<span class="o n">⚠ şüpheli veri</span>{% endif %}</div>
 {% if x.deger and x.deger > 1.30 and V %}<div class="r2 n" style="margin-top:4px">⚠ Fark çok büyük: büyük ihtimalle {{ ad }} skoru 1xbet'ten farklı (golü geç ya da erken işledi). Gerçekte {{ ad }} bu anda bahsi kilitler ya da sonradan iptal eder; sistem farkı görünce direkt işliyor.</div>{% endif %}
+{% if x.v_skor %}<div class="r2 {{ 'n' if x.skor_fark else '' }}" style="margin-top:4px">skor: Volkano <b>{{ x.v_skor }}</b> · 1xbet <b>{{ x.x_skor }}</b>{% if x.skor_fark %} · ⚠ {{ x.skor_fark }} sn'dir farklı — Volkano bu anda bahsi büyük ihtimalle kilitler/iptal eder{% else %} · aynı ✓{% endif %}</div>{% endif %}
 {% if x.link %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ x.link }}" target="_blank">🌋 Volkano'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}</div>
 {% else %}<div class="section-sub">Şu an {{ "Admiral'in" if ad == 'Admiral' else "Volkano'nun" if V else "iddaa'nın" }} geride kaldığı seçenek yok.</div>{% endfor %}
+
+{% if d.vskor %}{% set s = d.vskor %}
+<h2 class="section">⏱ VOLKANO SKOR FARKI (Volkano canlı skoru ↔ 1xbet)</h2>
+<div class="section-sub">Volkano'nun kendi canlı skoru (sitenin canlı bağlantısından) her taramada 1xbet skoruyla karşılaştırılır. Fark başladığı andan kapandığı ana kadar ölçülür.{% if s.okuyucu %} · okuyucu: {{ s.okuyucu.durum }}, {{ s.okuyucu.abone }} maç{% if s.okuyucu.hata %} · ⚠ {{ s.okuyucu.hata }}{% endif %}{% endif %}</div>
+{% for f in s.acik %}<div class="kc canli"><div class="r1"><span class="tk">{{ f.ev }} – {{ f.dep }}</span><span class="sn n">{{ f.sn }} sn</span></div><div class="r2">ŞU AN FARKLI · Volkano {{ f.v }} · 1xbet {{ f.x }} · {{ f.yon }}</div></div>{% endfor %}
+{% if s.n %}<div class="kasa"><div class="r2" style="margin-left:0">ölçülen fark: <b>{{ s.n }}</b> kez · ortalama <b>{{ s.ort }} sn</b> · ortanca {{ s.med }} sn · en uzun {{ s.max }} sn · 60 sn+ süren {{ s.uzun }}</div>
+<div class="r2" style="margin-left:0">{% for y in s.yon %}{{ y.ad }}: {{ y.n }} kez (ort. {{ y.ort }} sn){% if not loop.last %} · {% endif %}{% endfor %}</div></div>
+<table class="tt"><tr><th>başladı</th><th>maç</th><th>Volkano</th><th>1xbet</th><th>süre</th></tr>
+{% for f in s.son %}<tr><td>{{ f.saat }}</td><td style="text-align:left">{{ f.ev[:14] }} – {{ f.dep[:14] }}<br><span class="meta">{{ f.yon }} · {{ f.dk }}'</span></td><td>{{ f.v_skor }}</td><td>{{ f.x_skor }}</td><td><b class="{{ 'n' if f.sure >= 60 else '' }}">{{ f.sure }} sn</b></td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten skor farkı ölçümü yok.</div>{% endif %}
+{% endif %}
 
 <h2 class="section">📈 KARNE (biten sinyaller)</h2>
 {% if d.ozet %}
@@ -74,6 +86,7 @@
     <span class="o">1xbet {{ x.x_oran or '-' }}{% if not V %} · Volkano {{ x.v_oran or '-' }}{% endif %} · adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span>{% if x.deger and x.deger > 1.30 %}<span class="o n">⚠ şüpheli veri</span>{% endif %}
     <span class="o">açık kaldı {% set s = x.sure or 0 %}{% if s < 10 %}<b class="n">&lt;10 sn (tek tarama)</b>{% elif s < 60 %}<b>{{ s }} sn</b>{% else %}<b class="p">{{ s // 60 }} dk {{ s % 60 }} sn</b>{% endif %}</span></div>
   {% if x.deger and x.deger > 1.30 and V %}<div class="r2 n" style="margin-top:4px">⚠ büyük ihtimalle skor farkı ({{ ad }} golü geç/erken işledi) — fark {{ x.sure or 0 }} sn sürdü; gerçekte {{ ad }} bu bahsi kilitler/iptal eder</div>{% endif %}
+  {% if x.v_skor %}<div class="r2 {{ 'n' if x.skor_fark else '' }}" style="margin-top:4px">sinyal anında Volkano skoru <b>{{ x.v_skor }}</b> (1xbet {{ x.skor }}){% if x.skor_fark %} · ⚠ skor {{ x.skor_fark }} sn farklı kaldı{% else %} · aynı ✓{% endif %}</div>{% endif %}
   {% if x.vlink and not x.sonuc %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ x.vlink }}" target="_blank">🌋 Volkano'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}
 </div>
 {% else %}<div class="section-sub">Bu gün sinyal yok.</div>{% endfor %}

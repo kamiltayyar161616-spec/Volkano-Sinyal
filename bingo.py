@@ -141,10 +141,13 @@ def db():
         c.commit()
         c.close()
         return db()
-    try:                                   # 13.11.2026: Volkano maç linki (sadece gösterim)
-        c.execute("ALTER TABLE vsinyal ADD COLUMN vlink TEXT")
-    except sqlite3.OperationalError:
-        pass
+    for kol in ("vlink TEXT", "v_skor TEXT", "skor_fark INTEGER"):   # 13.11.2026: Volkano linki + canlı skor (sadece gösterim)
+        try:
+            c.execute(f"ALTER TABLE vsinyal ADD COLUMN {kol}")
+        except sqlite3.OperationalError:
+            pass
+    c.execute("""CREATE TABLE IF NOT EXISTS vskor_fark (xid INTEGER, ev TEXT, dep TEXT, bas TEXT, bit TEXT, sure INTEGER, v_skor TEXT,
+                 x_skor TEXT, yon TEXT, dk INTEGER)""")
     c.execute("CREATE TABLE IF NOT EXISTS asinyal AS SELECT * FROM vsinyal WHERE 0")
     c.execute("CREATE TABLE IF NOT EXISTS abahis AS SELECT * FROM vbahis WHERE 0")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS asinyal_k ON asinyal(xid, sec)")
@@ -488,6 +491,36 @@ def tur():
     return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO {len(V)} maç, 1xbet ile eşleşen {_SITE['volkano']['eslesen']}, açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, 1xbet ile eşleşen {_SITE['admiral']['eslesen']}, açık {len(acik_a)} yeni {ya}"
 
 
+_vfark = {}     # xid -> {"bas": epoch, "v": "h-a", "x": "h-a", "yon": str, "dk": int}
+
+
+def _vskor_takip(c, x, ai, now):
+    """Volkano canlı skoru (vk_canli_skor) ile 1xbet skorunu karşılaştır; fark dönemlerini vskor_fark'a yaz.
+    -> (v_skor 'h-a' | None, fark süresi sn | 0). Sadece gösterim/ölçüm — sinyal ve kupon kuralını etkilemez."""
+    try:
+        import vk_canli_skor as VS
+        s = VS.skor(ai)
+    except Exception:
+        s = None
+    if not s or s[2] > 120:
+        return None, 0
+    vh, va = s[0], s[1]
+    vs, xs = f"{vh}-{va}", f"{x['s1']}-{x['s2']}"
+    f = _vfark.get(x["I"])
+    if (vh, va) != (x["s1"], x["s2"]):
+        if not f:
+            yon = "Volkano geride" if vh + va < x["s1"] + x["s2"] else "Volkano önde" if vh + va > x["s1"] + x["s2"] else "skor farklı"
+            _vfark[x["I"]] = f = {"bas": time.time(), "v": vs, "x": xs, "yon": yon, "dk": x["dk"], "ev": x["ev"], "dep": x["dep"]}
+        return vs, int(time.time() - f["bas"])
+    if f:
+        sure = int(time.time() - f["bas"])
+        c.execute("INSERT INTO vskor_fark VALUES (?,?,?,?,?,?,?,?,?,?)",
+                  (x["I"], f["ev"], f["dep"], datetime.fromtimestamp(f["bas"], timezone.utc).isoformat(), now.isoformat(), sure, f["v"], f["x"],
+                   f["yon"], f["dk"]))
+        del _vfark[x["I"]]
+    return vs, 0
+
+
 def _vlink(ai, f, pazar):
     """Volkano mobil sitede maçın ilgili sekmesi (MS -> ana, Alt/Üst -> gol sekmesi). Kupon linkte taşınmıyor; seçim kartta yazar."""
     if not ai or not f:
@@ -513,6 +546,7 @@ def site_tur(c, X, VF, V, now, at, site):
         if not v:
             continue
         S_["eslesen"] += 1
+        v_skor, v_fark = _vskor_takip(c, x, ai, now) if site == "volkano" else (None, 0)
         if x["dk"] > MAX_DK or time.time() - _skor.get(x["I"], (None, 0))[1] < 90:
             continue
         gol = x["s1"] + x["s2"]
@@ -544,7 +578,7 @@ def site_tur(c, X, VF, V, now, at, site):
             adil = 1 / p
             link = _vlink(ai, VF.get(ai), pazar) if site == "volkano" else None
             acik.append({"ev": x["ev"], "dep": x["dep"], "sec": sec, "iddaa": vo, "adil": round(adil, 2), "deger": round(d, 3), "dk": x["dk"],
-                         "x_oran": xo, "v_oran": vo, "link": link})
+                         "x_oran": xo, "v_oran": vo, "link": link, "v_skor": v_skor, "x_skor": f"{x['s1']}-{x['s2']}", "skor_fark": v_fark})
             r = c.execute(f"SELECT son_at, sure FROM {s_tab} WHERE xid=? AND sec=?", key).fetchone()
             if r is None:
                 yeni += 1
@@ -561,7 +595,8 @@ def site_tur(c, X, VF, V, now, at, site):
                 c.execute(f"""UPDATE {s_tab} SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, vo, round(d, 4), x["I"], sec))
             if link:
-                c.execute(f"UPDATE {s_tab} SET vlink=COALESCE(vlink, ?) WHERE xid=? AND sec=?", (link, x["I"], sec))
+                c.execute(f"UPDATE {s_tab} SET vlink=COALESCE(vlink, ?), v_skor=COALESCE(v_skor, ?), skor_fark=MAX(COALESCE(skor_fark, 0), ?) "
+                          f"WHERE xid=? AND sec=?", (link, v_skor, v_fark, x["I"], sec))
     for k in list(_vbekle):
         if k not in gor:
             del _vbekle[k]
@@ -620,6 +655,28 @@ def get_page_data(gun=None, kaynak="iddaa"):
         B = {(r["xid"], r["sec"]): dict(r) for r in c.execute(f"SELECT * FROM {b_tab}")}
     except sqlite3.OperationalError:
         R, B = [], {}
+    if kaynak == "volkano":                # 13.11.2026: Volkano / 1xbet skor farkı ölçümü (sadece gösterim)
+        try:
+            F = [dict(r) for r in c.execute("SELECT * FROM vskor_fark ORDER BY bit DESC LIMIT 500")]
+        except sqlite3.OperationalError:
+            F = []
+        for r in F:
+            r["saat"] = datetime.fromisoformat(r["bas"]).astimezone(TR).strftime("%d.%m %H:%M")
+        S = sorted(r["sure"] for r in F)
+        Y = {}
+        for r in F:
+            Y.setdefault(r["yon"], []).append(r["sure"])
+        out["vskor"] = {"n": len(S), "ort": round(sum(S) / len(S)) if S else None, "med": S[len(S) // 2] if S else None, "max": S[-1] if S else None,
+                        "uzun": sum(1 for s in S if s >= 60),
+                        "yon": [{"ad": k, "n": len(v), "ort": round(sum(v) / len(v))} for k, v in sorted(Y.items(), key=lambda kv: -len(kv[1]))],
+                        "son": F[:15],
+                        "acik": [{"ev": f["ev"], "dep": f["dep"], "v": f["v"], "x": f["x"], "yon": f["yon"], "sn": int(time.time() - f["bas"])}
+                                 for f in _vfark.values()]}
+        try:
+            import vk_canli_skor as VS
+            out["vskor"]["okuyucu"] = {k: VS._d.get(k) for k in ("durum", "hata", "abone")}
+        except Exception:
+            pass
     c.close()
     for r in R:
         b = B.get((r["xid"], r["sec"]))
