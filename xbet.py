@@ -230,7 +230,7 @@ def ozet():
 
 
 def _loop():
-    time.sleep(320)
+    time.sleep(90)                  # 13.11.2026: 320 -> 90 sn (yeniden başlatmada son 5 dk penceresi kaçmasın)
     while True:
         try:
             _last["log"] = f"{datetime.now(timezone.utc):%H:%M} UTC " + kaydet()
