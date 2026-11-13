@@ -141,6 +141,10 @@ def db():
         c.commit()
         c.close()
         return db()
+    try:                                   # 13.11.2026: Volkano maç linki (sadece gösterim)
+        c.execute("ALTER TABLE vsinyal ADD COLUMN vlink TEXT")
+    except sqlite3.OperationalError:
+        pass
     c.execute("CREATE TABLE IF NOT EXISTS asinyal AS SELECT * FROM vsinyal WHERE 0")
     c.execute("CREATE TABLE IF NOT EXISTS abahis AS SELECT * FROM vbahis WHERE 0")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS asinyal_k ON asinyal(xid, sec)")
@@ -245,7 +249,8 @@ def xbet():
 
 def volkano_fix():
     F = _get(FIX_URL)
-    return {f["ai"]: {"ev": f["p"][0]["n"], "dep": f["p"][1]["n"], "S": int(datetime.fromisoformat(f["sd"].replace("Z", "+00:00")).timestamp())}
+    return {f["ai"]: {"ev": f["p"][0]["n"], "dep": f["p"][1]["n"], "S": int(datetime.fromisoformat(f["sd"].replace("Z", "+00:00")).timestamp()),
+                      "loi": f.get("loi"), "lei": f.get("lei")}
             for f in (F.get("f") or []) if f.get("si") == "1" and f.get("s") == "InProgress" and len(f.get("p") or []) >= 2}
 
 
@@ -483,6 +488,14 @@ def tur():
     return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO {len(V)} maç, 1xbet ile eşleşen {_SITE['volkano']['eslesen']}, açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, 1xbet ile eşleşen {_SITE['admiral']['eslesen']}, açık {len(acik_a)} yeni {ya}"
 
 
+def _vlink(ai, f, pazar):
+    """Volkano mobil sitede maçın ilgili sekmesi (MS -> ana, Alt/Üst -> gol sekmesi). Kupon linkte taşınmıyor; seçim kartta yazar."""
+    if not ai or not f:
+        return None
+    u = f"https://m.volcanobet.me/sport-v2/live?sportId=1&id={ai}&marketGroup={0 if pazar == 'MS' else 2}&leagueId={f.get('lei') or ''}&locationId={f.get('loi') or ''}"
+    return u if pazar == "MS" else u + "&subGroup=0"
+
+
 def site_tur(c, X, VF, V, now, at, site):
     """SITE geride (Volkano / Admiral): site oranı 1.30–10 ve site / 1xbet adil ≥ 1.05. Yanlış alarm koruması: aynı fark iki ayrı
     site taramasında (≥ 20 sn arayla) görülmeli; skor son 90 sn içinde değiştiyse bakılmaz."""
@@ -529,8 +542,9 @@ def site_tur(c, X, VF, V, now, at, site):
             if _vbekle[key] == vt:
                 continue                       # henüz tek Volkano taramasında görüldü — onay bekliyor
             adil = 1 / p
+            link = _vlink(ai, VF.get(ai), pazar) if site == "volkano" else None
             acik.append({"ev": x["ev"], "dep": x["dep"], "sec": sec, "iddaa": vo, "adil": round(adil, 2), "deger": round(d, 3), "dk": x["dk"],
-                         "x_oran": xo, "v_oran": vo})
+                         "x_oran": xo, "v_oran": vo, "link": link})
             r = c.execute(f"SELECT son_at, sure FROM {s_tab} WHERE xid=? AND sec=?", key).fetchone()
             if r is None:
                 yeni += 1
@@ -546,6 +560,8 @@ def site_tur(c, X, VF, V, now, at, site):
                     _bahis_ac(c, x["I"], sec, vo, p, at, b_tab)
                 c.execute(f"""UPDATE {s_tab} SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, vo, round(d, 4), x["I"], sec))
+            if link:
+                c.execute(f"UPDATE {s_tab} SET vlink=COALESCE(vlink, ?) WHERE xid=? AND sec=?", (link, x["I"], sec))
     for k in list(_vbekle):
         if k not in gor:
             del _vbekle[k]
