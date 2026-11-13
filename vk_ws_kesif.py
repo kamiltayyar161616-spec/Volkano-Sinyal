@@ -3,8 +3,8 @@ import re
 import urllib.request
 _S = {}
 UA = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"}
-ARA = ["Subscription/Subscribe", "new WebSocket", "WebSockets", "withUrl", "HubConnection", "signalr", "wss:", "ws:", "liveScore", "scoreboard",
-       "\"sc\"", "Scoreboard", "socketUrl", "SocketUrl", "pushUrl", "PushUrl", "realtime", "Realtime"]
+ARA = ["hubs/", "client.url.", ".withUrl(", "env.json", "config.json", "environment.json", "/assets/env", "live.statscore.com",
+       "eventChanged", "EventChanged", "OnEvent", '.on("', "scoreInfo", "ScoreInfo", "currentScore", "CurrentScore"]
 
 
 def _al(u):
@@ -31,7 +31,7 @@ def rapor():
         bag = {}
         for ad, t in js.items():
             for a in ARA:
-                for m in list(re.finditer(re.escape(a), t))[:3]:
+                for m in list(re.finditer(re.escape(a), t))[:4]:
                     bag.setdefault(a, []).append(f"{ad[:6]}@{m.start()}: " + t[max(0, m.start() - 250): m.start() + 350])
         out["bag"] = bag
         out["hosts"] = sorted(set(re.findall(r'https?://[a-zA-Z0-9.-]+\.[a-z]{2,}', " ".join(js.values()))))[:80]
