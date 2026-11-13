@@ -239,6 +239,10 @@ def iddaa():
     for e in E:
         if e.get("sid") != 1 or not e.get("il") or not e.get("m"):
             continue
+        O = ISK.olay(e.get("i")) or {}      # 13.11.2026: maç seviyesinde kapalı ("Bu maç şu an oynanamaz") — bp != 1 ise sinyal/kupon yok
+        if O.get("bp", e.get("bp")) != 1:
+            _SK["mac_kapali"] = _SK.get("mac_kapali", 0) + 1
+            continue
         P = {}
         for m in e["m"]:
             S = ISK.pazar(m.get("i"))
@@ -539,7 +543,7 @@ def tur():
         bahis_kapat(c, _SITE[st]["s"], _SITE[st]["b"])
     c.commit()
     c.close()
-    _last["soket"] = f"{_SK['fark']}/{_SK['bak']}"
+    _last["soket"] = f"{_SK['fark']}/{_SK['bak']} · maç kapalı atlanan {_SK.get('mac_kapali', 0)}"
     _last.update(vacik=acik_v, aacik=acik_a, admiral=len(AD[1]), eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
                  kaynak={k: {"ara": v["ara"], "hata": v["hata"], "yas": round(time.time() - v["vt"]) if v["vt"] else None} for k, v in _K.items()})
     return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO {len(V)} maç, 1xbet ile eşleşen {_SITE['volkano']['eslesen']}, açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, 1xbet ile eşleşen {_SITE['admiral']['eslesen']}, açık {len(acik_a)} yeni {ya}"

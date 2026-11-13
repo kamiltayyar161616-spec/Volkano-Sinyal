@@ -16,6 +16,8 @@ UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chr
 _d = {k: {"durum": "başlamadı", "hata": None, "bag_at": None, "hedef": {}, "son_mesaj": None} for k in HUBS}
 _ham = {k: {} for k in HUBS}       # hub -> hedef -> [ilk 2 ham örnek]
 PZ = {}
+EV = {}            # maç id -> {"bp": bahis açık mı (1/0), "s": durum, "t"} — maç seviyesinde kapanma (13.11.2026)
+_evsay = {}        # maç seviyesinde gelen alan sayıları (kontrol)
 _lock = threading.Lock()
 
 
@@ -26,6 +28,13 @@ def _pz_isle(a):
         return
     now = time.time()
     with _lock:
+        eid = a.get("eid")
+        if eid is not None:
+            for k in ("bp", "s", "bs", "st", "ls"):
+                if k in a:
+                    EV.setdefault(eid, {})[k] = a[k]
+                    EV[eid]["t"] = now
+                    _evsay[f"{k}={a[k]}"] = _evsay.get(f"{k}={a[k]}", 0) + 1
         for m in a.get("m") or []:
             i = m.get("i")
             if i is None:
@@ -41,6 +50,15 @@ def _pz_isle(a):
                 if o.get("n") is not None and o.get("na"):
                     x["na"][str(o["n"])] = o["na"]
             x["t"] = now
+
+
+def olay(eid):
+    """maç seviyesinde son soket bilgisi (bp/s) ya da None"""
+    if _d["lite"]["durum"] != "bağlandı":
+        return None
+    with _lock:
+        x = EV.get(eid)
+        return dict(x) if x else None
 
 
 def pazar(i):
@@ -59,6 +77,7 @@ def _oturum(ad, url):
     if ad == "lite":
         with _lock:
             PZ.clear()
+            EV.clear()
     d = _d[ad]
     d.update(durum="bağlandı", bag_at=datetime.now(timezone.utc).isoformat(), hata=None)
     ws.settimeout(5)
@@ -114,7 +133,7 @@ def _loop(ad, url):
 
 
 def rapor():
-    return {"d": _d, "pz": len(PZ), "ham": {a: {h: v[0][:600] for h, v in H.items()} for a, H in _ham.items()}}
+    return {"d": _d, "pz": len(PZ), "ev": len(EV), "evsay": _evsay, "ham": {a: {h: v[0][:600] for h, v in H.items()} for a, H in _ham.items()}}
 
 
 _started = False
