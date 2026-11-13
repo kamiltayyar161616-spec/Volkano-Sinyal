@@ -43,6 +43,7 @@
   <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o"><b>{{ '%.0f'|format(b.tutar) }} ₺</b> @ <b>{{ b.oran }}</b></span>{% if b.durum == 'kazandı' %}<span class="o">ödeme <b class="p">{{ '%.2f'|format(b.getiri) }} ₺</b></span>{% endif %}</div>
   <div class="r3" style="margin-top:5px"><span class="o">gerçek ihtimal (1xbet adil) <b>%{{ b.p_adil }}</b></span><span class="o">{{ ad }} ihtimali <b>%{{ b.p_iddaa }}</b></span>
     <span class="o">beklenen kâr <b class="p">%{{ '%+.1f'|format(b.fark) }}</b></span><span class="o">Kelly %{{ b.kelly_y }} → ½ = %{{ b.pay_y }}</span></div>
+  {% if b.durum == 'açık' %}{% set lk = x.vlink if V else ('https://www.iddaa.com/program/futbol/mac-detay/2/' ~ x.iid ~ '/tum-oranlar' if x.iid else None) %}{% if lk %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ lk }}" target="_blank">{{ '🌋' if V else '📲' }} {{ ad }}'da aç → {{ x.sec }} @ {{ b.oran }}</a></div>{% endif %}{% endif %}
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok — ilk BINGO sinyalinde otomatik açılacak.</div>{% endfor %}
 {% else %}
@@ -53,7 +54,7 @@
 <div class="r3" style="margin-top:6px"><span class="sec">{{ x.sec }}</span><span class="o">{{ ad }} <b>{{ x.iddaa }}</b></span><span class="o">1xbet {{ x.x_oran or '-' }}{% if not V %} · Volkano {{ x.v_oran or '-' }}{% endif %}</span><span class="o">adil {{ x.adil }}</span><span class="o">fark <b class="p">{{ '%+.0f'|format(100*(x.deger-1)) }}%</b></span>{% if x.deger and x.deger > 1.30 %}<span class="o n">⚠ şüpheli veri</span>{% endif %}</div>
 {% if x.deger and x.deger > 1.30 and V %}<div class="r2 n" style="margin-top:4px">⚠ Fark çok büyük: büyük ihtimalle {{ ad }} skoru 1xbet'ten farklı (golü geç ya da erken işledi). Gerçekte {{ ad }} bu anda bahsi kilitler ya da sonradan iptal eder; sistem farkı görünce direkt işliyor.</div>{% endif %}
 {% if x.v_skor %}<div class="r2 {{ 'n' if x.skor_fark else '' }}" style="margin-top:4px">skor: Volkano <b>{{ x.v_skor }}</b> · 1xbet <b>{{ x.x_skor }}</b>{% if x.skor_fark %} · ⚠ {{ x.skor_fark }} sn'dir farklı — Volkano bu anda bahsi büyük ihtimalle kilitler/iptal eder{% else %} · aynı ✓{% endif %}</div>{% endif %}
-{% if x.link %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ x.link }}" target="_blank">🌋 Volkano'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}</div>
+{% if x.link %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ x.link }}" target="_blank">{{ '🌋' if V else '📲' }} {{ ad }}'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}</div>
 {% else %}<div class="section-sub">Şu an {{ "Admiral'in" if ad == 'Admiral' else "Volkano'nun" if V else "iddaa'nın" }} geride kaldığı seçenek yok.</div>{% endfor %}
 
 {% if d.vskor %}{% set s = d.vskor %}
@@ -87,6 +88,7 @@
     <span class="o">açık kaldı {% set s = x.sure or 0 %}{% if s < 10 %}<b class="n">&lt;10 sn (tek tarama)</b>{% elif s < 60 %}<b>{{ s }} sn</b>{% else %}<b class="p">{{ s // 60 }} dk {{ s % 60 }} sn</b>{% endif %}</span></div>
   {% if x.deger and x.deger > 1.30 and V %}<div class="r2 n" style="margin-top:4px">⚠ büyük ihtimalle skor farkı ({{ ad }} golü geç/erken işledi) — fark {{ x.sure or 0 }} sn sürdü; gerçekte {{ ad }} bu bahsi kilitler/iptal eder</div>{% endif %}
   {% if x.v_skor %}<div class="r2 {{ 'n' if x.skor_fark else '' }}" style="margin-top:4px">sinyal anında Volkano skoru <b>{{ x.v_skor }}</b> (1xbet {{ x.skor }}){% if x.skor_fark %} · ⚠ skor {{ x.skor_fark }} sn farklı kaldı{% else %} · aynı ✓{% endif %}</div>{% endif %}
+  {% if not V and x.iid and not x.sonuc %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="https://www.iddaa.com/program/futbol/mac-detay/2/{{ x.iid }}/tum-oranlar" target="_blank">📲 iddaa'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}
   {% if x.vlink and not x.sonuc %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="{{ x.vlink }}" target="_blank">🌋 Volkano'da aç → {{ x.sec }} @ {{ x.iddaa }}</a></div>{% endif %}
 </div>
 {% else %}<div class="section-sub">Bu gün sinyal yok.</div>{% endfor %}

@@ -475,7 +475,7 @@ def tur():
             xo, vo = S.get("X", (None, None)), S.get("V", (None, None))
             r = c.execute("SELECT son_at, sure FROM sinyal WHERE xid=? AND sec=?", (x["I"], sec)).fetchone()
             acik.append({"ev": x["ev"], "dep": x["dep"], "sec": sec, "iddaa": io, "adil": round(adil, 2), "deger": round(d, 3), "dk": x["dk"],
-                         "x_oran": xo[0], "v_oran": vo[0]})
+                         "x_oran": xo[0], "v_oran": vo[0], "link": ILINK.format(i["i"])})
             if r is None:
                 yeni += 1
                 _seri_gun(("sinyal", x["I"], sec), SN)
@@ -540,6 +540,9 @@ def _vskor_takip(c, x, ai, now):
                    f["yon"], f["dk"]))
         del _vfark[x["I"]]
     return vs, 0
+
+
+ILINK = "https://www.iddaa.com/program/futbol/mac-detay/2/{}/tum-oranlar"   # iddaa canlı maç sayfası (13.11.2026, sadece gösterim)
 
 
 def _vlink(ai, f, pazar):
