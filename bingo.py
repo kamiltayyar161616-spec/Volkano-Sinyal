@@ -33,7 +33,7 @@ X_URL = "https://1xbet.mobi/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&
 H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
      "Accept": "application/json, text/plain, */*"}
 SN = 10
-V_SN, FIX_SN = 20, 300
+V_SN, FIX_SN = 10, 300          # 13.11.2026: Volkano artık bellekteki canlı orandan okunur (ağ isteği yok), her taramada
 VB = "https://sportdataproviderv3-volcano.xtreme.bet/api/public"
 VQ = "clientType=WebConsumer&lang=sr-Latn-ME&t=b7a855b8-4f88-4d95-8f7b-c4527826bb08&v=1.1.4384"
 VDP = "d4e045a4-860c-465a-8fc4-cf2b1c4ddac3-V3"
@@ -138,6 +138,17 @@ def db():
                 c.execute(f"ALTER TABLE {t} RENAME TO {t}_eski2")
         for ix in ("asinyal_k", "abahis_k2"):
             c.execute(f"DROP INDEX IF EXISTS {ix}")
+        c.commit()
+        c.close()
+        return db()
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_canli_oran'").fetchone():
+        # 13.11.2026: Volkano oranları artık canlı bağlantıdan (anlık görüntü ~1 dk bayattı) — eski Volkano sinyal/kupon arşive, kasa 5000'den
+        c.execute("CREATE TABLE kural_canli_oran (at TEXT)")
+        c.execute("INSERT INTO kural_canli_oran VALUES (datetime('now'))")
+        for tb in ("vsinyal", "vbahis", "vskor_fark"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (tb,)).fetchone():
+                c.execute(f"DROP TABLE IF EXISTS {tb}_eski3")
+                c.execute(f"ALTER TABLE {tb} RENAME TO {tb}_eski3")
         c.commit()
         c.close()
         return db()
@@ -258,6 +269,16 @@ def volkano_fix():
 
 
 def volkano():
+    """13.11.2026: Volkano oranları CANLI bağlantıdan (vk_canli_skor, sitenin gördüğü oran). Eski anlık görüntü (V_URL) ~45-60 sn
+    bayat olduğu için kullanılmıyor; bağlantı sağlıklı değilse boş döner (bayat oranla sinyal üretilmez)."""
+    import vk_canli_skor as VS
+    V = VS.canli_oranlar()
+    if V is None:
+        raise RuntimeError("Volkano canlı bağlantı yok — sinyal üretilmiyor")
+    return V
+
+
+def volkano_eski():
     V = {}
     for e in _get(V_URL) or []:
         ms, au = {}, {}

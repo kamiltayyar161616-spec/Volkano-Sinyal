@@ -16,7 +16,7 @@ HUB = DP + "hubs/messages"
 RS = "\x1e"
 UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36"
 CLIENT, LANG = "WebConsumer", "sr-Latn-ME"
-ABONE_SN = 60
+ABONE_SN = 30
 
 SKOR = {}          # ai -> {"h": int|None, "a": int|None, "t": str, "cp": str, "at": epoch, "sc": ham}
 _ham = []          # ilk birkaç ham LS/yanıt örneği (biçim kontrolü için)
@@ -24,6 +24,7 @@ _d = {"durum": "başlamadı", "hata": None, "bag_at": None, "mesaj": 0, "abone":
 _abone = set()
 _em = {"hedef": {}, "ham": [], "tamam": []}   # oran aboneligi denemesi: gelen hedef sayilari + ham ornekler
 _lock = threading.Lock()
+ORAN = {}          # ai -> {"b": {(pazar id, bahis id, çizgi): (oran, durum)}, "at": epoch}   (SB_EM ilk durum + EM değişiklikleri)
 
 
 def _negotiate():
@@ -51,6 +52,48 @@ def _skor_cikar(s):
     """scoreboard sc: [{"p": "1", "v": "0"}, {"p": "2", "v": "1"}] -> (ev, dep)"""
     d = {str(o.get("p")): _int(o.get("v")) for o in (s.get("sc") or []) if isinstance(o, dict)}
     return d.get("1"), d.get("2")
+
+
+def _oran_isle(o):
+    """o = {e: maç id, m: [{id: pazar, d, b: [{id, bl, od, s}]}]} — ilk durum ya da değişiklik (sadece değişen bahisler gelebilir)"""
+    if isinstance(o, str):
+        o = json.loads(o)
+    i = o.get("e") or o.get("id")
+    if not i or not isinstance(o.get("m"), list):
+        return
+    with _lock:
+        x = ORAN.setdefault(i, {"b": {}, "at": 0})
+        for m in o["m"]:
+            mid = str(m.get("id"))
+            if m.get("d"):                     # pazar kaldırıldı
+                for k in [k for k in x["b"] if k[0] == mid]:
+                    del x["b"][k]
+                continue
+            for b in m.get("b") or []:
+                x["b"][(mid, str(b.get("id")), str(b.get("bl") or ""))] = (b.get("od"), b.get("s"))
+        x["at"] = time.time()
+
+
+def canli_oranlar():
+    """Bingo'nun volkano() biçimi: {ai: {"ms": {"1","X","2"}, "au": {çizgi: {"ust","alt"}}}} — sadece açık (s == "O") bahisler.
+    Bağlantı sağlıklı değilse None (bayat veriyle sinyal üretilmesin)."""
+    if _d.get("durum") != "bağlandı" or not _d.get("son_mesaj") or time.time() - _d["son_mesaj"] > 90:
+        return None
+    V = {}
+    with _lock:
+        for i, x in ORAN.items():
+            if i not in _abone:
+                continue
+            ms, au = {}, {}
+            for (mid, bid, bl), (od, s) in x["b"].items():
+                if s != "O" or not od:
+                    continue
+                if mid == "1" and bid in ("1", "x", "2"):
+                    ms[bid.upper()] = od
+                elif mid == "18" and bid in ("over", "under") and bl:
+                    au.setdefault(float(bl), {})["ust" if bid == "over" else "alt"] = od
+            V[i] = {"ms": ms, "au": au}
+    return V
 
 
 def _isle(o):
@@ -86,6 +129,8 @@ def _oturum():
     n = 0
     _gonder(ws, "SubscribeToDefault", [], n)
     _abone.clear()
+    with _lock:
+        ORAN.clear()
     son_abone = son_ping = 0
     ws.settimeout(5)
     while True:
@@ -106,6 +151,8 @@ def _oturum():
                 with _lock:
                     for k in [k for k in SKOR if k not in canli and now - SKOR[k]["at"] > 1800]:
                         del SKOR[k]
+                    for k in [k for k in ORAN if k not in canli]:
+                        del ORAN[k]
                 _abone.intersection_update(canli)
                 _d["abone"] = len(_abone)
             except Exception as e:
@@ -132,6 +179,21 @@ def _oturum():
                 _em["hedef"][hd] = _em["hedef"].get(hd, 0) + 1
                 if hd in ("EM", "EMD", "IEM") and len(_em["ham"]) < 4:
                     _em["ham"].append(parca[:2500])
+            if tip == 1 and m.get("target") == "EM":
+                _d["son_mesaj"] = time.time()
+                for a in m.get("arguments") or []:
+                    try:
+                        _oran_isle(a)
+                    except Exception:
+                        pass
+            elif tip == 1 and m.get("target") == "EMD":
+                for a in m.get("arguments") or []:
+                    try:
+                        a = json.loads(a) if isinstance(a, str) else a
+                        with _lock:
+                            ORAN.pop(a.get("e") or a.get("id"), None)
+                    except Exception:
+                        pass
             if tip == 3 and m.get("invocationId") == _em.get("sb_em_id") and len(_em["tamam"]) < 2:
                 _em["tamam"].append(parca[:3500])
             if tip == 7:
@@ -154,7 +216,10 @@ def _oturum():
                 if isinstance(r, dict) and r.get("e"):
                     for o in r["e"]:
                         try:
-                            _isle(o)
+                            if isinstance(o, dict) and "m" in o:
+                                _oran_isle(o)
+                            else:
+                                _isle(o)
                         except Exception:
                             pass
                 elif m.get("error"):
@@ -185,7 +250,9 @@ def skor(ai):
 def rapor():
     with _lock:
         ornek = {k: {kk: v[kk] for kk in ("h", "a", "t", "cp")} for k, v in list(SKOR.items())[:6]}
-    return {**_d, "skor_n": len(SKOR), "ornek": ornek, "ham": _ham[:2], "em": _em}
+    with _lock:
+        on = {k: len(v["b"]) for k, v in list(ORAN.items())[:5]}
+    return {**_d, "skor_n": len(SKOR), "oran_n": len(ORAN), "oran_ornek": on, "ornek": ornek, "em_hedef": _em["hedef"]}
 
 
 _started = False
