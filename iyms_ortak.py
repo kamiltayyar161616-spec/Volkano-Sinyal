@@ -29,6 +29,8 @@ def hesap():
         og = [s for s in gir["V"] if s in gir["A"] and s in gir["X"]]
         oc = [s for s in cik["V"] if s in cik["A"] and s in cik["X"]]
         bir = [gir["V"][0]] if gir["V"] and gir["V"][0] == gir["A"][0] == gir["X"][0] else []
+        if not (og or oc):          # ortak seçenek yoksa listeye alma
+            continue
         sonuc = v.get("sonuc")
         maclar.append({"mid": m, "ko": v["ko"], "ev": v["ev"], "dep": v["dep"], "lig": v.get("lig"), "sonuc": sonuc, "skor": v.get("skor"),
                        "iy": v.get("iy"), "ortak_gir": og, "ortak_cik": oc, "bir": bir,
