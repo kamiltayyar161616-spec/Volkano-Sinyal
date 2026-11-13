@@ -28,12 +28,13 @@ def rapor():
             except Exception as e:
                 bul.add("HATA " + u[:80] + " " + str(e)[:60])
                 continue
-            for m in re.findall(r'["\'`]([A-Za-z/]*(?:[Ss]core|[Rr]esult|[Ss]coreboard|[Ss]tatistic|LiveData|[Mm]atchTracker|GetEvent|[Tt]imeline)[A-Za-z/]*)["\'`]', t):
+            for m in re.findall(r'["\'`]((?:api/public/|/api/)[A-Za-z0-9/_.-]+|[A-Za-z/]*(?:[Hh]ub|[Ss]ignal[Rr]|[Ss]ocket|[Ss]hare|[Bb]ooking|[Tt]icketCode|[Ll]iveScore|Snapshot|Offer/)[A-Za-z0-9/]*)["\'`]', t):
                 if 3 < len(m) < 80:
                     bul.add(m)
             for m in re.findall(r'https?://[a-z0-9.-]+(?:xtreme|volcano|sportradar|betradar)[a-z0-9./-]*', t):
                 bul.add(m)
-        out["bulunan"] = sorted(bul)[:150]
+        out["bulunan"] = sorted(bul)[:250]
+        out["wss"] = sorted(set(re.findall(r'wss?://[^"\'` ]+', " ".join([h]))))[:20]
     except Exception as e:
         out["hata"] = f"{type(e).__name__}: {str(e)[:200]}"
     _S["v"] = out
