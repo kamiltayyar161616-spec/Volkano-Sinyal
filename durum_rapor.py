@@ -183,6 +183,7 @@ def rapor():
             "bingo": _guvenli(lambda: __import__("bingo").ozet()),
             "iyv_yama": _guvenli(lambda: __import__("iyv_yama").rapor()),
             "kars_tani": _guvenli(lambda: __import__("kars_tani").rapor()),
+            "iddaa_olay_kesif": _guvenli(lambda: __import__("iddaa_olay_kesif").rapor()),
             "iddaa_soket": _guvenli(lambda: __import__("iddaa_soket").rapor()),
             "vk_canli_skor": _guvenli(lambda: __import__("vk_canli_skor").rapor()),
             "toto_hafta": _guvenli(lambda: (lambda h: {"hafta": h["hafta"], "kapanis": h["kapanis"], "toto_iddaa": __import__("toto_iddaa")._last,
