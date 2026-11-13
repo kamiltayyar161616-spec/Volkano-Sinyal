@@ -52,7 +52,7 @@ def db():
     c = sqlite3.connect(DB, timeout=30)
     c.execute("""CREATE TABLE IF NOT EXISTS k (mid INTEGER PRIMARY KEY, i INTEGER, ko TEXT, ev TEXT, dep TEXT, lig TEXT,
                  at_ilk TEXT, idd_ilk TEXT, at_son TEXT, idd_son TEXT)""")
-    for kol in ("at_son5 TEXT", "idd_son5 TEXT"):
+    for kol in ("at_son5 TEXT", "idd_son5 TEXT", "at_vk TEXT", "vk_son TEXT", "vk_son5 TEXT"):
         try:
             c.execute(f"ALTER TABLE k ADD COLUMN {kol}")
         except sqlite3.OperationalError:
@@ -80,6 +80,13 @@ def son5_kaydet():
         if o:
             c.execute("UPDATE k SET at_son5=?, idd_son5=? WHERE mid=?", (now.isoformat(), json.dumps(o), m))
             n += 1
+            try:                                               # iddaa'ya gore: Volkano İY/MS anlik (son 5 dk)
+                ev, dep, ko = c.execute("SELECT ev, dep, ko FROM k WHERE mid=?", (m,)).fetchone()
+                vo = _vk_47(ev, dep, ko)
+                if vo:
+                    c.execute("UPDATE k SET vk_son5=? WHERE mid=?", (json.dumps(vo), m))
+            except Exception:
+                pass
         time.sleep(0.4)
     c.commit()
     c.close()
@@ -119,6 +126,85 @@ def _ing(ad):
         return toto_iddaa._ing(ad)
     except Exception:
         return ad
+
+
+# ---- iddaa'ya gore calisma (13.11.2026, kullanici istegi) ----
+# Liste iddaa bultenidir: iddaa'nin İY/MS actigi her mac kaydedilir; Volkano İY/MS orani iddaa macinin adi+saatiyle
+# Volkano fiksturunden DOGRUDAN cekilir (iyv.db'nin 12 saatlik listesini beklemez). NowGoal mid'i sadece sonuc icin baglanir.
+_U = {"turkey": "Turkiye", "czech republic": "Czechia", "bosnia-herzegovina": "Bosnia and Herzegovina", "usa": "United States",
+      "ivory coast": "Cote d'Ivoire", "republic of ireland": "Ireland"}
+
+
+def _vk_fx():
+    import oto_tahmin as O
+    if "/root/defter" not in sys.path:
+        sys.path.insert(0, "/root/defter")
+    import defter as D
+    if time.time() - O._vkfx["t"] > 240 or not O._vkfx["fx"]:
+        O._vkfx["v"], O._vkfx["fx"] = D.vk_fikstur()
+        O._vkfx["t"] = time.time()
+    return O._vkfx["v"], O._vkfx["fx"]
+
+
+def _vk_47(ev, dep, ko):
+    """iddaa maci (Turkce ad) -> Volkano İY/MS 9 oran ya da None"""
+    import oto_tahmin as O
+    v, fx = _vk_fx()
+    e1, d1 = _ing(ev or ""), _ing(dep or "")
+    m = O.vk_fx_esle(fx, [(ev, dep), (e1, d1), (_U.get(e1.lower(), e1), _U.get(d1.lower(), d1))], ko)
+    i = next((m[k] for k in ("id", "mac_id", "ai", "event_id") if m.get(k)), None) if m else None
+    if i is None:
+        return None
+    d = v.get("Offer/GetEventMarkets", [("eventIds", i), ("dpId", v.DP_ID)])
+    e = d[0] if isinstance(d, list) and d else d
+    time.sleep(0.3)
+    for p in (e or {}).get("m", []):
+        if str(p.get("id")) != "47":
+            continue
+        o = {}
+        for b in p.get("b", []):
+            try:
+                od = float(b.get("od"))
+            except (TypeError, ValueError):
+                continue
+            if od > 1:
+                o[str(b.get("n")).strip().upper().replace(" ", "").replace("0", "X")] = od
+        if all(k in o for k in S9):
+            return {k: o[k] for k in S9}
+    return None
+
+
+def _ng_bagla(c, now):
+    """mid'i negatif (sadece iddaa) kayitlari NowGoal macina bagla (sonuc icin): saat ±15 dk + iki ad benzer"""
+    import nowgoal as ng
+    L = [(m, i, ko, ev, dep) for m, i, ko, ev, dep in c.execute("SELECT mid, i, ko, ev, dep FROM k WHERE mid < 0")
+         if now - timedelta(hours=6) < _dt(ko) < now + timedelta(hours=30)]
+    if not L:
+        return 0
+    g = sqlite3.connect(f"file:{ng.DB_FILE}?mode=ro", uri=True, timeout=30)
+    N = g.execute("SELECT mid, kickoff_utc, home, away FROM ng_match WHERE kickoff_utc BETWEEN ? AND ?",
+                  ((now - timedelta(hours=7)).isoformat(), (now + timedelta(hours=31)).isoformat())).fetchall()
+    g.close()
+    var = {r[0] for r in c.execute("SELECT mid FROM k")}
+    n = 0
+    for m, i, ko, ev, dep in L:
+        t = _dt(ko)
+        best = None
+        for nm, nko, h, a in N:
+            try:
+                if abs((_dt(nko) - t).total_seconds()) > 900 or nm in var:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            s1 = max(IS._benz(h or "", ev or ""), IS._benz(h or "", _ing(ev or "")))
+            s2 = max(IS._benz(a or "", dep or ""), IS._benz(a or "", _ing(dep or "")))
+            if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
+                best = (s1 + s2, nm)
+        if best:
+            c.execute("UPDATE k SET mid=? WHERE mid=?", (best[1], m))
+            var.add(best[1])
+            n += 1
+    return n
 
 
 def kaydet():
@@ -195,9 +281,24 @@ def kaydet():
         elif m < 0:
             c.execute("UPDATE k SET at_son=?, idd_son=? WHERE mid=?", (at, js, m))
             n_bs += 1
+    n_ng = _ng_bagla(c, now)
+    c.commit()
+    n_vk = n_vk0 = 0
+    for m, ev, dep, ko in c.execute("SELECT mid, ev, dep, ko FROM k WHERE idd_son5 IS NULL").fetchall():
+        if not now + timedelta(minutes=5) < _dt(ko) < now + timedelta(hours=26):
+            continue
+        n_vk0 += 1
+        try:
+            vo = _vk_47(ev, dep, ko)
+        except Exception:
+            vo = None
+        if vo:
+            c.execute("UPDATE k SET at_vk=?, vk_son=? WHERE mid=?", (now.isoformat(), json.dumps(vo), m))
+            n_vk += 1
     c.commit()
     c.close()
-    return f"Volkano İY/MS {len(V)} maç · iddaa eşleşen {n_es} · İY/MS oranı yazılan {n_or} · tüm bülten: yeni ilk oran {n_b}, güncellenen {n_bs}"
+    return (f"Volkano İY/MS {len(V)} maç · iddaa eşleşen {n_es} · İY/MS oranı yazılan {n_or} · tüm bülten: yeni ilk oran {n_b}, güncellenen {n_bs}"
+            f" · iddaa→Volkano doğrudan {n_vk}/{n_vk0} · NowGoal'a bağlanan {n_ng}")
 
 
 def _novig(o):
@@ -243,10 +344,17 @@ def hesap():
     """-> {"ozet": {...}, "gruplar": [...], "kovalar": [...], "maclar": [...]} (tum kayitlar)"""
     import oto_tahmin as O
     c = db()
-    K = {m: (json.loads(js), ev, dep, lg, ko, ji, ai, j5) for m, js, ev, dep, lg, ko, ji, ai, j5 in
-         c.execute("SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk, idd_son5 FROM k")}
+    K, DV = {}, {}
+    for m, js, ev, dep, lg, ko, ji, ai, j5, vs, vs5 in c.execute(
+            "SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk, idd_son5, vk_son, vk_son5 FROM k"):
+        K[m] = (json.loads(js), ev, dep, lg, ko, ji, ai, j5)
+        if vs5 or vs:
+            DV[m] = (json.loads(vs5 or vs), bool(vs5))
     c.close()
     VK = _vk_oku()
+    for m, x in DV.items():                       # iddaa'ya gore: iyv.db'de yoksa dogrudan cekilen Volkano orani
+        if m not in VK:
+            VK[m] = x
     R = O._sonuclar([str(m) for m in K]) if K else {}
     f = lambda x, y: "1" if x > y else "2" if y > x else "X"
     G = {g: [0, 0, 0.0, 0.0, 0.0] for g in GRUPLAR}
