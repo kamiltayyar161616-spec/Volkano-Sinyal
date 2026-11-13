@@ -3,7 +3,7 @@ import re
 import urllib.request
 _S = {}
 UA = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"}
-ARA = ["invokeSubscribeToDefault(){", "liveScoreAggregators", "LiveScore", "liveScore", ".invoke(\"", "subscribeToEventMarkets("]
+ARA = ["handleLSResponse(e){", "mapEventLiveScoreScoreboard(i){", "this.connection.invoke(i,", "queues.set(\"SB_LS\""]
 
 
 def _al(u):
@@ -35,7 +35,9 @@ def rapor():
             except Exception:
                 continue
             if "sport_offer_src_index" in cid:
-                out["ham_73400"] = t[73400:78500]
+                out["ham_enq"] = t[t.find("enqueue(i,e,t,s){"):t.find("enqueue(i,e,t,s){") + 2500]
+                k0 = t.find('this.queues=new Map')
+                out["ham_q"] = t[k0 - 200:k0 + 1200] if k0 > 0 else None
             for a in ARA:
                 for mm in list(re.finditer(re.escape(a), t))[:6]:
                     bag.setdefault(a, []).append(f"{cid}@{mm.start()}: " + t[max(0, mm.start() - 300): mm.start() + 500])
@@ -45,5 +47,13 @@ def rapor():
         out["yollar"] = sorted(yol)[:300]
     except Exception as e:
         out["hata"] = f"{type(e).__name__}: {str(e)[:200]}"
+    mod = {}
+    for m in ("websocket", "websockets", "aiohttp", "signalrcore", "requests"):
+        try:
+            __import__(m)
+            mod[m] = True
+        except Exception:
+            mod[m] = False
+    out["moduller"] = mod
     _S["v"] = out
     return out
