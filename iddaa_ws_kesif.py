@@ -3,8 +3,7 @@ import re
 import urllib.request
 _S = {}
 UA = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36", "Accept-Language": "tr-TR"}
-ARA = ["wss://", "ws://", "WebSocket(", "socket.io", "signalr", "HubConnection", "sportsbookv2", "mqtt", "centrifug", "pusher", "sockjs",
-       "stomp", "EventSource(", "/live", "subscribe"]
+ARA = ["sportsbookSocket", "withUrl(", '.on("', '.invoke("', "hubs/", "joinGroup", "JoinGroup"]
 
 
 def _al(u):
@@ -23,7 +22,7 @@ def rapor():
         js = sorted(set(re.findall(r'src="([^"]+\.js[^"]*)"', h)))
         out["js_n"] = len(js)
         bag = {}
-        hosts = set()
+        hosts, on = set(), set()
         for s in js[:80]:
             u = s if s.startswith("http") else base + s
             try:
@@ -31,10 +30,13 @@ def rapor():
             except Exception:
                 continue
             for a in ARA:
-                for m in list(re.finditer(re.escape(a), t))[:2]:
+                for m in list(re.finditer(re.escape(a), t))[:5]:
                     bag.setdefault(a, []).append(s.split("/")[-1][:30] + ": " + t[max(0, m.start() - 200): m.start() + 300])
+            on.update(re.findall(r'\.on\("([A-Za-z_]{2,40})"', t))
+            on.update("INV:" + x for x in re.findall(r'\.(?:invoke|send)\("([A-Za-z_]{2,40})"', t))
             hosts.update(re.findall(r'(?:wss?|https?)://[a-zA-Z0-9.-]*iddaa[a-zA-Z0-9.-]*[a-zA-Z0-9/._-]*', t))
-        out["bag"] = {k: v[:4] for k, v in bag.items()}
+        out["bag"] = {k: v[:6] for k, v in bag.items()}
+        out["on"] = sorted(on)[:100]
         out["hosts"] = sorted(hosts)[:60]
     except Exception as e:
         out["hata"] = f"{type(e).__name__}: {str(e)[:200]}"
