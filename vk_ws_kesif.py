@@ -1,9 +1,9 @@
-"""Geçici salt-okur keşif: Volkano sitesi canlı skoru hangi websocket/abonelikle alıyor (main.js bağlamları)."""
+"""Geçici salt-okur keşif: Volkano sport-v2 tembel yüklenen JS parçalarında canlı skor/websocket."""
 import re
 import urllib.request
 _S = {}
 UA = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"}
-ARA = ["GetSnapshotEventMarkets", "sportDataProvider", "sportdataprovider", "GetLiveScore", "Scoreboard/", "scoreboard/", "hubs/", "LiveHub", "liveHub", "OfferHub", "offerHub"]
+ARA = ["GetSnapshotEventMarkets", "hubs/", ".withUrl(", "connection.on(", '.on("', "sportDataProvider", "client.url.portSocket", "Subscribe"]
 
 
 def _al(u):
@@ -18,29 +18,26 @@ def rapor():
     try:
         base = "https://m.volcanobet.me/"
         h = _al(base + "sport-v2/live?sportId=1")
-        out["html_cfg"] = re.findall(r'(?:window\.[A-Za-z_]+\s*=|<base[^>]*>|data-[a-z-]+="[^"]{0,200}")', h)[:20]
-        js = {}
-        for s in re.findall(r'src="([^"]+\.js)"', h):
+        rt_ad = re.search(r'src="(runtime[^"]+\.js)"', h).group(1)
+        rt = _al(base + rt_ad)
+        m = re.search(r'\{(\s*\d+:"[0-9a-f]{8,}"\s*(?:,\s*\d+:"[0-9a-f]{8,}"\s*)*)\}\[_?[a-z]\]\+"\.js"', rt) or re.search(r'\{((?:\d+:"[0-9a-f]{8,}",?)+)\}', rt)
+        es = dict(re.findall(r'(\d+):"([0-9a-f]{8,})"', m.group(1))) if m else {}
+        out["chunk_n"] = len(es)
+        out["rt_u"] = re.findall(r's\.u=[^;]{0,300}', rt)[:2]
+        bag, yol = {}, set()
+        for cid, hs in list(es.items())[:400]:
+            u = f"{base}{cid}.{hs}.js"
             try:
-                js[s] = _al(base + s)
-            except Exception as e:
-                out["js_hata_" + s] = str(e)[:80]
-        rt = js.get(next((k for k in js if k.startswith("runtime")), ""), "")
-        out["runtime_chunks"] = re.findall(r'"([0-9a-f]{12,20})"', rt)[:5] + [rt[:600]]
-        bag = {}
-        for ad, t in js.items():
+                t = _al(u)
+            except Exception:
+                continue
             for a in ARA:
-                for m in list(re.finditer(re.escape(a), t))[:4]:
-                    bag.setdefault(a, []).append(f"{ad[:6]}@{m.start()}: " + t[max(0, m.start() - 250): m.start() + 350])
-        out["bag"] = bag
-        yol = set()
-        for t2 in js.values():
-            for m in re.findall(r'["\'`/]((?:Offer|offer|Live|live|Score|score|Stat|stat|Event|event|Fixture|fixture)[A-Za-z]*/[A-Za-z]+)["\'`?]', t2):
-                yol.add(m)
-            for m in re.findall(r'client\.url\.[A-Za-z]+', t2):
-                yol.add(m)
+                for mm in list(re.finditer(re.escape(a), t))[:3]:
+                    bag.setdefault(a, []).append(f"{cid}@{mm.start()}: " + t[max(0, mm.start() - 300): mm.start() + 500])
+            for mm in re.findall(r'["\'`/]((?:Offer|offer|Live|live|Score|score|Stat|stat|Event|event|Fixture|fixture|Subscription|hubs)[A-Za-z]*/[A-Za-z]+)["\'`?]', t):
+                yol.add(f"{cid}:{mm}")
+        out["bag"] = {k: v[:6] for k, v in bag.items()}
         out["yollar"] = sorted(yol)[:300]
-        out["hosts"] = sorted(set(re.findall(r'https?://[a-zA-Z0-9.-]+\.[a-z]{2,}', " ".join(js.values()))))[:80]
     except Exception as e:
         out["hata"] = f"{type(e).__name__}: {str(e)[:200]}"
     _S["v"] = out
