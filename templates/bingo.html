@@ -70,10 +70,10 @@
 
 <h2 class="section">📈 KARNE (biten sinyaller)</h2>
 {% if d.ozet %}
-<table class="tt"><tr><th></th><th>sinyal</th><th>tuttu</th><th>isabet</th><th>ROI</th><th>vergili<br>(%12)</th></tr>
+<table class="tt"><tr><th></th><th>sinyal</th><th>tuttu</th><th>isabet</th><th>ROI</th>{% if V %}<th>vergili<br>(%12)</th>{% endif %}</tr>
 {% set ns = namespace(g='') %}
 {% for x in d.ozet %}{% if x.grup != ns.g %}{% set ns.g = x.grup %}<tr class="g"><td colspan="6">{{ x.grup }}</td></tr>{% endif %}
-<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>%{{ x.isabet }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td><td>{{ roi(x.roi_v) }}</td></tr>{% endfor %}</table>
+<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>%{{ x.isabet }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td>{% if V %}<td>{{ roi(x.roi_v) }}</td>{% endif %}</tr>{% endfor %}</table>
 {% else %}<div class="section-sub">Henüz biten sinyal yok.</div>{% endif %}
 
 <h2 class="section">📅 GÜN GÜN</h2>
