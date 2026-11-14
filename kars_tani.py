@@ -10,9 +10,11 @@ def rapor():
     VK = K._vk_oku()
     c = K.db()
     R = []
-    for m, i, ko, ev, dep, j5, ji in c.execute("SELECT mid, i, ko, ev, dep, idd_son5, idd_ilk FROM k"):
+    for m, i, ko, ev, dep, j5, ji, vs, vs5 in c.execute("SELECT mid, i, ko, ev, dep, idd_son5, idd_ilk, vk_son, vk_son5 FROM k"):
         if now - timedelta(hours=14) < K._dt(ko) < now + timedelta(hours=22):
-            R.append([K._dt(ko).astimezone(K.TR if hasattr(K, "TR") else timezone(timedelta(hours=3))).strftime("%d %H:%M"), m, ev, dep, bool(j5), m in VK])
+            iv = VK.get(m)
+            R.append([K._dt(ko).astimezone(timezone(timedelta(hours=3))).strftime("%d %H:%M"), m, ev, dep, "i5" if j5 else "-",
+                      "iyv_kilit" if iv and iv[1] else "iyv_guncel" if iv else "-", "v_son5" if vs5 else "v_son" if vs else "-"])
     c.close()
     R.sort()
     v = sqlite3.connect(f"file:{K.IYV}?mode=ro", uri=True, timeout=10)
