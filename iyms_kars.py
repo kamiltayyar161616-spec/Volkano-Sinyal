@@ -8,6 +8,7 @@ Test (rapor): her macta 9 secenek iddaa/Volkano farkina gore siralanir -> en yak
   python3 iyms_kars.py          (simdi kaydet + rapor)
   python3 iyms_kars.py rapor"""
 import json
+from zoneinfo import ZoneInfo
 import os
 import re
 import sqlite3
@@ -388,6 +389,7 @@ def hesap():
         grup = {k: GRUPLAR[sira.index(k) // 3] for k in S9}
         maclar.append({"mid": m, "ko": ko, "ev": ev, "dep": dep, "lig": lg, "kilitli": kil, "skor": f"{r[0]}-{r[1]}" if bitti else None,
                        "iy": f"{r[2]}-{r[3]}" if bitti else None, "sonuc": sonuc, "son5": bool(j5),
+                       "i_ilk": _dt(ai).astimezone(ZoneInfo("Europe/Istanbul")).strftime("%d.%m %H:%M") if ai else None,
                        "para": [{"sec": k, "d": round(100 * para[k]), "ilk": json.loads(ji)[k], "son": i1[k], "tuttu": k == sonuc}
                                 for k in sorted(S9, key=lambda k: -para[k])[:3]] if para else None,
                        "S": [{"sec": k, "idd": io[k], "vk": vo[k], "fark": round(100 * fark[k], 1), "grup": grup[k], "tuttu": k == sonuc,
