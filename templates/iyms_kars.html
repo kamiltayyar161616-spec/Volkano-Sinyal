@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — İY/MS iddaa vs Volkano{% endblock %}
 {% block page_tag %}⚖️ İY/MS iddaa–VOLKANO{% endblock %}
-{% block subtitle %}Tüm bültende iddaa ve Volkano'nun 9 İY/MS oranı karşılaştırılır (iddaa 30 dk'da bir, Volkano maçtan ~15 dk önceki kilit oranı). Her maçta seçenekler iki oran arasındaki farka göre sıralanır: <b>en yakın 3</b> / <b>kalan 3</b> / <b>en uzak 3</b>. ROI = gruptaki her seçime 1 birim, o sitenin oranıyla. Fark = iddaa ÷ Volkano − 1 (artı: iddaa daha yüksek veriyor).{% endblock %}
+{% block subtitle %}Tüm bültende iddaa ve Volkano'nun 9 İY/MS oranı karşılaştırılır (Volkano'nun İLK oranı alınıp kilitlenir; iddaa'nın ilk oranı ve maçtan 3-7 dk önceki son 5 dk oranı alınır; karşılaştırma iddaa son 5 dk ÷ Volkano ilk). Her maçta seçenekler iki oran arasındaki farka göre sıralanır: <b>en yakın 3</b> / <b>kalan 3</b> / <b>en uzak 3</b>. ROI = gruptaki her seçime 1 birim, o sitenin oranıyla. Fark = iddaa ÷ Volkano − 1 (artı: iddaa daha yüksek veriyor).{% endblock %}
 {% block extra_style %}
 <style>
   .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
@@ -61,12 +61,13 @@
 <div class="kc">
   <div class="ust"><span>{{ x.saat }} · {{ x.ev }} – {{ x.dep }}</span><span>{% if x.sonuc %}{{ x.skor }} <span class="meta">(İY {{ x.iy }})</span> → {{ x.sonuc }}{% endif %}</span></div>
   <div class="meta">{{ x.lig or '' }}</div>
-  <div class="hd3">{% if x.i_ilk %}<span class="pl">i ilk · {{ x.i_ilk }}</span>{% endif %}{% if x.son5 %}<span class="pl ok">✓ i son 5 dk alındı</span>{% else %}<span class="pl bek">⏳ i son 5 dk bekleniyor</span>{% endif %}{% if x.kilitli %}<span class="pl ok">✓ V son oran (kilit) alındı</span>{% else %}<span class="pl bek">⏳ V son oran bekleniyor</span>{% endif %}</div>
-  {% if x.para %}<div class="meta">💸 para (iddaa ilk → {{ 'son 5 dk' if x.son5 else 'son kayıt' }}): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
+  <div class="hd3">{% if x.v_ilk %}<span class="pl">V ilk (kilit) · {{ 'açılış ' if x.v_kaynak == 'açılış' else '~12 sa önce ' if x.v_kaynak == '12 saat' else '' }}{{ x.v_ilk }}</span>{% endif %}{% if x.i_ilk %}<span class="pl">i ilk · {{ x.i_ilk }}</span>{% endif %}{% if x.son5 %}<span class="pl ok">✓ i son 5 dk alındı</span>{% else %}<span class="pl bek">⏳ i son 5 dk bekleniyor</span>{% endif %}</div>
+  {% if x.para %}<div class="meta">💸 iddaa para giren (ilk → {{ 'son 5 dk' if x.son5 else 'son kayıt' }}): {% for p in x.para %}<b style="{{ 'color:#3ccf7a' if p.tuttu else '' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
+  {% if x.cikan %}<div class="meta">🔻 iddaa para çıkan: {% for p in x.cikan %}<b style="{{ 'color:#3ccf7a' if p.tuttu else 'color:#e06060' }}">{{ p.sec }} {{ '%+d'|format(p.d) }}%</b> ({{ p.ilk }}→{{ p.son }}){{ ' · ' if not loop.last else '' }}{% endfor %}</div>{% endif %}
   <div class="g9">{% for g in ('en yakın 3', 'kalan 3', 'en uzak 3') %}<div class="gb"><h4>{{ g|upper }}</h4>
     {% for s in x.S if s.grup == g %}<div class="sl {{ 'ok' if s.tuttu else '' }}"><div class="r1"><span class="sc">{{ s.sec }}{{ ' ✓' if s.tuttu else '' }}</span><span class="fk {{ 'a' if s.fark >= 1 else 'e' if s.fark <= -1 else 's' }}">{{ '%+.0f'|format(s.fark) }}%</span></div><div class="r2"><span>i <b>{{ s.idd }}</b></span><span>V <b>{{ s.vk }}</b></span></div></div>{% endfor %}
   </div>{% endfor %}</div>
-  <div class="lj">i = iddaa · V = Volkano · % = iddaa'nın Volkano'ya farkı</div>
+  <div class="lj">i = iddaa son 5 dk · V = Volkano ilk (kilit) · % = iddaa'nın Volkano'ya farkı</div>
 </div>
 {% else %}<div class="section-sub">Bu gün için eşleşen maç yok.</div>{% endfor %}
 {% endblock %}

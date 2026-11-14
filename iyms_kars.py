@@ -53,7 +53,7 @@ def db():
     c = sqlite3.connect(DB, timeout=30)
     c.execute("""CREATE TABLE IF NOT EXISTS k (mid INTEGER PRIMARY KEY, i INTEGER, ko TEXT, ev TEXT, dep TEXT, lig TEXT,
                  at_ilk TEXT, idd_ilk TEXT, at_son TEXT, idd_son TEXT)""")
-    for kol in ("at_son5 TEXT", "idd_son5 TEXT", "at_vk TEXT", "vk_son TEXT", "vk_son5 TEXT"):
+    for kol in ("at_son5 TEXT", "idd_son5 TEXT", "at_vk TEXT", "vk_son TEXT", "vk_son5 TEXT", "at_vk_ilk TEXT", "vk_ilk TEXT"):
         try:
             c.execute(f"ALTER TABLE k ADD COLUMN {kol}")
         except sqlite3.OperationalError:
@@ -294,7 +294,8 @@ def kaydet():
         except Exception:
             vo = None
         if vo:
-            c.execute("UPDATE k SET at_vk=?, vk_son=? WHERE mid=?", (now.isoformat(), json.dumps(vo), m))
+            c.execute("UPDATE k SET at_vk=?, vk_son=?, at_vk_ilk=COALESCE(at_vk_ilk, ?), vk_ilk=COALESCE(vk_ilk, ?) WHERE mid=?",
+                      (now.isoformat(), json.dumps(vo), now.isoformat(), json.dumps(vo), m))
             n_vk += 1
     c.commit()
     c.close()
@@ -345,15 +346,17 @@ def hesap():
     """-> {"ozet": {...}, "gruplar": [...], "kovalar": [...], "maclar": [...]} (tum kayitlar)"""
     import oto_tahmin as O
     c = db()
+    # 15.11.2026 kullanıcı: Volkano İLK oranı alınır ve kilitlenir (sabit); iddaa ilk -> son 5 dk. Karşılaştırma: iddaa son 5 dk ÷ Volkano ilk.
     K, DV = {}, {}
-    for m, js, ev, dep, lg, ko, ji, ai, j5, vs, vs5 in c.execute(
-            "SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk, idd_son5, vk_son, vk_son5 FROM k"):
-        K[m] = (json.loads(js), ev, dep, lg, ko, ji, ai, j5)
-        if vs5 or vs:
-            DV[m] = (json.loads(vs5 or vs), bool(vs5))
+    for m, js, ev, dep, lg, ko, ji, ai, j5, vi, vai in c.execute(
+            "SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk, idd_son5, vk_ilk, at_vk_ilk FROM k"):
+        K[m] = (json.loads(j5) if j5 else json.loads(js), ev, dep, lg, ko, ji, ai, j5)
+        if vi:
+            DV[m] = (json.loads(vi), vai, "doğrudan")
     c.close()
-    VK = _vk_oku()
-    for m, x in DV.items():                       # iddaa'ya gore: iyv.db'de yoksa dogrudan cekilen Volkano orani
+    from iyms_av import _volkano
+    VK = {m: (v[5], v[0], v[6]) for m, v in _volkano().items()}     # açılış ya da ~12 sa önce (V Para / 1x–V ile aynı)
+    for m, x in DV.items():                       # yoksa iddaa maçından doğrudan bulunan ilk Volkano oranı
         if m not in VK:
             VK[m] = x
     R = O._sonuclar([str(m) for m in K]) if K else {}
@@ -378,7 +381,8 @@ def hesap():
             para = None
         if m not in VK:
             continue
-        vo, kil = VK[m]
+        vo, v_at, v_kay = VK[m]
+        kil = bool(j5)                            # karne: iddaa son 5 dk oranı olan biten maçlar
         r = R.get(str(m)) or (None,) * 4
         bitti = r[0] is not None and r[2] is not None
         sonuc = f"{f(r[2], r[3])}/{f(r[0], r[1])}" if bitti else None
@@ -390,6 +394,10 @@ def hesap():
         maclar.append({"mid": m, "ko": ko, "ev": ev, "dep": dep, "lig": lg, "kilitli": kil, "skor": f"{r[0]}-{r[1]}" if bitti else None,
                        "iy": f"{r[2]}-{r[3]}" if bitti else None, "sonuc": sonuc, "son5": bool(j5),
                        "i_ilk": _dt(ai).astimezone(ZoneInfo("Europe/Istanbul")).strftime("%d.%m %H:%M") if ai else None,
+                       "v_ilk": _dt(v_at).astimezone(ZoneInfo("Europe/Istanbul")).strftime("%d.%m %H:%M") if v_at else None,
+                       "v_kaynak": v_kay,
+                       "cikan": [{"sec": k, "d": round(100 * para[k]), "ilk": json.loads(ji)[k], "son": i1[k], "tuttu": k == sonuc}
+                                 for k in sorted(S9, key=lambda k: para[k])[:3]] if para else None,
                        "para": [{"sec": k, "d": round(100 * para[k]), "ilk": json.loads(ji)[k], "son": i1[k], "tuttu": k == sonuc}
                                 for k in sorted(S9, key=lambda k: -para[k])[:3]] if para else None,
                        "S": [{"sec": k, "idd": io[k], "vk": vo[k], "fark": round(100 * fark[k], 1), "grup": grup[k], "tuttu": k == sonuc,

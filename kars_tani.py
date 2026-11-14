@@ -21,4 +21,10 @@ def rapor():
     A = [(ko, h, a, '"47"' in (vk or "")) for m, ko, h, a, vk in v.execute("SELECT mid, ko, home, away, vk FROM iyv_aday")
          if now - timedelta(hours=14) < K._dt(ko) < now + timedelta(hours=22)]
     v.close()
-    return {"last": K._last, "k": R, "iyv_aday": sorted(A)[:80]}
+    try:
+        H = K.hesap()
+        hs = {"ozet": H["ozet"], "mac": len(H["maclar"]), "ornek": [{k: x.get(k) for k in ("ev", "dep", "v_ilk", "v_kaynak", "i_ilk", "son5")}
+                                                                    for x in H["maclar"][:6]]}
+    except Exception as e:
+        hs = {"HATA": f"{type(e).__name__}: {str(e)[:200]}"}
+    return {"last": K._last, "k": R[-12:], "hesap": hs}
