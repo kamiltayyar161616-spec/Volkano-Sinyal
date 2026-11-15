@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Bingo{% endblock %}
 {% block page_tag %}🎱 BINGO{% endblock %}
-{% block subtitle %}<b>75. dakikadan sonra 1xbet'te oranı düşen seçenekler</b> (keskin olmasa da): son 3 dk'daki en yüksek orana göre en az %3 düşüş. Gol sonrası 90 sn sayılmaz (gol zaten oranı oynatır). O an iddaa'da aynı seçenek açıksa oranı yazılır. Sadece gözlem — kupon/kasa yok; karnede 1 birim sabit bahisle ROI (1xbet oranıyla ve iddaa oranıyla).{% endblock %}
+{% set KN = "Pinnacle" if sekme == "pgec" else "1xbet" %}{% block subtitle %}{% set KN = "Pinnacle" if sekme == "pgec" else "1xbet" %}<b>75. dakikadan sonra {{ KN }}'{{ "da" if KN == "Pinnacle" else "te" }} oranı düşen seçenekler</b> (keskin olmasa da): son 3 dk'daki en yüksek orana göre en az %3 düşüş. Gol sonrası 90 sn sayılmaz (gol zaten oranı oynatır). O an iddaa'da aynı seçenek açıksa oranı yazılır. Sadece gözlem — kupon/kasa yok; karnede 1 birim sabit bahisle ROI ({{ KN }} oranıyla ve iddaa oranıyla){% if sekme == 'pgec' %}; o anki 1xbet oranı da yazılır. Pinnacle canlı oranı pinnacle.com'un herkese açık misafir API'sinden, maçlar 1xbet ile isim + skordan eşleşir{% endif %}. İki sekme aynı kuralla çalışır — hangisi daha avantajlıysa o kullanılır.{% endblock %}
 {% block extra_style %}
 <style>
   .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
@@ -24,25 +24,25 @@
 <meta http-equiv="refresh" content="10">
 {% endblock %}
 {% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
-{% block content %}
-<div class="section-sub">{{ d.last.log or 'başlıyor…' }}{% if d.last.gec_hata %} · ⚠ {{ d.last.gec_hata }}{% endif %}</div>
-<div style="margin:8px 16px 4px"><a class="chip " href="/bingo">🎱 iddaa Sinyal</a><a class="chip {{ 'on' if sekme == 'kupon' else '' }}" href="/bingo?sekme=kupon">🎫 iddaa Kupon</a><a class="chip {{ 'on' if sekme == 'volkano' else '' }}" href="/bingo?sekme=volkano">🌋 Volkano Sinyal</a><a class="chip {{ 'on' if sekme == 'vkupon' else '' }}" href="/bingo?sekme=vkupon">🎫 Volkano Kupon</a><a class="chip {{ 'on' if sekme == 'admiral' else '' }}" href="/bingo?sekme=admiral">🟦 Admiral Sinyal</a><a class="chip {{ 'on' if sekme == 'akupon' else '' }}" href="/bingo?sekme=akupon">🎫 Admiral Kupon</a><a class="chip on" href="/bingo?sekme=gec">⏱ 75+ 1xbet Düşüş</a></div>
+{% block content %}{% set KN = "Pinnacle" if sekme == "pgec" else "1xbet" %}
+<div class="section-sub">{{ d.last.log or 'başlıyor…' }}{% if sekme == 'pgec' %}<br>{{ d.last.pin or 'Pinnacle başlıyor…' }}{% if d.last.pin_hata %} · ⚠ {{ d.last.pin_hata }}{% endif %}{% if d.pin and d.pin.hata %} · ⚠ {{ d.pin.hata }}{% endif %}{% elif d.last.gec_hata %} · ⚠ {{ d.last.gec_hata }}{% endif %}</div>
+<div style="margin:8px 16px 4px"><a class="chip " href="/bingo">🎱 iddaa Sinyal</a><a class="chip {{ 'on' if sekme == 'kupon' else '' }}" href="/bingo?sekme=kupon">🎫 iddaa Kupon</a><a class="chip {{ 'on' if sekme == 'volkano' else '' }}" href="/bingo?sekme=volkano">🌋 Volkano Sinyal</a><a class="chip {{ 'on' if sekme == 'vkupon' else '' }}" href="/bingo?sekme=vkupon">🎫 Volkano Kupon</a><a class="chip {{ 'on' if sekme == 'admiral' else '' }}" href="/bingo?sekme=admiral">🟦 Admiral Sinyal</a><a class="chip {{ 'on' if sekme == 'akupon' else '' }}" href="/bingo?sekme=akupon">🎫 Admiral Kupon</a><a class="chip {{ 'on' if sekme == 'gec' else '' }}" href="/bingo?sekme=gec">⏱ 75+ 1xbet Düşüş</a><a class="chip {{ 'on' if sekme == 'pgec' else '' }}" href="/bingo?sekme=pgec">📌 75+ Pinnacle Düşüş</a></div>
 <h2 class="section">📈 KARNE (biten)</h2>
 {% if d.ozet %}
-<table class="tt"><tr><th></th><th>n</th><th>tuttu</th><th>isabet</th><th>ROI<br>1xbet</th><th>ROI<br>iddaa</th></tr>
+<table class="tt"><tr><th></th><th>n</th><th>tuttu</th><th>isabet</th><th>ROI<br>{{ KN }}</th><th>ROI<br>iddaa</th></tr>
 {% set ns = namespace(g='') %}
 {% for x in d.ozet %}{% if x.grup != ns.g %}{% set ns.g = x.grup %}<tr class="g"><td colspan="6">{{ x.grup }}</td></tr>{% endif %}
 <tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>%{{ x.isabet }}</td><td>{{ roi(x.roi) }}</td><td>{{ roi(x.roi_i) }}{% if x.ni %}<br><span class="meta">n {{ x.ni }}</span>{% endif %}</td></tr>{% endfor %}</table>
 {% else %}<div class="section-sub">Henüz biten düşüş yok — 75. dakikayı geçen maçlar bittikçe dolacak.</div>{% endif %}
 <h2 class="section">📅 GÜN GÜN</h2>
-<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/bingo?sekme=gec&gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/bingo?sekme={{ sekme }}&gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
 {% for x in d.L %}
 <div class="kc {{ 'ok' if x.sonuc == 'tuttu' else 'no' if x.sonuc == 'yattı' else 'canli' }}">
   <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>
     <span class="sn {{ 'p' if x.sonuc == 'tuttu' else 'n' if x.sonuc == 'yattı' else '' }}">{{ x.sonuc or 'bekliyor' }}{% if x.final %} · {{ x.final }}{% endif %}</span></div>
   <div class="r2">{{ x.saat }} · {{ x.lig or '' }} · o an {{ x.skor }}</div>
-  <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o">1xbet <b>{{ x.x_once }} → {{ x.x_oran }}</b></span><span class="o">düşüş <b class="n">%{{ '%.1f'|format(100*x.dusus) }}</b>{% if x.max_dusus and x.max_dusus > x.dusus + 0.005 %} (en çok %{{ '%.1f'|format(100*x.max_dusus) }}){% endif %}</span>
-    <span class="o">adil {{ x.x_adil }}</span><span class="o">iddaa {% if x.iddaa %}<b>{{ x.iddaa }}</b> · {{ '%+.0f'|format(100*(x.deger-1)) }}%{% else %}yok{% endif %}</span></div>
+  <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o">{{ KN }} <b>{{ x.x_once }} → {{ x.x_oran }}</b></span><span class="o">düşüş <b class="n">%{{ '%.1f'|format(100*x.dusus) }}</b>{% if x.max_dusus and x.max_dusus > x.dusus + 0.005 %} (en çok %{{ '%.1f'|format(100*x.max_dusus) }}){% endif %}</span>
+    <span class="o">adil {{ x.x_adil }}{% if sekme == 'pgec' %} · 1xbet {{ x.xb or '-' }}{% endif %}</span><span class="o">iddaa {% if x.iddaa %}<b>{{ x.iddaa }}</b> · {{ '%+.0f'|format(100*(x.deger-1)) }}%{% else %}yok{% endif %}</span></div>
 </div>
 {% else %}<div class="section-sub">Bu gün düşüş yok.</div>{% endfor %}
 {% endblock %}

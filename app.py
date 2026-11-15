@@ -503,8 +503,10 @@ def iyms_av_page():
 
 @app.route("/bingo")
 def bingo_page():
-    if request.args.get("sekme") == "gec":
-        return render_template("bingo_gec.html", d=bingo.gec_page_data(request.args.get("gun")), sekme="gec", active_page="bingo")
+    if request.args.get("sekme") in ("gec", "pgec"):
+        s = request.args.get("sekme")
+        return render_template("bingo_gec.html", d=bingo.gec_page_data(request.args.get("gun"), "psinyal" if s == "pgec" else "gsinyal"),
+                               sekme=s, active_page="bingo")
     return render_template("bingo.html", d=bingo.get_page_data(request.args.get("gun"), {"volkano": "volkano", "vkupon": "volkano", "admiral": "admiral", "akupon": "admiral"}.get(request.args.get("sekme"), "iddaa")),
                            sekme=request.args.get("sekme"), active_page="bingo")
 
