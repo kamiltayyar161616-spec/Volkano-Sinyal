@@ -61,7 +61,7 @@ KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 1
 # eski: 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
+SIRA = ("Tümü", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)", "iddaa durumu")
 SUPHELI = 1.30                  # oran/adil bunun ustu: buyuk ihtimalle veri/cizgi hatasi (gercek gecikme degil), bahis iptal riski
 VERGI = 0.12                    # vergili ROI satiri: net kazancin %12si (iyms_analiz ile ayni kural)
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
@@ -110,6 +110,10 @@ def db():
             c.execute(f"ALTER TABLE sinyal ADD COLUMN {k} REAL")
         except sqlite3.OperationalError:
             pass
+    try:
+        c.execute("ALTER TABLE sinyal ADD COLUMN donmus TEXT")     # 15.11.2026: iddaa durdurdu/donmuş oran sebebi
+    except sqlite3.OperationalError:
+        pass
     c.execute("""CREATE TABLE IF NOT EXISTS bahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
                  getiri REAL, PRIMARY KEY (xid, sec))""")
     # VOLKANO sekmesi: aynı yapı; 'iddaa' sütunu burada oynanan Volkano oranını tutar, adil = yalnız 1xbet
@@ -139,6 +143,17 @@ def db():
                 c.execute(f"ALTER TABLE {t} RENAME TO {t}_eski2")
         for ix in ("asinyal_k", "abahis_k2"):
             c.execute(f"DROP INDEX IF EXISTS {ix}")
+        c.commit()
+        c.close()
+        return db()
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_donma'").fetchone():
+        # 15.11.2026 kullanıcı: iddaa donmuş oran tespiti — iddaa sinyal + kupon geçmişi arşive, iddaa kasası 20.000'den (gerçek ROI)
+        c.execute("CREATE TABLE kural_donma (at TEXT)")
+        c.execute("INSERT INTO kural_donma VALUES (datetime('now'))")
+        for tb in ("sinyal", "bahis"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (tb,)).fetchone():
+                c.execute(f"DROP TABLE IF EXISTS {tb}_eski5")
+                c.execute(f"ALTER TABLE {tb} RENAME TO {tb}_eski5")
         c.commit()
         c.close()
         return db()
@@ -474,6 +489,24 @@ def adaylar(i, x, v=None):
 
 
 # ---------- tur ----------
+DON_GOL_SN = 120          # 1xbet'te gol olduktan sonra bu süre içinde iddaa maçın oranlarını güncellemediyse: iddaa durdurmuş
+
+
+def _donmus(i, x, pazar, cz, gol_at):
+    """iddaa bu maçı içeride durdurmuş / oranı donmuş mu? (iddaa bunu verisinde göstermiyor; 'Bu maç şu an oynanamaz' BO-51-10)
+    -> sebep metni ya da None.
+    1) Alt/Üst çizgisi 1xbet skorunun hemen üstünde (gol + 0.5): iddaa skor 2-1 iken 3.5'i vermez; çizgi görünüyorsa golü işlememiştir.
+    2) 1xbet'te gol oldu (son 120 sn) ama iddaa o andan beri maçın hiçbir oranını güncellemedi."""
+    gol = x["s1"] + x["s2"]
+    if pazar == "A/Ü" and cz is not None and abs(cz - (gol + 0.5)) < 0.01:
+        return "çizgi skorun hemen üstünde — iddaa golü işlememiş"
+    if gol_at and time.time() - gol_at < DON_GOL_SN:
+        su = ISK.son_guncelleme(i["i"])
+        if su is not None and su < gol_at:
+            return f"1xbet'te gol {int(time.time() - gol_at)} sn önce, iddaa o andan beri oran güncellemedi"
+    return None
+
+
 def tur():
     now = datetime.now(timezone.utc)
     at = now.isoformat(timespec="seconds")
@@ -500,6 +533,8 @@ def tur():
         n_v += v is not None
         if x["dk"] > MAX_DK:
             continue
+        sk0 = _skor.get(x["I"])
+        gol_at = time.time() if sk0 and sk0[0] != (x["s1"], x["s2"]) else (sk0[1] if sk0 else None)
         for pazar, sec, cz, io, S in adaylar(i, x, v):
             if "X" not in S:
                 continue
@@ -510,8 +545,9 @@ def tur():
                 continue
             xo, vo = S.get("X", (None, None)), S.get("V", (None, None))
             r = c.execute("SELECT son_at, sure FROM sinyal WHERE xid=? AND sec=?", (x["I"], sec)).fetchone()
+            dn = _donmus(i, x, pazar, cz, gol_at)
             acik.append({"ev": x["ev"], "dep": x["dep"], "sec": sec, "iddaa": io, "adil": round(adil, 2), "deger": round(d, 3), "dk": x["dk"],
-                         "x_oran": xo[0], "v_oran": vo[0], "link": ILINK.format(i["i"])})
+                         "x_oran": xo[0], "v_oran": vo[0], "link": None if dn else ILINK.format(i["i"]), "donmus": dn})
             if r is None:
                 yeni += 1
                 _seri_gun(("sinyal", x["I"], sec), SN)
@@ -520,11 +556,16 @@ def tur():
                           (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            io, xo[0], round(adil, 3), round(d, 4), io, round(d, 4), at, vo[0],
                            round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None))
+                if dn:
+                    c.execute("UPDATE sinyal SET donmus=? WHERE xid=? AND sec=?", (dn, x["I"], sec))
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * SN else 0)
-                if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
-                    _bahis_ac(c, x["I"], sec, io, p, at)
+                if dn:                         # donmuş: kupon yok, sinyal donmuş olarak işaretlenir (karnede ayrı)
+                    c.execute("UPDATE sinyal SET donmus=COALESCE(donmus, ?) WHERE xid=? AND sec=?", (dn, x["I"], sec))
+                elif _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
+                    if not c.execute("SELECT donmus FROM sinyal WHERE xid=? AND sec=?", (x["I"], sec)).fetchone()[0]:
+                        _bahis_ac(c, x["I"], sec, io, p, at)
                 c.execute("""UPDATE sinyal SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
@@ -777,6 +818,8 @@ def get_page_data(gun=None, kaynak="iddaa"):
         if kaynak == "volkano":              # 13.11.2026: sinyal anında Volkano skoru 1xbet'le aynı mıydı (sadece karne)
             ekle("Skor (Volkano ↔ 1xbet)", "skor bilinmiyor (13.11 11:00 öncesi)" if not r.get("v_skor") else
                  "skor farklıyken gelen (gecikme)" if (r.get("skor_fark") or 0) > 0 else "skor aynıyken gelen (gerçek fark)", r)
+        if kaynak not in ("volkano", "admiral"):
+            ekle("iddaa durumu", "⚠ donmuş / durdurulmuş (oynanamaz)" if r.get("donmus") else "temiz (oynanabilir)", r)
         ekle("Açık kalma süresi", _kova(r["sure"] or 0, (10, 30, 60, 180), ("<10 sn (tek tarama)", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+")), r)
     out["ozet"] = [{"grup": k[0], "ad": k[1], "n": v[0], "w": v[1], "isabet": round(100 * v[1] / v[0]), "roi": round(100 * v[2] / v[0], 1),
                     "roi_v": round(100 * v[3] / v[0], 1), "kar": round(v[2], 2)} for k, v in sorted(G.items(), key=lambda kv: (SIRA.index(kv[0][0]), kv[0][1]))]
