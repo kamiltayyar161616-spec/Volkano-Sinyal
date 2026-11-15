@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Bingo{% endblock %}
+{% block page_tag %}🎱 BINGO{% endblock %}
+{% block subtitle %}<b>75. dakikadan sonra 1xbet'te oranı düşen seçenekler</b> (keskin olmasa da): son 3 dk'daki en yüksek orana göre en az %3 düşüş. Gol sonrası 90 sn sayılmaz (gol zaten oranı oynatır). O an iddaa'da aynı seçenek açıksa oranı yazılır. Sadece gözlem — kupon/kasa yok; karnede 1 birim sabit bahisle ROI (1xbet oranıyla ve iddaa oranıyla).{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .tt tr.g td{ color:#e0a030; font-size:11px; font-weight:700; border-top:none; padding-top:10px; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; }
+  .kc{ margin:0 16px 10px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .kc.ok{ border-color:rgba(60,207,122,.6); } .kc.no{ border-color:rgba(255,90,79,.45); } .kc.canli{ border-color:#e0a030; box-shadow:0 0 0 1px rgba(224,160,48,.35); }
+  .r1{ display:flex; align-items:baseline; gap:8px; } .r1 .dk{ color:#ff5a4f; font-weight:800; font-size:14px; min-width:34px; }
+  .r1 .tk{ flex:1; font-weight:700; font-size:13.5px; } .r1 .sn{ font-size:12px; font-weight:800; }
+  .r2{ font-size:11px; color:var(--chalk-faint); margin:2px 0 6px 42px; }
+  .r3{ display:flex; flex-wrap:wrap; gap:6px; margin-left:42px; align-items:center; }
+  .sec{ font-weight:800; font-size:14px; color:#e0a030; }
+  .o{ font-size:11.5px; padding:2px 8px; border-radius:10px; background:rgba(255,255,255,.06); } .o b{ font-size:13px; }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .kasa{ margin:4px 16px 14px; padding:12px 14px; border-radius:14px; background:var(--navy); border:1px solid #e0a030; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="10">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% block content %}
+<div class="section-sub">{{ d.last.log or 'başlıyor…' }}{% if d.last.gec_hata %} · ⚠ {{ d.last.gec_hata }}{% endif %}</div>
+<div style="margin:8px 16px 4px"><a class="chip " href="/bingo">🎱 iddaa Sinyal</a><a class="chip {{ 'on' if sekme == 'kupon' else '' }}" href="/bingo?sekme=kupon">🎫 iddaa Kupon</a><a class="chip {{ 'on' if sekme == 'volkano' else '' }}" href="/bingo?sekme=volkano">🌋 Volkano Sinyal</a><a class="chip {{ 'on' if sekme == 'vkupon' else '' }}" href="/bingo?sekme=vkupon">🎫 Volkano Kupon</a><a class="chip {{ 'on' if sekme == 'admiral' else '' }}" href="/bingo?sekme=admiral">🟦 Admiral Sinyal</a><a class="chip {{ 'on' if sekme == 'akupon' else '' }}" href="/bingo?sekme=akupon">🎫 Admiral Kupon</a><a class="chip on" href="/bingo?sekme=gec">⏱ 75+ 1xbet Düşüş</a></div>
+<h2 class="section">📈 KARNE (biten)</h2>
+{% if d.ozet %}
+<table class="tt"><tr><th></th><th>n</th><th>tuttu</th><th>isabet</th><th>ROI<br>1xbet</th><th>ROI<br>iddaa</th></tr>
+{% set ns = namespace(g='') %}
+{% for x in d.ozet %}{% if x.grup != ns.g %}{% set ns.g = x.grup %}<tr class="g"><td colspan="6">{{ x.grup }}</td></tr>{% endif %}
+<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>%{{ x.isabet }}</td><td>{{ roi(x.roi) }}</td><td>{{ roi(x.roi_i) }}{% if x.ni %}<br><span class="meta">n {{ x.ni }}</span>{% endif %}</td></tr>{% endfor %}</table>
+{% else %}<div class="section-sub">Henüz biten düşüş yok — 75. dakikayı geçen maçlar bittikçe dolacak.</div>{% endif %}
+<h2 class="section">📅 GÜN GÜN</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/bingo?sekme=gec&gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+{% for x in d.L %}
+<div class="kc {{ 'ok' if x.sonuc == 'tuttu' else 'no' if x.sonuc == 'yattı' else 'canli' }}">
+  <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>
+    <span class="sn {{ 'p' if x.sonuc == 'tuttu' else 'n' if x.sonuc == 'yattı' else '' }}">{{ x.sonuc or 'bekliyor' }}{% if x.final %} · {{ x.final }}{% endif %}</span></div>
+  <div class="r2">{{ x.saat }} · {{ x.lig or '' }} · o an {{ x.skor }}</div>
+  <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o">1xbet <b>{{ x.x_once }} → {{ x.x_oran }}</b></span><span class="o">düşüş <b class="n">%{{ '%.1f'|format(100*x.dusus) }}</b>{% if x.max_dusus and x.max_dusus > x.dusus + 0.005 %} (en çok %{{ '%.1f'|format(100*x.max_dusus) }}){% endif %}</span>
+    <span class="o">adil {{ x.x_adil }}</span><span class="o">iddaa {% if x.iddaa %}<b>{{ x.iddaa }}</b> · {{ '%+.0f'|format(100*(x.deger-1)) }}%{% else %}yok{% endif %}</span></div>
+</div>
+{% else %}<div class="section-sub">Bu gün düşüş yok.</div>{% endfor %}
+{% endblock %}

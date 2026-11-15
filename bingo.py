@@ -211,6 +211,10 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS vskor_fark (xid INTEGER, ev TEXT, dep TEXT, bas TEXT, bit TEXT, sure INTEGER, v_skor TEXT,
                  x_skor TEXT, yon TEXT, dk INTEGER)""")
     c.execute("CREATE TABLE IF NOT EXISTS asinyal AS SELECT * FROM vsinyal WHERE 0")
+    # 15.11.2026 kullanıcı: 75+ dk 1xbet oran düşüşleri (keskin olmasa da) — ayrı sanal takip, kupon/kasa yok
+    c.execute("""CREATE TABLE IF NOT EXISTS gsinyal (xid INTEGER, sec TEXT, at TEXT, ev TEXT, dep TEXT, lig TEXT, pazar TEXT, cizgi REAL,
+                 dk INTEGER, skor TEXT, x_once REAL, x_oran REAL, dusus REAL, x_adil REAL, iddaa REAL, deger REAL, max_dusus REAL,
+                 son_at TEXT, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     c.execute("CREATE TABLE IF NOT EXISTS abahis AS SELECT * FROM vbahis WHERE 0")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS asinyal_k ON asinyal(xid, sec)")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS abahis_k2 ON abahis(xid, sec)")
@@ -538,6 +542,115 @@ def adaylar(i, x, v=None):
     return [tuple(v) for v in out.values()]
 
 
+# ---------- 75+ 1xbet düşüş takibi ----------
+GEC_DK, GEC_PENCERE, GEC_ESIK = 75, 180, 0.03   # 75. dk+, son 180 sn'deki en yüksek orana göre en az %3 düşüş
+_xgec = {}                  # (xid, sec) -> [(t, oran)]
+
+
+def _gec_secenekler(x):
+    """1xbet: {sec: (pazar, cizgi, oran, adil_ihtimal)} — MS 1/X/2 ve skorun hemen üstündeki iki Alt/Üst çizgisi"""
+    out = {}
+    nv = _novig(x["ms"].get("1"), x["ms"].get("X"), x["ms"].get("2"))
+    if nv:
+        for k, p in zip(("1", "X", "2"), nv):
+            out[f"MS {k}"] = ("MS", None, x["ms"][k], p)
+    gol = x["s1"] + x["s2"]
+    for cz in (gol + 0.5, gol + 1.5):
+        so = x["au"].get(cz) or {}
+        nv = _novig(so.get("ust"), so.get("alt"))
+        if nv:
+            out[f"Üst {cz:g}"] = ("A/Ü", cz, so["ust"], nv[0])
+            out[f"Alt {cz:g}"] = ("A/Ü", cz, so["alt"], nv[1])
+    return out
+
+
+def gec_tur(c, X, IO, now, at):
+    """IO: {xid: {sec: iddaa oranı}} — o an iddaa'da açık seçenekler (eşleşen maçlar)"""
+    t = time.time()
+    n = 0
+    for x in X.values():
+        if x["dk"] < GEC_DK - 3 or x["dk"] > MAX_DK:
+            continue
+        if t - _skor.get(x["I"], (None, 0))[1] < GOL_BEKLE:      # gol sonrası oranlar zaten oynar — geçmiş sıfırlanır
+            for k in [k for k in _xgec if k[0] == x["I"]]:
+                del _xgec[k]
+            continue
+        for sec, (pazar, cz, o, p) in _gec_secenekler(x).items():
+            if not o or o <= 1.0:
+                continue
+            h = _xgec.setdefault((x["I"], sec), [])
+            h.append((t, o))
+            while h and t - h[0][0] > GEC_PENCERE:
+                h.pop(0)
+            if x["dk"] < GEC_DK or not 1.10 <= o <= 15:
+                continue
+            tepe = max(v for _, v in h)
+            dus = (tepe - o) / tepe
+            if dus < GEC_ESIK:
+                continue
+            io = (IO.get(x["I"]) or {}).get(sec)
+            adil = 1 / p
+            r = c.execute("SELECT 1 FROM gsinyal WHERE xid=? AND sec=?", (x["I"], sec)).fetchone()
+            if r is None:
+                n += 1
+                c.execute("""INSERT INTO gsinyal (xid, sec, at, ev, dep, lig, pazar, cizgi, dk, skor, x_once, x_oran, dusus, x_adil, iddaa, deger,
+                             max_dusus, son_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                          (x["I"], sec, at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}", tepe, o,
+                           round(dus, 4), round(adil, 3), io, round(io / adil, 4) if io else None, round(dus, 4), at))
+            else:
+                c.execute("UPDATE gsinyal SET max_dusus=MAX(max_dusus, ?), son_at=? WHERE xid=? AND sec=?", (round(dus, 4), at, x["I"], sec))
+    if len(_xgec) > 20000:
+        for k in [k for k, h in _xgec.items() if not h or t - h[-1][0] > 600]:
+            del _xgec[k]
+    return n
+
+
+def gec_page_data(gun=None):
+    out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun}
+    if not os.path.exists(DB):
+        return out
+    c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+    c.row_factory = sqlite3.Row
+    try:
+        R = [dict(r) for r in c.execute("SELECT * FROM gsinyal ORDER BY at DESC")]
+    except sqlite3.OperationalError:
+        R = []
+    c.close()
+    G = {}
+
+    def ekle(grup, ad, r, oran):
+        g = G.setdefault((grup, ad), {"grup": grup, "ad": ad, "n": 0, "w": 0, "kar": 0.0, "ni": 0, "wi": 0, "kari": 0.0})
+        g["n"] += 1
+        g["w"] += r["sonuc"] == "tuttu"
+        g["kar"] += (r["x_oran"] - 1) if r["sonuc"] == "tuttu" else -1
+        if oran:
+            g["ni"] += 1
+            g["wi"] += r["sonuc"] == "tuttu"
+            g["kari"] += (oran - 1) if r["sonuc"] == "tuttu" else -1
+    for r in R:
+        r["saat"] = datetime.fromisoformat(r["at"]).astimezone(TR).strftime("%H:%M")
+        r["g"] = datetime.fromisoformat(r["at"]).astimezone(TR).date().isoformat()
+        if r["sonuc"] not in ("tuttu", "yattı"):
+            continue
+        io = r["iddaa"]
+        ekle("Tümü", "tüm düşüşler", r, io)
+        ekle("Düşüş", _kova(100 * r["dusus"], (5, 10), ("%3–5", "%5–10", "%10+")), r, io)
+        ekle("Pazar", r["pazar"] if r["pazar"] != "A/Ü" else ("Üst" if r["sec"].startswith("Üst") else "Alt"), r, io)
+        ekle("Dakika", _kova(r["dk"], (80, 85), ("75–79", "80–84", "85–90")), r, io)
+        ekle("1xbet oranı", _kova(r["x_oran"], (1.5, 2.5, 4), ("1.10–1.49", "1.50–2.49", "2.50–3.99", "4.00+")), r, io)
+        ekle("iddaa", "iddaa yok / kapalı" if not io else _kova(r["deger"], (1.0, 1.05), ("iddaa ≤ adil", "iddaa %0–5 üstü", "iddaa %5+ üstü")), r, io)
+    for g in G.values():
+        g["isabet"] = round(100 * g["w"] / g["n"])
+        g["roi"] = round(100 * g["kar"] / g["n"], 1)
+        g["roi_i"] = round(100 * g["kari"] / g["ni"], 1) if g["ni"] else None
+    sira = ("Tümü", "Düşüş", "Pazar", "Dakika", "1xbet oranı", "iddaa")
+    out["ozet"] = sorted(G.values(), key=lambda g: (sira.index(g["grup"]), g["ad"]))
+    out["gunler"] = sorted({r["g"] for r in R}, reverse=True)[:14]
+    out["gun"] = gun or (out["gunler"][0] if out["gunler"] else None)
+    out["L"] = [r for r in R if r["g"] == out["gun"]][:200]
+    return out
+
+
 # ---------- tur ----------
 def tur():
     now = datetime.now(timezone.utc)
@@ -560,6 +673,7 @@ def tur():
         if _skor.get(x["I"], (None, 0))[0] != sk:
             _skor[x["I"]] = (sk, time.time() if x["I"] in _skor else 0)
     n_gol = 0
+    IO = {}
     sahip = {}                                 # 1xbet maçı -> iddaa maçı: bir 1xbet maçı tek iddaa maçına bağlanır (isim benzerliği en yüksek olan)
     for i in I:
         x = _eslestir(i, X)
@@ -584,6 +698,7 @@ def tur():
         if x["dk"] > MAX_DK:
             continue
         for pazar, sec, cz, io, S in adaylar(i, x, v):
+            IO.setdefault(x["I"], {})[sec] = io
             if "X" not in S:
                 continue
             p = S["X"][1]                      # referans yalnız 1xbet (Volkano oranı sadece bilgi)
@@ -612,6 +727,12 @@ def tur():
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
     bahis_kapat(c)
+    try:
+        _last["gec_yeni"] = gec_tur(c, X, IO, now, at)
+        sonuclandir(c, X, now, "gsinyal")
+        _last["gec_hata"] = None
+    except Exception as e:
+        _last["gec_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     if len(_skor) > 5000:
         _skor.clear()
     yv, acik_v = site_tur(c, X, VF, V, now, at, "volkano")
@@ -767,7 +888,7 @@ def sonuclandir(c, X, now, s_tab="sinyal"):
                 c.execute(f"UPDATE {s_tab} SET sonuc='yattı', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
             continue
         gecen = (now - datetime.fromisoformat(son)).total_seconds()
-        if gecen < 2 * SN:
+        if gecen < max(20, 2 * SN):
             continue
         if dk >= BITIS_DK:
             c.execute(f"UPDATE {s_tab} SET sonuc=?, final=? WHERE xid=? AND sec=?",
