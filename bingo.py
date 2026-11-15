@@ -146,6 +146,19 @@ def db():
         c.commit()
         c.close()
         return db()
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_site_yeni'").fetchone():
+        # 15.11.2026 kullanıcı: Volkano + Admiral yeniden kuruldu — sinyal, kupon, skor farkı geçmişi arşive (*_eski6), kasalar 20.000'den
+        c.execute("CREATE TABLE kural_site_yeni (at TEXT)")
+        c.execute("INSERT INTO kural_site_yeni VALUES (datetime('now'))")
+        c.execute("DROP INDEX IF EXISTS asinyal_k")
+        c.execute("DROP INDEX IF EXISTS abahis_k2")
+        for tb in ("vsinyal", "vbahis", "asinyal", "abahis", "vskor_fark"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (tb,)).fetchone():
+                c.execute(f"DROP TABLE IF EXISTS {tb}_eski6")
+                c.execute(f"ALTER TABLE {tb} RENAME TO {tb}_eski6")
+        c.commit()
+        c.close()
+        return db()
     if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_donma'").fetchone():
         # 15.11.2026 kullanıcı: iddaa donmuş oran tespiti — iddaa sinyal + kupon geçmişi arşive, iddaa kasası 20.000'den (gerçek ROI)
         c.execute("CREATE TABLE kural_donma (at TEXT)")
@@ -216,12 +229,31 @@ def kasa(c=None, b="bahis"):
             "roi": round(100 * kar / oyn, 1) if oyn else None, "oynanan": round(oyn, 2)}
 
 
+# 15.11.2026 kullanıcı: Volkano/Admiral iflas etti — yeniden kuruldu. Karne (13-15.11): oran 3.50+ (-%15), Alt (-%24), şüpheli fark,
+# 75+ dk zarar; bunlarda kupon açılmaz (sinyal yine karnede). Kasa: çeyrek Kelly, tek kupon en fazla kasanın %2'si, alt limit 10 ₺ —
+# tutar kasayla orantılı küçülür, kasa sıfırlanamaz.
+SITE_MAX_ORAN, SITE_MAX_DEGER, SITE_MAX_DK = 3.50, SUPHELI, 74
+SITE_KELLY, SITE_MAX_PAY, SITE_MIN = 0.25, 0.02, 10.0
+
+
+def _site_kupon_uygun(sec, oran, deger, dk):
+    return oran <= SITE_MAX_ORAN and deger <= SITE_MAX_DEGER and dk <= SITE_MAX_DK and not sec.startswith("Alt")
+
+
 def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis"):
     b = oran - 1
     f = (b * p - (1 - p)) / b if b > 0 else 0
     if f <= 0:
         return
     k = kasa(c, b_tab)
+    if b_tab != "bahis":                   # Volkano / Admiral: orantılı, iflas etmez
+        t = min(k["serbest"] * f * SITE_KELLY, k["bakiye"] * SITE_MAX_PAY)
+        t = round(t / 5) * 5 if t >= 50 else round(t)
+        if t < SITE_MIN or t > k["serbest"]:
+            return
+        c.execute(f"INSERT OR IGNORE INTO {b_tab} (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
+                  (xid, sec, at, oran, round(p, 4), round(f, 4), t))
+        return
     t = max(MIN_BAHIS, min(MAX_BAHIS, round(k["serbest"] * f * KELLY_PAY / 5) * 5))
     if t > k["serbest"]:
         return
@@ -692,7 +724,7 @@ def site_tur(c, X, VF, V, now, at, site):
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * S_["sn"] else 0)
-                if _seri_gun((s_tab, x["I"], sec), S_["sn"]) >= OYNA_SN:
+                if _seri_gun((s_tab, x["I"], sec), S_["sn"]) >= OYNA_SN and _site_kupon_uygun(sec, vo, d, x["dk"]):
                     _bahis_ac(c, x["I"], sec, vo, p, at, b_tab)
                 c.execute(f"""UPDATE {s_tab} SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, vo, round(d, 4), x["I"], sec))
