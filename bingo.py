@@ -32,7 +32,7 @@ IDDAA_URL = "https://sportsbookv2.iddaa.com/sportsbook/events?st=1&type=1&versio
 X_URL = "https://1xbet.mobi/service-api/LiveFeed/Get1x2_VZip?sports=1&count=500&lng=en&mode=4&country=1&getEmpty=true"
 H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
      "Accept": "application/json, text/plain, */*"}
-SN = 10
+SN = 7                      # 15.11.2026 kullanıcı: 10 -> 7 sn (iddaa REST + 1xbet); engel (403/429/503) sayısı durumda, artarsa geri alınır
 V_SN, FIX_SN = 10, 300          # 13.11.2026: Volkano artık bellekteki canlı orandan okunur (ağ isteği yok), her taramada
 VB = "https://sportdataproviderv3-volcano.xtreme.bet/api/public"
 VQ = "clientType=WebConsumer&lang=sr-Latn-ME&t=b7a855b8-4f88-4d95-8f7b-c4527826bb08&v=1.1.4384"
@@ -43,6 +43,7 @@ MIN_ORAN = 1.30
 MAX_ORAN = 10.0             # çok uç sürpriz oranlar (gürültü) alınmaz
 ESIK = 1.05                 # iddaa / 1xbet adil
 MAX_DK = 90                 # 15.11.2026 kullanıcı: 85 -> 90
+GOL_BEKLE = 90              # 15.11.2026 kullanıcı: iddaa'da da gol sonrası 90 sn sinyal yok (iddaa o arada kilitli/reddediyor)
 OYNA_SN = 50                # sanal kupon: fark en az bu kadar saniye kesintisiz açık kalırsa, o anki oranla açılır (kullanıcının oynama süresi)
 _seri = {}                  # (tablo, xid, sec) -> (kesintisiz görülmeye başladığı an, son görüldüğü an)
 
@@ -86,6 +87,8 @@ def _kaynak(ad, f, taban):
             k["ardisik"] += 1
             kod = getattr(e, "code", None)
             k["hata"] = f"{type(e).__name__}{f' {kod}' if kod else ''}: {str(e)[:120]}"
+            if kod in (403, 429, 503):
+                k["engel"] = k.get("engel", 0) + 1
             if kod in (403, 429, 503) or k["ardisik"] >= 3:
                 k["ara"] = 20 if k["ara"] < 20 else 60
         k["t"] = time.time() + k["ara"]
@@ -465,12 +468,20 @@ def _v_eslestir(x, F, cache=None):
     return best[1] if best else None
 
 
+def _ad_tutar(i, x):
+    return IS._benz(i["ev"], x["ev"]) >= 0.5 and IS._benz(i["dep"], x["dep"]) >= 0.5
+
+
 def _eslestir(i, X):
     if i["i"] in _esle:
         v = _esle[i["i"]]
         if not isinstance(v, float):
-            return X.get(v)
-        if time.time() - v < 60:
+            x = X.get(v)
+            if x is None or _ad_tutar(i, x):   # 15.11.2026: önbellekteki eşleşme her turda isimle yeniden doğrulanır
+                return x
+            _SK["isim_uyusmadi"] = _SK.get("isim_uyusmadi", 0) + 1
+            del _esle[i["i"]]                  # yanlış/eskimiş bağ (Trapani–Palermo ↔ Trastevere–Albalonga) — yeniden aranır
+        elif time.time() - v < 60:
             return None
     best = None
     for x in X.values():
@@ -544,11 +555,29 @@ def tur():
         c.execute("""INSERT INTO mac (xid, ev, dep, lig, s1, s2, dk, son_at) VALUES (?,?,?,?,?,?,?,?)
                      ON CONFLICT(xid) DO UPDATE SET s1=excluded.s1, s2=excluded.s2, dk=excluded.dk, son_at=excluded.son_at""",
                   (x["I"], x["ev"], x["dep"], x["lig"], x["s1"], x["s2"], x["dk"], at))
+    for x in X.values():                     # skor değişimi iddaa taramasından ÖNCE işlenir (gol sonrası bekleme için)
+        sk = (x["s1"], x["s2"])
+        if _skor.get(x["I"], (None, 0))[0] != sk:
+            _skor[x["I"]] = (sk, time.time() if x["I"] in _skor else 0)
+    n_gol = 0
+    sahip = {}                                 # 1xbet maçı -> iddaa maçı: bir 1xbet maçı tek iddaa maçına bağlanır (isim benzerliği en yüksek olan)
+    for i in I:
+        x = _eslestir(i, X)
+        if x:
+            sk = IS._benz(i["ev"], x["ev"]) + IS._benz(i["dep"], x["dep"])
+            if x["I"] not in sahip or sk > sahip[x["I"]][0]:
+                sahip[x["I"]] = (sk, i["i"])
     for i in I:
         x = _eslestir(i, X)
         if not x:
             continue
+        if sahip.get(x["I"], (0, i["i"]))[1] != i["i"]:
+            _SK["cift_esle"] = _SK.get("cift_esle", 0) + 1
+            continue
         n_es += 1
+        if time.time() - _skor.get(x["I"], (None, 0))[1] < GOL_BEKLE:
+            n_gol += 1                         # 15.11.2026 kullanıcı: gol sonrası 90 sn iddaa sinyali yok (Volkano/Admiral ile aynı)
+            continue
         ai = _v_eslestir(x, VF) if VF else None
         v = V.get(ai) if ai else None
         n_v += v is not None
@@ -583,10 +612,6 @@ def tur():
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
     bahis_kapat(c)
-    for x in X.values():
-        sk = (x["s1"], x["s2"])
-        if _skor.get(x["I"], (None, 0))[0] != sk:
-            _skor[x["I"]] = (sk, time.time())
     if len(_skor) > 5000:
         _skor.clear()
     yv, acik_v = site_tur(c, X, VF, V, now, at, "volkano")
@@ -598,6 +623,9 @@ def tur():
     c.commit()
     c.close()
     _last["soket"] = f"{_SK['fark']}/{_SK['bak']} · maç kapalı atlanan {_SK.get('mac_kapali', 0)}"
+    _last["gol_bekle"] = n_gol
+    _last["esle_hata"] = {"isim_uyusmadi": _SK.get("isim_uyusmadi", 0), "cift_esle": _SK.get("cift_esle", 0)}
+    _last["engel"] = {k: v.get("engel", 0) for k, v in _K.items()}
     _last.update(vacik=acik_v, aacik=acik_a, admiral=len(AD[1]), eslesen=n_es, volkano_eslesen=n_v, iddaa=len(I), xbet=len(X), volkano=len(V), acik=acik,
                  kaynak={k: {"ara": v["ara"], "hata": v["hata"], "yas": round(time.time() - v["vt"]) if v["vt"] else None} for k, v in _K.items()})
     return f"iddaa {len(I)} · 1xbet {len(X)} · Volkano {len(V)} · eşleşen {n_es} (Volkano {n_v}) · açık {len(acik)} · yeni {yeni} · VOLKANO {len(V)} maç, 1xbet ile eşleşen {_SITE['volkano']['eslesen']}, açık {len(acik_v)} yeni {yv} · ADMIRAL {len(AD[1])} maç, 1xbet ile eşleşen {_SITE['admiral']['eslesen']}, açık {len(acik_a)} yeni {ya}"
@@ -860,6 +888,7 @@ def ozet():
 def _loop():
     time.sleep(90)
     while True:
+        t0 = time.time()
         try:
             _last.update(log=f"{datetime.now(TR):%H:%M:%S} " + tur(), at=datetime.now(timezone.utc).isoformat(), hata=None)
         except Exception as e:
@@ -869,7 +898,7 @@ def _loop():
         for st in _SITE.values():
             if len(st["esle"]) > 5000:
                 st["esle"].clear()
-        time.sleep(SN)
+        time.sleep(max(1.0, SN - (time.time() - t0)))   # tur süresi dahil SN saniyede bir
 
 
 _started = False
