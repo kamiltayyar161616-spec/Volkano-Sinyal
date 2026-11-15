@@ -472,15 +472,29 @@ def _v_eslestir(x, F, cache=None):
     for ai, f in F.items():
         if abs(f["S"] - (x["S"] or 0)) > 1800:
             continue
-        s1, s2 = IS._benz(x["ev"], f["ev"]), IS._benz(x["dep"], f["dep"])
+        s1, s2 = _bz(x["ev"], f["ev"]), _bz(x["dep"], f["dep"])
         if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
             best = (s1 + s2, ai)
     _vesle[x["I"]] = best[1] if best else time.time()
     return best[1] if best else None
 
 
+GENEL = {"calcio", "ssd", "asd", "usd", "ssc", "spor", "sport", "sporting", "football", "futbol", "club", "real", "atletico", "athletic",
+         "deportivo", "sociedad", "olympique", "dynamo", "dinamo", "racing", "union", "ssdarl", "srl", "arl", "fbc", "1907", "1913"}
+
+
+def _bz(a, b):
+    """IS._benz gibi ama 'Calcio', 'SSD' gibi genel kelimeler sayılmaz (15.11.2026: 'Trapani Calcio – SSD Palermo' ↔
+    'Trastevere Calcio – SSD Albalonga' 0.5 ile eşleşiyordu)"""
+    A, B_ = IS._tok(a) - GENEL, IS._tok(b) - GENEL
+    if not A or not B_:
+        return IS._benz(a, b) if not (IS._tok(a) - GENEL or IS._tok(b) - GENEL) else 0
+    s = len(A & B_) + sum(1 for x in A for y in B_ if x != y and len(x) >= 5 and len(y) >= 5 and (x in y or y in x)) * 0.8
+    return s / min(len(A), len(B_))
+
+
 def _ad_tutar(i, x):
-    return IS._benz(i["ev"], x["ev"]) >= 0.5 and IS._benz(i["dep"], x["dep"]) >= 0.5
+    return _bz(i["ev"], x["ev"]) >= 0.5 and _bz(i["dep"], x["dep"]) >= 0.5
 
 
 def _eslestir(i, X):
@@ -498,7 +512,7 @@ def _eslestir(i, X):
     for x in X.values():
         if abs((x["S"] or 0) - i["d"]) > 1800:
             continue
-        s1, s2 = IS._benz(i["ev"], x["ev"]), IS._benz(i["dep"], x["dep"])
+        s1, s2 = _bz(i["ev"], x["ev"]), _bz(i["dep"], x["dep"])
         if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
             best = (s1 + s2, x)
     _esle[i["i"]] = best[1]["I"] if best else time.time()
@@ -623,6 +637,7 @@ def gec_tur(c, X, IO, now, at, tab="gsinyal", Q=None):
     return n
 
 
+PIN_AKTIF = False           # 15.11.2026: pinnacle.com canlı API sunucuya 403 veriyor; NowGoal'daki Pinnacle maç başında donuyor (canlı yok)
 _pesle = {}                 # 1xbet I -> Pinnacle matchupId ("" yok, float = son deneme)
 
 
@@ -644,7 +659,7 @@ def _pinnacle_esle(X, P):
                 continue
             if q["skor"] and tuple(q["skor"]) != (x["s1"], x["s2"]):
                 continue
-            s1, s2 = IS._benz(x["ev"], q["ev"]), IS._benz(x["dep"], q["dep"])
+            s1, s2 = _bz(x["ev"], q["ev"]), _bz(x["dep"], q["dep"])
             if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
                 best = (s1 + s2, pid)
         _pesle[x["I"]] = best[1] if best else time.time()
@@ -728,7 +743,7 @@ def tur():
     for i in I:
         x = _eslestir(i, X)
         if x:
-            sk = IS._benz(i["ev"], x["ev"]) + IS._benz(i["dep"], x["dep"])
+            sk = _bz(i["ev"], x["ev"]) + _bz(i["dep"], x["dep"])
             if x["I"] not in sahip or sk > sahip[x["I"]][0]:
                 sahip[x["I"]] = (sk, i["i"])
     for i in I:
@@ -784,7 +799,7 @@ def tur():
     except Exception as e:
         _last["gec_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     try:                                       # 15.11.2026: aynı takip Pinnacle canlı oranıyla
-        P = _kaynak("pinnacle", PC.canli, 10)
+        P = _kaynak("pinnacle", PC.canli, 10) if PIN_AKTIF else None
         Q = _pinnacle_esle(X, P) if P else {}
         _last["pin"] = f"Pinnacle canlı {len(P or {})} maç · 75+ eşleşen {len(Q)}"
         if P:
