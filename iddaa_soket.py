@@ -16,7 +16,6 @@ UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chr
 _d = {k: {"durum": "başlamadı", "hata": None, "bag_at": None, "hedef": {}, "son_mesaj": None} for k in HUBS}
 _ham = {k: {} for k in HUBS}       # hub -> hedef -> [ilk 2 ham örnek]
 PZ = {}
-EVT = {}           # maç id -> son oran güncellemesi (epoch)
 EV = {}            # maç id -> {"bp": bahis açık mı (1/0), "s": durum, "t"} — maç seviyesinde kapanma (13.11.2026)
 _evsay = {}        # maç seviyesinde gelen alan sayıları (kontrol)
 _lock = threading.Lock()
@@ -30,8 +29,6 @@ def _pz_isle(a):
     now = time.time()
     with _lock:
         eid = a.get("eid")
-        if eid is not None and a.get("m"):
-            EVT[eid] = now                 # maçın oranları en son ne zaman güncellendi (donma tespiti)
         if eid is not None:
             for k in ("bp", "s", "bs", "st", "ls"):
                 if k in a:
@@ -64,14 +61,6 @@ def olay(eid):
         return dict(x) if x else None
 
 
-def son_guncelleme(eid):
-    """maçın oranlarının soketten en son güncellendiği an (epoch) ya da None (bağlantı yok / hiç gelmedi)"""
-    if _d["lite"]["durum"] != "bağlandı" or not _d["lite"]["bag_at"]:
-        return None
-    with _lock:
-        return EVT.get(eid)
-
-
 def pazar(i):
     """REST pazar id'si için anlık durum (bağlantı sağlıklıysa) ya da None"""
     if _d["lite"]["durum"] != "bağlandı" or not _d["lite"]["son_mesaj"] or time.time() - _d["lite"]["son_mesaj"] > 60:
@@ -89,7 +78,6 @@ def _oturum(ad, url):
         with _lock:
             PZ.clear()
             EV.clear()
-            EVT.clear()
     d = _d[ad]
     d.update(durum="bağlandı", bag_at=datetime.now(timezone.utc).isoformat(), hata=None)
     ws.settimeout(5)
