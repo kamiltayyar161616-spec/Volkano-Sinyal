@@ -42,7 +42,7 @@ FIX_URL = f"{VB}/offer/GetFixtures?dp={VDP}&{VQ}"
 MIN_ORAN = 1.30
 MAX_ORAN = 10.0             # çok uç sürpriz oranlar (gürültü) alınmaz
 ESIK = 1.05                 # iddaa / 1xbet adil
-MAX_DK = 85
+MAX_DK = 90                 # 15.11.2026 kullanıcı: 85 -> 90
 OYNA_SN = 50                # sanal kupon: fark en az bu kadar saniye kesintisiz açık kalırsa, o anki oranla açılır (kullanıcının oynama süresi)
 _seri = {}                  # (tablo, xid, sec) -> (kesintisiz görülmeye başladığı an, son görüldüğü an)
 
@@ -773,7 +773,7 @@ def get_page_data(gun=None, kaynak="iddaa"):
             if 60 <= (r["sure"] or 0) < 180:
                 ekle("Filtre", "önerilen: 1–3 dk açık + fark ≤ %30", r)
         ekle("oran", _kova(r["iddaa"], (1.60, 2.20, 3.50), ("1.30–1.60", "1.60–2.20", "2.20–3.50", "3.50+")), r)
-        ekle("Dakika", _kova(r["dk"], (30, 60, 75), ("0–29", "30–59", "60–74", "75–85")), r)
+        ekle("Dakika", _kova(r["dk"], (30, 60, 75), ("0–29", "30–59", "60–74", "75–90")), r)
         if kaynak == "volkano":              # 13.11.2026: sinyal anında Volkano skoru 1xbet'le aynı mıydı (sadece karne)
             ekle("Skor (Volkano ↔ 1xbet)", "skor bilinmiyor (13.11 11:00 öncesi)" if not r.get("v_skor") else
                  "skor farklıyken gelen (gecikme)" if (r.get("skor_fark") or 0) > 0 else "skor aynıyken gelen (gerçek fark)", r)
