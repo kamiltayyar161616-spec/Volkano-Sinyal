@@ -98,4 +98,18 @@
 </div>
 {% else %}<div class="section-sub">Bu gün sinyal yok.</div>{% endfor %}
 {% endif %}
+{% if d.iyms and not V %}
+<h2 class="section">🧮 İY/MS İSTATİSTİK BAHİSLERİ (Oto İY/MS tahmini · 1xbet karşılaştırması yok · 100 ₺, iddaa kasasından)</h2>
+<div class="section-sub">Maç başında Oto'nun İY/MS tahmini olan takıma <b>İY</b> · İY tutmazsa ve takım yenik değilse <b>2. yarı başında MS</b> (iddaa oranı ≥ 1.50) · İY'de yenikse <b>70'</b>de berabereyse MS · 70'te hâlâ yenikse <b>80'</b>de berabereyse MS.
+ Kupon: {{ d.iyms.kupon.n }} ({{ d.iyms.kupon.acik }} açık) · kâr {{ '%+.2f'|format(d.iyms.kupon.kar) }} ₺{% if d.iyms.hata %} · ⚠ {{ d.iyms.hata }}{% endif %}</div>
+{% if d.iyms.karne %}<table class="tt" style="margin:0 16px"><tr><th></th><th>n</th><th>tuttu</th><th>ROI</th></tr>{% for k in d.iyms.karne %}<tr><td>{{ k.ad }}</td><td>{{ k.n }}</td><td>{{ k.w }}</td><td>{{ roi(k.roi) }}</td></tr>{% endfor %}</table>{% endif %}
+{% for x in d.iyms.L %}
+<div class="kc {{ 'ok' if x.sonuc == 'tuttu' else 'no' if x.sonuc == 'yattı' else 'canli' }}">
+  <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span><span class="sn {{ 'p' if x.sonuc == 'tuttu' else 'n' if x.sonuc == 'yattı' else '' }}">{{ x.sonuc or 'bekliyor' }}{% if x.final %} · {{ x.final }}{% endif %}</span></div>
+  <div class="r2">{{ x.saat }} · {{ x.lig or '' }} · {{ x.adim }} · o an {{ x.skor }} · Oto İY/MS: <b>{{ x.iyms }}</b></div>
+  <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o">iddaa <b>{{ x.oran or '-' }}</b></span>{% if x.bahis %}<span class="o">kupon {{ x.bahis.tutar|int }} ₺ · {{ x.bahis.durum }}</span>{% elif x.notu %}<span class="o n">{{ x.notu }}</span>{% endif %}</div>
+  {% if x.iid and not x.sonuc %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="https://www.iddaa.com/program/futbol/mac-detay/2/{{ x.iid }}/tum-oranlar" target="_blank">📲 iddaa'da aç → {{ x.sec }}</a></div>{% endif %}
+</div>
+{% else %}<div class="section-sub">Henüz İY/MS bahsi yok — Oto'da İY/MS tahmini olan maç başladığında ilk 8 dk içinde gelir.</div>{% endfor %}
+{% endif %}
 {% endblock %}

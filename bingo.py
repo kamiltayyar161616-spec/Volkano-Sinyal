@@ -114,6 +114,11 @@ def db():
             c.execute(f"ALTER TABLE sinyal ADD COLUMN {k} REAL")
         except sqlite3.OperationalError:
             pass
+    # 16.11.2026 kullanıcı: Oto İY/MS tahminine göre istatistik bahisleri (1xbet karşılaştırması yok) — İY başı, 2. yarı başı, 70', 80'
+    c.execute("""CREATE TABLE IF NOT EXISTS iyplan (xid INTEGER PRIMARY KEY, iid INTEGER, ev TEXT, dep TEXT, lig TEXT, iyms TEXT, takim TEXT,
+                 durum TEXT, iy_skor TEXT, at TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS iysinyal (xid INTEGER, sec TEXT, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT, adim TEXT,
+                 dk INTEGER, skor TEXT, iyms TEXT, oran REAL, oyna INTEGER, notu TEXT, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     try:                                   # 16.11.2026: ek takip seçeneği (çifte şans / bir üst çizgi) — sadece karne
         c.execute("ALTER TABLE sinyal ADD COLUMN ek_sec TEXT")
     except sqlite3.OperationalError:
@@ -351,29 +356,30 @@ def _oto_yukle():
                     ko = datetime.fromisoformat(x["ko"])
                 except (KeyError, TypeError, ValueError):
                     continue
-                G.setdefault(ko.date().isoformat(), []).append((ko, x["ev"], x["dep"], F))
+                iy = (((R5.get(m) or {}).get("T") or {}).get("İY/MS") or (x.get("T") or {}).get("İY/MS") or {}).get("sec")
+                G.setdefault(ko.date().isoformat(), []).append((ko, x["ev"], x["dep"], F, iy))
     except Exception as e:
         _last["oto_hata"] = f"{type(e).__name__}: {str(e)[:120]}"
     _OTO.update(t=time.time(), G=G)
     return G
 
 
-def oto_baglam(x):
+def oto_baglam(x, iyms=False):
     """1xbet maçı -> (favori 0/1/2, favori ihtimali, maç öncesi gol çizgisi) ya da (None, None, None)"""
     G = _oto_yukle()
     ko0 = datetime.now(timezone.utc) - timedelta(minutes=x["dk"] + (15 if x["dk"] > 45 else 0))
     best = None
     for gun in {ko0.date().isoformat(), (ko0 - timedelta(days=1)).date().isoformat()}:
-        for ko, e, d, F in G.get(gun, []):
+        for ko, e, d, F, iy in G.get(gun, []):
             if abs((ko - ko0).total_seconds()) > 2700:
                 continue
             s1, s2 = _bz(x["ev"], e), _bz(x["dep"], d)
             if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
-                best = (s1 + s2, F)
+                best = (s1 + s2, F, iy)
     if not best:
-        return None, None, None
+        return (None, None, None, None) if iyms else (None, None, None)
     F = best[1]
-    return F.get("fav"), F.get("pf"), F.get("L")
+    return (F.get("fav"), F.get("pf"), F.get("L"), best[2]) if iyms else (F.get("fav"), F.get("pf"), F.get("L"))
 
 
 def oto_etiket(r):
@@ -389,6 +395,133 @@ def oto_etiket(r):
     L = r.get("o_L")
     k = "çizgi yok" if L is None else "≤2.25" if L <= 2.25 else "2.5–2.75" if L <= 2.75 else "3.0–3.25" if L <= 3.25 else "3.5+"
     return f"{s.split()[0]} · maç öncesi gol çizgisi {k}"
+
+
+# ---------- 16.11.2026 kullanıcı: İY/MS istatistik bahisleri (Oto İY/MS tahmini; 1xbet karşılaştırması yok; iddaa kasasından 100 ₺) ----------
+IYMS_TUTAR, IYMS_MIN_MS = 100.0, 1.50
+_IYP = {"t": {}, "st": {}}                 # iddaa maç detayı önbelleği, görülen pazar tipleri (kontrol)
+
+
+def _iy_oran(iid, takim):
+    """iddaa maç detayından İlk yarı sonucu oranı (takim '1'/'2') — (oran, not)"""
+    try:
+        j = _get(f"https://sportsbookv2.iddaa.com/sportsbook/event/{iid}")
+    except Exception as e:
+        return None, f"detay alınamadı: {type(e).__name__}"
+    M = (j.get("data") or {}).get("m") or []
+    adaylar = []
+    for m in M:
+        st = m.get("st")
+        o = {str(x.get("n")): x.get("odd") for x in m.get("o") or [] if x.get("odd")}
+        _IYP["st"][str(st)] = sorted(o)[:4]
+        if st not in (4, 23) and m.get("sov") in (None, "") and set(o) == {"1", "0", "2"} and m.get("s") == 1:
+            adaylar.append((st, o))
+    if not adaylar:
+        return None, "iddaa'da canlı İY sonucu pazarı yok"
+    st, o = sorted(adaylar)[0]
+    return o.get(takim), f"İY pazarı st={st}"
+
+
+def _iy_kupon(c, xid, sec, oran, at):
+    if not oran or oran <= 1.0 or kasa(c, "bahis")["serbest"] < IYMS_TUTAR:
+        return 0
+    c.execute("INSERT OR IGNORE INTO bahis (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,NULL,NULL,?,'açık')",
+              (xid, "İY/MS·" + sec, at, oran, IYMS_TUTAR))
+    return 1
+
+
+def _iy_kaydet(c, i, x, plan, sec, adim, oran, oyna, notu, at):
+    c.execute("""INSERT OR IGNORE INTO iysinyal (xid, sec, iid, at, ev, dep, lig, adim, dk, skor, iyms, oran, oyna, notu)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+              (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], adim, x["dk"], f"{x['s1']}-{x['s2']}", plan["iyms"], oran,
+               _iy_kupon(c, x["I"], sec, oran, at) if oyna else 0, notu))
+
+
+def _iy_ms(c, i, x, plan, adim, at):
+    """MS bahsi: iddaa MS oranı ≥ 1.50 ise sinyal + kupon; oran yoksa (pazar kapalı) False -> sonraki turda tekrar dene"""
+    o = (i["P"].get("ms") or {}).get(plan["takim"])
+    if not o:
+        return False
+    sec = f"MS {plan['takim']}"
+    if o >= IYMS_MIN_MS:
+        _iy_kaydet(c, i, x, plan, sec, adim, o, True, None, at)
+    else:
+        _iy_kaydet(c, i, x, plan, sec, adim, o, False, f"MS oranı {o} < 1.50 — oynanmadı", at)
+    return True
+
+
+def iyms_tur(c, ciftler, at):
+    for i, x in ciftler:
+        r = c.execute("SELECT iyms, takim, durum, iy_skor FROM iyplan WHERE xid=?", (x["I"],)).fetchone()
+        dk = x["dk"]
+        if r is None:
+            if dk > 8:
+                continue
+            try:
+                _, _, _, iy = oto_baglam(x, iyms=True)
+            except Exception:
+                iy = None
+            tk = iy.split("/")[-1] if iy and "/" in iy else None
+            durum = "iy" if tk in ("1", "2") else "yok"
+            c.execute("INSERT OR IGNORE INTO iyplan (xid, iid, ev, dep, lig, iyms, takim, durum, at) VALUES (?,?,?,?,?,?,?,?,?)",
+                      (x["I"], i["i"], x["ev"], x["dep"], x["lig"], iy, tk, durum, at))
+            if durum == "iy":
+                plan = {"iyms": iy, "takim": tk}
+                o, notu = _iy_oran(i["i"], tk)
+                _iy_kaydet(c, i, x, plan, f"İY {tk}", "maç başı", o, bool(o), notu if not o else None, at)
+            continue
+        plan = {"iyms": r[0], "takim": r[1]}
+        durum = r[2]
+        if durum in ("yok", "bitti") or not plan["takim"]:
+            continue
+        a, b = x["s1"], x["s2"]
+        fark = (a - b) if plan["takim"] == "1" else (b - a)
+        yeni = durum
+        if durum == "iy" and dk >= 46:
+            iy_tuttu = fark > 0
+            c.execute("UPDATE iysinyal SET sonuc=?, final=? WHERE xid=? AND sec=? AND sonuc IS NULL",
+                      ("tuttu" if iy_tuttu else "yattı", f"İY {a}-{b}", x["I"], f"İY {plan['takim']}"))
+            c.execute("UPDATE iyplan SET iy_skor=? WHERE xid=?", (f"{a}-{b}", x["I"]))
+            yeni = "bitti" if iy_tuttu else "ms2" if fark == 0 else "b70"      # İY tutmadı: yenik değilse 2. yarı başı MS, yenikse 70'
+        if yeni == "ms2":
+            if dk > 60:
+                yeni = "bitti"
+            elif _iy_ms(c, i, x, plan, "2. yarı başı", at):
+                yeni = "ms"
+        if yeni == "b70" and dk >= 70:
+            if fark == 0:
+                yeni = "ms" if _iy_ms(c, i, x, plan, "70. dk (berabere)", at) else ("b70" if dk <= 75 else "bitti")
+            elif fark < 0:
+                yeni = "b80"
+            else:
+                yeni = "bitti"
+        if yeni == "b80" and dk >= 80:
+            if fark == 0:
+                yeni = "ms" if _iy_ms(c, i, x, plan, "80. dk (berabere)", at) else ("b80" if dk <= 85 else "bitti")
+            else:
+                yeni = "bitti"
+        if yeni != durum:
+            c.execute("UPDATE iyplan SET durum=? WHERE xid=?", (yeni, x["I"]))
+
+
+def iyms_kapat(c, X, now):
+    c.execute("UPDATE iysinyal SET sonuc='belirsiz' WHERE sonuc IS NULL AND sec LIKE 'İY %' AND at < datetime('now', '-3 hours')")
+    for xid, sec in c.execute("SELECT xid, sec FROM iysinyal WHERE sonuc IS NULL AND sec LIKE 'MS %'").fetchall():
+        m = c.execute("SELECT s1, s2, dk, son_at FROM mac WHERE xid=?", (xid,)).fetchone()
+        if not m or xid in X:
+            continue
+        s1, s2, dk, son = m
+        if (now - datetime.fromisoformat(son)).total_seconds() < max(20, 2 * SN):
+            continue
+        if dk >= BITIS_DK:
+            c.execute("UPDATE iysinyal SET sonuc=?, final=? WHERE xid=? AND sec=?", ("tuttu" if _kazandi(sec, s1, s2) else "yattı", f"{s1}-{s2}", xid, sec))
+        elif (now - datetime.fromisoformat(son)).total_seconds() > 3 * 3600:
+            c.execute("UPDATE iysinyal SET sonuc='belirsiz', final=? WHERE xid=? AND sec=?", (f"{s1}-{s2} ({dk}')", xid, sec))
+    for xid, sec, oran, tutar in c.execute("SELECT xid, sec, oran, tutar FROM bahis WHERE durum='açık' AND sec LIKE 'İY/MS·%'").fetchall():
+        s = c.execute("SELECT sonuc FROM iysinyal WHERE xid=? AND sec=?", (xid, sec[6:])).fetchone()
+        if s and s[0]:
+            d, g = {"tuttu": ("kazandı", tutar * oran), "yattı": ("kaybetti", 0.0)}.get(s[0], ("iade", tutar))
+            c.execute("UPDATE bahis SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
 
 
 def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis"):
@@ -869,6 +1002,7 @@ def tur():
             _skor[x["I"]] = (sk, time.time() if x["I"] in _skor else 0)
     n_gol = 0
     IO = {}
+    ciftler = []
     sahip = {}                                 # 1xbet maçı -> iddaa maçı: bir 1xbet maçı tek iddaa maçına bağlanır (isim benzerliği en yüksek olan)
     for i in I:
         x = _eslestir(i, X)
@@ -884,6 +1018,7 @@ def tur():
             _SK["cift_esle"] = _SK.get("cift_esle", 0) + 1
             continue
         n_es += 1
+        ciftler.append((i, x))
         if time.time() - _skor.get(x["I"], (None, 0))[1] < GOL_BEKLE:
             n_gol += 1                         # 15.11.2026 kullanıcı: gol sonrası 90 sn iddaa sinyali yok (Volkano/Admiral ile aynı)
             continue
@@ -930,6 +1065,13 @@ def tur():
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
     bahis_kapat(c)
+    try:                                       # 16.11.2026: İY/MS istatistik bahisleri
+        iyms_tur(c, ciftler, at)
+        iyms_kapat(c, X, now)
+        _last["iyms_hata"] = None
+        _last["iy_pazar_st"] = dict(_IYP["st"])
+    except Exception as e:
+        _last["iyms_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     try:
         _last["gec_yeni"] = gec_tur(c, X, IO, now, at)
         sonuclandir(c, X, now, "gsinyal")
@@ -1221,6 +1363,30 @@ def get_page_data(gun=None, kaynak="iddaa"):
     if gun not in gunler:
         gun = bugun if bugun in gunler or not gunler else gunler[0]
     out.update(gunler=gunler, gun=gun, L=[r for r in R if r["gun"] == gun], K=[r for r in R if r.get("bahis")][:200])
+    if kaynak not in _SITE:                  # 16.11.2026: İY/MS istatistik bahisleri
+        try:
+            c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+            c.row_factory = sqlite3.Row
+            Y = [dict(r) for r in c.execute("SELECT * FROM iysinyal ORDER BY at DESC LIMIT 300")]
+            BY = {(r["xid"], r["sec"][6:]): dict(r) for r in c.execute("SELECT * FROM bahis WHERE sec LIKE 'İY/MS·%'")}
+            c.close()
+        except sqlite3.OperationalError:
+            Y, BY = [], {}
+        K = {}
+        for r in Y:
+            r["saat"] = datetime.fromisoformat(r["at"]).astimezone(TR).strftime("%d.%m %H:%M")
+            r["bahis"] = BY.get((r["xid"], r["sec"]))
+            if r["sonuc"] in ("tuttu", "yattı") and r["oran"]:
+                for k in ("tümü", r["adim"]):
+                    g = K.setdefault(k, [0, 0, 0.0])
+                    g[0] += 1
+                    g[1] += r["sonuc"] == "tuttu"
+                    g[2] += (r["oran"] - 1) if r["sonuc"] == "tuttu" else -1
+        BK = [b for b in BY.values() if b["durum"] != "açık"]
+        out["iyms"] = {"L": Y[:60], "karne": [{"ad": k, "n": v[0], "w": v[1], "roi": round(100 * v[2] / v[0], 1)} for k, v in K.items()],
+                       "kupon": {"n": len(BY), "acik": sum(1 for b in BY.values() if b["durum"] == "açık"),
+                                 "kar": round(sum((b["getiri"] or 0) - b["tutar"] for b in BK), 2)},
+                       "hata": _last.get("iyms_hata"), "st": _last.get("iy_pazar_st")}
     return out
 
 
