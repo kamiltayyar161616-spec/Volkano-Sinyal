@@ -61,63 +61,145 @@ def _yaz(o):
     return json.dumps(o, ensure_ascii=False, default=lambda v: v.hex() if isinstance(v, (bytes, bytearray)) else str(v))
 
 
+PARCA_MB = 45                       # 17.11.2026 kullanıcı: tek dosya 133 MB — en fazla ~45 MB'lık parçalara bölünür
+
+
+def _parca_yolu(n):
+    return os.path.join(DATA, f"tum_veri_{n}.json.gz")
+
+
+class _Parca:
+    """sıkıştırılmış JSON parçası; tablo sınırında (ya da büyük tablonun 5000 satırlık dilimlerinde) yeni parçaya geçer"""
+
+    def __init__(self):
+        self.n = 0
+        self.f = None
+        self.ham = None
+        self.icerik = []
+
+    def ac(self):
+        self.n += 1
+        yol = _parca_yolu(self.n) + ".yapiliyor"
+        self.ham = open(yol, "wb")
+        self.f = gzip.GzipFile(fileobj=self.ham, mode="wb", compresslevel=6)
+        self.icerik.append([])
+        self.yaz('{"parca":' + str(self.n) + ',"olusturma_utc":' + _yaz(datetime.now(timezone.utc).isoformat()) +
+                 ',"aciklama":' + _yaz("SAHA tüm veri dökümü (parçalı). dbler.<dosya>.<tablo> = {kol: sütun adları, r: satırlar}. "
+                                       "Büyük tablolar birden fazla parçaya bölünebilir (aynı tablo adı, satırlar devam eder). "
+                                       "Saatler çoğunlukla UTC ISO; oranlar ondalık. jsonlar = sekmelerin ham JSON dosyaları (son parçada).") +
+                 ',"rehber":' + _yaz(REHBER) + ',"dbler":{')
+        self.db = None
+        self.ilk_db = True
+
+    def yaz(self, s):
+        self.f.write(s.encode("utf-8"))
+
+    def boyut(self):
+        return self.ham.tell()
+
+    def dolu(self):
+        return self.boyut() > PARCA_MB * 1e6
+
+    def db_ac(self, ad):
+        if self.db is not None:
+            self.yaz("}")
+        self.yaz(("" if self.ilk_db else ",") + _yaz(ad) + ":{")
+        self.ilk_db = False
+        self.db = ad
+        self.ilk_t = True
+
+    def tablo_ac(self, tb, kol):
+        self.yaz(("" if self.ilk_t else ",") + _yaz(tb) + ':{"kol":' + _yaz(kol) + ',"r":[')
+        self.ilk_t = False
+        self.ilk_r = True
+        self.icerik[-1].append(f"{self.db} · {tb}")
+
+    def satir(self, r):
+        self.yaz(("" if self.ilk_r else ",") + _yaz(list(r)))
+        self.ilk_r = False
+
+    def kapat(self, jsonlar=None):
+        if self.db is not None:
+            self.yaz("}")
+        self.yaz('},"jsonlar":' + (jsonlar or "{}") + "}")
+        self.f.close()
+        self.ham.close()
+        os.replace(_parca_yolu(self.n) + ".yapiliyor", _parca_yolu(self.n))
+
+
 def olustur():
     t0 = time.time()
     n_tab = n_sat = 0
-    with gzip.open(GECICI, "wt", encoding="utf-8", compresslevel=6) as f:
-        f.write('{"olusturma_utc":' + _yaz(datetime.now(timezone.utc).isoformat()) +
-                ',"aciklama":' + _yaz("SAHA tüm veri dökümü. dbler.<dosya>.<tablo> = {kol: sütun adları, r: satırlar}. "
-                                      "Saatler çoğunlukla UTC ISO; oranlar ondalık. jsonlar = sekmelerin ham JSON dosyaları.") +
-                ',"rehber":' + _yaz(REHBER) + ',"dbler":{')
-        ilk_db = True
-        for p in _dbler():
-            ad = os.path.relpath(p, DATA) if p.startswith(DATA) else os.path.basename(p)
-            _d["su_an"] = ad
+    P = _Parca()
+    P.ac()
+    for p in _dbler():
+        ad = os.path.relpath(p, DATA) if p.startswith(DATA) else os.path.basename(p)
+        _d["su_an"] = ad
+        try:
+            c = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=60)
+            tablolar = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        except sqlite3.Error as e:
+            _d["hata"] = f"{ad}: {e}"
+            continue
+        P.db_ac(ad)
+        for tb in tablolar:
             try:
-                c = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=60)
-                tablolar = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-            except sqlite3.Error as e:
-                _d["hata"] = f"{ad}: {e}"
+                cur = c.execute(f'SELECT * FROM "{tb}"')
+                kol = [x[0] for x in cur.description]
+            except sqlite3.Error:
                 continue
-            f.write(("" if ilk_db else ",") + _yaz(ad) + ":{")
-            ilk_db = False
-            ilk_t = True
-            for tb in tablolar:
-                try:
-                    cur = c.execute(f'SELECT * FROM "{tb}"')
-                    kol = [x[0] for x in cur.description]
-                    f.write(("" if ilk_t else ",") + _yaz(tb) + ':{"kol":' + _yaz(kol) + ',"r":[')
-                    ilk_t = False
-                    ilk_r = True
-                    while True:
-                        R = cur.fetchmany(5000)
-                        if not R:
-                            break
-                        for r in R:
-                            f.write(("" if ilk_r else ",") + _yaz(list(r)))
-                            ilk_r = False
-                        n_sat += len(R)
-                        _d["satir"] = n_sat
-                    f.write("]}")
-                    n_tab += 1
-                except sqlite3.Error as e:
-                    f.write(("" if ilk_t else ",") + _yaz(tb + "__hata") + ":" + _yaz(str(e)))
-                    ilk_t = False
-            f.write("}")
-            c.close()
-        f.write('},"jsonlar":{')
-        ilk = True
-        for p in _jsonlar():
-            try:
-                v = json.load(open(p, encoding="utf-8"))
-            except Exception:
-                continue
-            f.write(("" if ilk else ",") + _yaz(os.path.relpath(p, DATA)) + ":" + _yaz(v))
-            ilk = False
-        f.write("}}")
-    os.replace(GECICI, CIKTI)
-    _d.update(at=datetime.now(timezone.utc).isoformat(), boyut=os.path.getsize(CIKTI), sure=round(time.time() - t0),
-              tablo=n_tab, satir=n_sat, su_an=None)
+            if P.dolu():
+                P.kapat()
+                P.ac()
+                P.db_ac(ad)
+            P.tablo_ac(tb, kol)
+            while True:
+                R = cur.fetchmany(5000)
+                if not R:
+                    break
+                for r in R:
+                    P.satir(r)
+                n_sat += len(R)
+                _d["satir"] = n_sat
+                if P.dolu():                     # büyük tablo: dilimi kapat, yeni parçada aynı tabloyla devam
+                    P.yaz("]}")
+                    P.kapat()
+                    P.ac()
+                    P.db_ac(ad)
+                    P.tablo_ac(tb, kol)
+            P.yaz("]}")
+            n_tab += 1
+        c.close()
+    J = []
+    for p in _jsonlar():
+        try:
+            J.append(_yaz(os.path.relpath(p, DATA)) + ":" + _yaz(json.load(open(p, encoding="utf-8"))))
+        except Exception:
+            continue
+    P.icerik[-1].append(f"{len(J)} ham JSON dosyası")
+    P.kapat("{" + ",".join(J) + "}")
+    n = P.n
+    k = n + 1                                    # eski fazla parçaları ve tek dosyalı eski dökümü sil
+    while os.path.exists(_parca_yolu(k)):
+        os.remove(_parca_yolu(k))
+        k += 1
+    if os.path.exists(CIKTI):
+        os.remove(CIKTI)
+    _d.update(at=datetime.now(timezone.utc).isoformat(), sure=round(time.time() - t0), tablo=n_tab, satir=n_sat, su_an=None,
+              parcalar=[{"n": i + 1, "mb": round(os.path.getsize(_parca_yolu(i + 1)) / 1e6, 1), "icerik": _ozet(P.icerik[i])} for i in range(n)])
+    json.dump(_d["parcalar"], open(os.path.join(DATA, "tum_veri_parcalar.json.liste"), "w"), ensure_ascii=False)
+
+
+def _ozet(L):
+    """parça içeriği: veritabanı başına tablo sayısı"""
+    D, ek = {}, []
+    for s in L:
+        if " · " not in s:
+            ek.append(s)
+            continue
+        db = s.split(" · ")[0]
+        D[db] = D.get(db, 0) + 1
+    return ", ".join([f"{k} ({v} tablo)" for k, v in D.items()] + ek)
 
 
 def baslat_simdi():
@@ -143,7 +225,7 @@ def _calistir():
 
 def _dongu():
     time.sleep(600)
-    if not os.path.exists(CIKTI):
+    if not parcalar():
         _calistir()
     while True:
         n = datetime.now(TR)
@@ -162,9 +244,19 @@ def start_background():
     threading.Thread(target=_dongu, daemon=True).start()
 
 
+def parcalar():
+    """diskteki hazır parçalar: [{n, mb, icerik}]"""
+    try:
+        L = json.load(open(os.path.join(DATA, "tum_veri_parcalar.json.liste"), encoding="utf-8"))
+    except Exception:
+        L = []
+    return [x for x in L if os.path.exists(_parca_yolu(x["n"]))]
+
+
 def rapor():
     d = dict(_d)
-    if os.path.exists(CIKTI):
-        d["dosya_boyut_mb"] = round(os.path.getsize(CIKTI) / 1e6, 1)
-        d["dosya_at"] = datetime.fromtimestamp(os.path.getmtime(CIKTI), timezone.utc).isoformat()
+    d["parcalar"] = parcalar()
+    if d["parcalar"]:
+        d["dosya_at"] = datetime.fromtimestamp(os.path.getmtime(_parca_yolu(1)), timezone.utc).isoformat()
+        d["toplam_mb"] = round(sum(x["mb"] for x in d["parcalar"]), 1)
     return d

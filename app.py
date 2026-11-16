@@ -475,12 +475,13 @@ def tum_veri_page():
 a.b{display:inline-block;padding:10px 16px;border-radius:10px;background:#e0a030;color:#111;font-weight:800;text-decoration:none;margin:6px 8px 6px 0}
 a.k{background:#1f2a40;color:#e8edf5}.m{color:#93a0b8;font-size:13px}code{background:#1f2a40;padding:1px 5px;border-radius:5px}</style></head><body>
 <h2>🗄️ SAHA · Tüm Biriken Veri</h2>
-<p>Bütün sekmelerin veritabanları — sinyaller, kuponlar, oranlar, tahminler, sonuçlar — <b>tek bir JSON</b> dosyasında (gzip ile sıkıştırılmış).
+<p>Bütün sekmelerin veritabanları — sinyaller, kuponlar, oranlar, tahminler, sonuçlar — en fazla ~45 MB'lık <b>JSON parçalarında</b> (gzip ile sıkıştırılmış). Her parça tek başına açılabilir; büyük bir tablo birden fazla parçaya bölünebilir (aynı tablo adı, satırlar devam eder).
 Dosyanın içinde her tablonun sütun adları ve hangi sekmeye ait olduğu (<code>rehber</code>) yazar; üçüncü kişiler de doğrudan analiz edebilir.</p>
-{% if r.dosya_boyut_mb %}<a class="b" href="/tum-veri/indir">⬇ tum_veri.json.gz indir ({{ r.dosya_boyut_mb }} MB)</a>{% endif %}
+{% for x in r.parcalar %}<div style="margin:10px 0;padding:10px 12px;border:1px solid #1f2a40;border-radius:10px">
+<a class="b" href="/tum-veri/indir?n={{ x.n }}">⬇ Parça {{ x.n }} / {{ r.parcalar|length }} ({{ x.mb }} MB)</a><div class="m">{{ x.icerik }}</div></div>{% endfor %}
 <a class="b k" href="/tum-veri?olustur=1">🔄 Şimdi yeniden oluştur</a>
 <p class="m">Durum: <b>{{ r.durum }}</b>{% if r.su_an %} · şu an: {{ r.su_an }} · {{ r.satir }} satır{% endif %}
-{% if r.dosya_at %} · son dosya: {{ r.dosya_at[:16].replace('T', ' ') }} UTC{% endif %}{% if r.tablo %} · {{ r.tablo }} tablo, {{ r.satir }} satır, {{ r.sure }} sn{% endif %}
+{% if r.dosya_at %} · son dosya: {{ r.dosya_at[:16].replace('T', ' ') }} UTC{% endif %}{% if r.toplam_mb %} · toplam {{ r.toplam_mb }} MB, {{ r.parcalar|length }} parça{% endif %}{% if r.tablo %} · {{ r.tablo }} tablo, {{ r.satir }} satır, {{ r.sure }} sn{% endif %}
 {% if r.hata %}<br>⚠ {{ r.hata }}{% endif %}</p>
 <p class="m">Her gece 05:30'da kendiliğinden yenilenir. Açmak için: <code>gunzip tum_veri.json.gz</code> ya da Python'da <code>json.load(gzip.open('tum_veri.json.gz','rt'))</code>.
 Dışarıda bırakılanlar: türetilmiş önbellekler, ziyaretçi IP listesi, anahtar dosyaları.</p>
@@ -491,11 +492,17 @@ Dışarıda bırakılanlar: türetilmiş önbellekler, ziyaretçi IP listesi, an
 def tum_veri_indir():
     import tum_veri
     from flask import send_file
-    if not os.path.exists(tum_veri.CIKTI):
-        from flask import redirect
-        tum_veri.baslat_simdi()
-        return redirect("/tum-veri")         # dosya yoksa oluşturmayı başlat, durum sayfasını göster
-    return send_file(tum_veri.CIKTI, as_attachment=True, download_name="saha_tum_veri.json.gz", mimetype="application/gzip")
+    from flask import redirect
+    try:
+        n = int(request.args.get("n") or 0)
+    except ValueError:
+        n = 0
+    yol = tum_veri._parca_yolu(n) if n else None
+    if not yol or not os.path.exists(yol):
+        if not tum_veri.parcalar():
+            tum_veri.baslat_simdi()          # hiç parça yoksa oluşturmayı başlat
+        return redirect("/tum-veri")
+    return send_file(yol, as_attachment=True, download_name=f"saha_tum_veri_{n}.json.gz", mimetype="application/gzip")
 
 
 @app.route("/indir")
