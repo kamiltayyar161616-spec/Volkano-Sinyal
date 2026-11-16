@@ -423,6 +423,38 @@ def _iy_oran(iid, takim):
     return o.get(takim), f"İY pazarı st={st}"
 
 
+_M7K = {"t": 0, "L": []}
+
+
+def _m7_kirmizi(x):
+    """7M canlı programından kırmızı kart (kev, kdep) — 1xbet vermezse yedek. (ev_kirmizi, dep_kirmizi) ya da None"""
+    try:
+        if time.time() - _M7K["t"] > 60:
+            import m7
+            P = m7.program()
+            c7 = sqlite3.connect(m7.DB, timeout=10)
+            AD = {i: (a, b) for i, a, b in c7.execute("SELECT id, ta, tb FROM ad")}
+            c7.close()
+            _M7K.update(t=time.time(), L=[(AD[i][0], AD[i][1], v["kev"], v["kdep"]) for i, v in P.items() if v["durum"] in (1, 2, 3) and i in AD])
+        best = None
+        for e, d, ke, kd in _M7K["L"]:
+            s1, s2 = _bz(x["ev"], e or ""), _bz(x["dep"], d or "")
+            if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
+                best = (s1 + s2, ke, kd)
+        return (best[1], best[2]) if best else None
+    except Exception:
+        return None
+
+
+def kirmizi_kart(x, takim):
+    """Oynanacak takımın kırmızı kartı: sayı (0 = yok) ya da None (bilinmiyor). Önce 1xbet, yoksa 7M."""
+    k = x.get("k1" if takim == "1" else "k2")
+    if k is not None:
+        return k
+    m = _m7_kirmizi(x)
+    return None if m is None else (m[0] if takim == "1" else m[1])
+
+
 def _iy_kupon(c, xid, sec, oran, at):
     if not oran or oran <= 1.0 or kasa(c, "bahis")["serbest"] < IYMS_TUTAR:
         return 0
@@ -444,6 +476,10 @@ def _iy_ms(c, i, x, plan, adim, at):
     if not o:
         return False
     sec = f"MS {plan['takim']}"
+    kk = kirmizi_kart(x, plan["takim"])           # 17.11.2026 kullanıcı: oynanacak takım kırmızı kart gördüyse bahis yok (Perugia örneği)
+    if kk:
+        _iy_kaydet(c, i, x, plan, sec, adim, o, False, f"🟥 takım kırmızı kart gördü ({kk}) — oynanmadı", at)
+        return True
     if o >= IYMS_MIN_MS:
         _iy_kaydet(c, i, x, plan, sec, adim, o, True, None, at)
     else:
@@ -623,9 +659,16 @@ def xbet():
                 ms[{1: "1", 2: "X", 3: "2"}[o["T"]]] = o.get("C")
             elif o.get("G") == 17 and o.get("T") in (9, 10) and o.get("P") is not None and not o.get("B"):
                 au.setdefault(float(o["P"]), {})["ust" if o["T"] == 9 else "alt"] = o.get("C")
+        kk = {}                                  # 17.11.2026: kırmızı kart (1xbet istatistik anahtarları IRedCard1/2)
+        for s in sc.get("S") or []:
+            if isinstance(s, dict) and s.get("Key") in ("IRedCard1", "IRedCard2"):
+                try:
+                    kk[s["Key"][-1]] = int(s.get("Value") or 0)
+                except (TypeError, ValueError):
+                    pass
         L[x["I"]] = {"I": x["I"], "ev": x.get("O1"), "dep": x.get("O2"), "lig": x.get("L"), "S": x.get("S") or 0,
                      "s1": int(fs.get("S1") or 0), "s2": int(fs.get("S2") or 0), "dk": int(sc["TS"]) // 60, "cp": sc.get("CP"),
-                     "ms": ms, "au": au}
+                     "ms": ms, "au": au, "k1": kk.get("1"), "k2": kk.get("2")}
     return L
 
 
@@ -1113,6 +1156,7 @@ def tur():
         iyms_kapat(c, X, now)
         _last["iyms_hata"] = None
         _last["iy_pazar_st"] = dict(_IYP["st"])
+        _last["kirmizi_veri"] = f"1xbet kırmızı kart verisi olan {sum(1 for x in X.values() if x.get('k1') is not None)}/{len(X)} maç"
     except Exception as e:
         _last["iyms_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     try:
@@ -1420,7 +1464,7 @@ def get_page_data(gun=None, kaynak="iddaa"):
         for r in Y:
             r["saat"] = datetime.fromisoformat(r["at"]).astimezone(TR).strftime("%d.%m %H:%M")
             r["bahis"] = BY.get((r["xid"], r["sec"]))
-            if r["sonuc"] in ("tuttu", "yattı") and r["oran"]:
+            if r["sonuc"] in ("tuttu", "yattı") and r["oran"] and r["oyna"]:     # oynanmayanlar (kırmızı kart, oran<1.50) karneye girmez
                 for k in ("tümü", r["adim"]):
                     g = K.setdefault(k, [0, 0, 0.0])
                     g[0] += 1
