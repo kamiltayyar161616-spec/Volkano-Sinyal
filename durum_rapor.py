@@ -183,6 +183,7 @@ def rapor():
             "bingo": _guvenli(lambda: __import__("bingo").ozet()),
             "iyv_yama": _guvenli(lambda: __import__("iyv_yama").rapor()),
             "bingo_analiz": _guvenli(lambda: __import__("bingo_analiz").rapor()),
+            "m7_pin_tani": _guvenli(lambda: __import__("m7_pin_tani").rapor()),
             "bingo_ms_tani": _guvenli(lambda: __import__("bingo_ms_tani").rapor()),
             "iddaa_soket": _guvenli(lambda: __import__("iddaa_soket").rapor()),
             "pinnacle_canli": _guvenli(lambda: __import__("pinnacle_canli").rapor()),
