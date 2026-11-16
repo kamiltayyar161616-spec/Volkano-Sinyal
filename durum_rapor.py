@@ -183,10 +183,9 @@ def rapor():
             "bingo": _guvenli(lambda: __import__("bingo").ozet()),
             "iyv_yama": _guvenli(lambda: __import__("iyv_yama").rapor()),
             "bingo_analiz": _guvenli(lambda: __import__("bingo_analiz").rapor()),
-            "m7_pin_tani": _guvenli(lambda: __import__("m7_pin_tani").rapor()),
             "bingo_ms_tani": _guvenli(lambda: __import__("bingo_ms_tani").rapor()),
             "iddaa_soket": _guvenli(lambda: __import__("iddaa_soket").rapor()),
-            "pinnacle_canli": _guvenli(lambda: __import__("pinnacle_canli").rapor()),
+            "pinnacle_canli": _guvenli(lambda: __import__("pinnwire_canli").rapor()),
             "vk_canli_skor": _guvenli(lambda: __import__("vk_canli_skor").rapor()),
             "toto_hafta": _guvenli(lambda: (lambda h: {"hafta": h["hafta"], "kapanis": h["kapanis"], "toto_iddaa": __import__("toto_iddaa")._last,
                                                         "maclar": [{k: x.get(k) for k in ("no", "ad", "ng", "ko", "simdi", "simdi_at", "m7", "pin", "kupon", "iddaa")} for x in h["maclar"]]} if h else None)(__import__("toto_tab").toto_hafta()))}

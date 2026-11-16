@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 import istat_ajan as IS
 import pinnacle_canli as PC
+import pinnwire_canli as PW
 
 TR = ZoneInfo("Europe/Istanbul")
 KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "bingo")
@@ -875,7 +876,7 @@ def gec_tur(c, X, IO, now, at, tab="gsinyal", Q=None):
                 continue
             h = _xgec.setdefault((tab, x["I"], sec), [])
             h.append((t, o))
-            while h and t - h[0][0] > GEC_PENCERE:
+            while h and t - h[0][0] > (900 if tab == "psinyal" else GEC_PENCERE):   # Pinnacle 2–4 dk'da bir güncellenir
                 h.pop(0)
             if x["dk"] < GEC_DK or not 1.10 <= o <= 15:
                 continue
@@ -900,7 +901,7 @@ def gec_tur(c, X, IO, now, at, tab="gsinyal", Q=None):
     return n
 
 
-PIN_AKTIF = False           # 15.11.2026: pinnacle.com canlı API sunucuya 403 veriyor; NowGoal'daki Pinnacle maç başında donuyor (canlı yok)
+PIN_AKTIF = True            # 16.11.2026: pinnacle.com Cloudflare'i sunucu IP'sini engelliyor -> Pinnacle verisi PinnWire'dan (pinnwire_canli.py)
 _pesle = {}                 # 1xbet I -> Pinnacle matchupId ("" yok, float = son deneme)
 
 
@@ -934,7 +935,7 @@ def _pinnacle_esle(X, P):
 
 
 def gec_page_data(gun=None, tab="gsinyal"):
-    out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun, "pin": PC.rapor() if tab == "psinyal" else None}
+    out = {"last": dict(_last), "ozet": [], "L": [], "gunler": [], "gun": gun, "pin": PW.rapor() if tab == "psinyal" else None}
     if not os.path.exists(DB):
         return out
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
@@ -1079,7 +1080,8 @@ def tur():
     except Exception as e:
         _last["gec_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     try:                                       # 15.11.2026: aynı takip Pinnacle canlı oranıyla
-        P = _kaynak("pinnacle", PC.canli, 10) if PIN_AKTIF else None
+        gerek = any(GEC_DK - 5 <= x["dk"] <= MAX_DK for x in X.values())
+        P = _kaynak("pinnacle", lambda: PW.canli(gerek), 10) if PIN_AKTIF else None
         Q = _pinnacle_esle(X, P) if P else {}
         _last["pin"] = f"Pinnacle canlı {len(P or {})} maç · 75+ eşleşen {len(Q)}"
         if P:
