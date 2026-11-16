@@ -466,6 +466,8 @@ def tum_veri_page():
     from flask import render_template_string
     if request.args.get("olustur"):
         tum_veri.baslat_simdi()
+        from flask import redirect
+        return redirect("/tum-veri")         # yenilemede tekrar tetiklenmesin
     r = tum_veri.rapor()
     return render_template_string("""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SAHA · Tüm Veri</title>{% if r.durum == 'oluşturuluyor' %}<meta http-equiv="refresh" content="15">{% endif %}
@@ -490,7 +492,9 @@ def tum_veri_indir():
     import tum_veri
     from flask import send_file
     if not os.path.exists(tum_veri.CIKTI):
-        return "Dosya henüz oluşturulmadı — /tum-veri sayfasından oluşturun.", 404
+        from flask import redirect
+        tum_veri.baslat_simdi()
+        return redirect("/tum-veri")         # dosya yoksa oluşturmayı başlat, durum sayfasını göster
     return send_file(tum_veri.CIKTI, as_attachment=True, download_name="saha_tum_veri.json.gz", mimetype="application/gzip")
 
 
