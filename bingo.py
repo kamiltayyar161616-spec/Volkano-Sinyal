@@ -63,7 +63,7 @@ KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 1
 # eski: 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Kural (16.11)", "Ek takip (16.11)", "Maç öncesi (16.11)", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
+SIRA = ("Tümü", "Kural (16.11)", "Ek takip (16.11)", "Maç öncesi (16.11)", "Ters: Alt yerine Üst (16.11)", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
 SUPHELI = 1.30                  # oran/adil bunun ustu: buyuk ihtimalle veri/cizgi hatasi (gercek gecikme degil), bahis iptal riski
 VERGI = 0.12                    # vergili ROI satiri: net kazancin %12si (iyms_analiz ile ayni kural)
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
@@ -109,7 +109,7 @@ def db():
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS mac (xid INTEGER PRIMARY KEY, ev TEXT, dep TEXT, lig TEXT, s1 INTEGER, s2 INTEGER, dk INTEGER,
                  son_at TEXT, bitti INTEGER DEFAULT 0)""")
-    for k in ("v_oran", "x_adil", "v_adil", "ek_oran", "o_fav", "o_pf", "o_L"):
+    for k in ("v_oran", "x_adil", "v_adil", "ek_oran", "o_fav", "o_pf", "o_L", "ters_oran"):
         try:
             c.execute(f"ALTER TABLE sinyal ADD COLUMN {k} REAL")
         except sqlite3.OperationalError:
@@ -913,12 +913,14 @@ def tur():
                     of, opf, oL = oto_baglam(x)
                 except Exception:
                     of = opf = oL = None
+                # 16.11.2026 kullanıcı: Alt sinyalinin TERSİ — aynı çizgide iddaa'nın o anki Üst oranı (sanal takip, kupon yok)
+                to = ((i["P"].get("au") or {}).get(cz) or {}).get("Üst") if sec.startswith("Alt") and cz is not None else None
                 c.execute("""INSERT INTO sinyal (xid, sec, iid, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
-                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran, o_fav, o_pf, o_L)
-                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?)""",
+                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran, o_fav, o_pf, o_L, ters_oran)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?)""",
                           (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            io, xo[0], round(adil, 3), round(d, 4), io, round(d, 4), at, vo[0],
-                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None, es, eo, of, opf, oL))
+                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None, es, eo, of, opf, oL, to))
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * SN else 0)
@@ -1199,6 +1201,13 @@ def get_page_data(gun=None, kaynak="iddaa"):
             ekle("Kural (16.11)", "kurala uyan (kupon açılabilir)" if not r["kural"] else "elenen: " + r["kural"].split(" (")[0], r)
             if r.get("oto"):
                 ekle("Maç öncesi (16.11)", r["oto"], r)
+            if r.get("ters_oran") and r["sec"].startswith("Alt"):      # Alt yerine aynı çizgide Üst (iddaa'nın gerçek o anki oranı)
+                L = r.get("o_L")
+                k = "maç öncesi çizgi yok" if L is None else "çizgi ≤2.25" if L <= 2.25 else "çizgi 2.5–3.25" if L <= 3.25 else "çizgi 3.5+"
+                ters = dict(r, sonuc="yattı" if r["sonuc"] == "tuttu" else "tuttu", iddaa=r["ters_oran"])
+                ekle("Ters: Alt yerine Üst (16.11)", "tüm Alt sinyalleri", ters)
+                if r.get("o_fav") is not None or r.get("o_pf") is not None or L is not None:
+                    ekle("Ters: Alt yerine Üst (16.11)", k, ters)
             if r.get("ek_sec") and r.get("ek_oran") and r.get("final"):
                 k = ek_tuttu(r["ek_sec"], r["final"])
                 if k is not None:
