@@ -653,6 +653,7 @@ def iddaa():
                 P.setdefault("au", {})[float(m["sov"])] = o
             elif st == 34:
                 P["olmaz"] = o.get("Olmaz")
+                P["olur"] = o.get("Olur")      # 17.11.2026: "Gol olmaz" sinyalinin tersi (Üst +0.5) için
         L.append({"i": e["i"], "ev": e["hn"], "dep": e["an"], "d": e.get("d") or 0, "P": P, "bgi": e.get("bgi")})
     return L
 
@@ -1151,6 +1152,8 @@ def tur():
                     of = opf = oL = None
                 # 16.11.2026 kullanıcı: Alt sinyalinin TERSİ — aynı çizgide iddaa'nın o anki Üst oranı (sanal takip, kupon yok)
                 to = ((i["P"].get("au") or {}).get(cz) or {}).get("Üst") if sec.startswith("Alt") and cz is not None else None
+                if to is None and sec.startswith("Alt") and cz is not None and abs(cz - (x["s1"] + x["s2"] + 0.5)) < 0.01:
+                    to = i["P"].get("olur")    # çizgi iddaa'da "Gol olmaz/olur" pazarıyla veriliyor
                 c.execute("""INSERT INTO sinyal (xid, sec, iid, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
                              max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran, o_fav, o_pf, o_L, ters_oran)
                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?)""",
