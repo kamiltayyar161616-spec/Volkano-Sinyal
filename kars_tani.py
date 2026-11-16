@@ -26,5 +26,6 @@ def rapor():
         hs = {"ozet": H["ozet"], "mac": len(H["maclar"]), "ornek": [{k: x.get(k) for k in ("ev", "dep", "v_ilk", "v_kaynak", "i_ilk", "son5")}
                                                                     for x in H["maclar"][:6]]}
     except Exception as e:
-        hs = {"HATA": f"{type(e).__name__}: {str(e)[:200]}"}
+        import traceback
+        hs = {"HATA": f"{type(e).__name__}: {str(e)[:200]}", "iz": traceback.format_exc()[-1500:]}
     return {"last": K._last, "k": R[-12:], "hesap": hs}

@@ -382,7 +382,7 @@ def hesap():
         if m not in VK:
             continue
         vo, v_at, v_kay = VK[m]
-        if not (isinstance(io, dict) and isinstance(vo, dict) and all(k in io and k in vo and io[k] and vo[k] for k in S9)):
+        if not (isinstance(io, dict) and isinstance(vo, dict) and all((io.get(k) or 0) > 1 and (vo.get(k) or 0) > 1 for k in S9)):
             continue                              # 9 İY/MS oranından biri eksik (iddaa ya da Volkano) — maç atlanır, sekme çökmez
         kil = bool(j5)                            # karne: iddaa son 5 dk oranı olan biten maçlar
         r = R.get(str(m)) or (None,) * 4
