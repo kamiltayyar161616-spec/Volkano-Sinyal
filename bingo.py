@@ -63,7 +63,7 @@ KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 1
 # eski: 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Kural (16.11)", "Ek takip (16.11)", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
+SIRA = ("Tümü", "Kural (16.11)", "Ek takip (16.11)", "Maç öncesi (16.11)", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
 SUPHELI = 1.30                  # oran/adil bunun ustu: buyuk ihtimalle veri/cizgi hatasi (gercek gecikme degil), bahis iptal riski
 VERGI = 0.12                    # vergili ROI satiri: net kazancin %12si (iyms_analiz ile ayni kural)
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
@@ -109,7 +109,7 @@ def db():
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS mac (xid INTEGER PRIMARY KEY, ev TEXT, dep TEXT, lig TEXT, s1 INTEGER, s2 INTEGER, dk INTEGER,
                  son_at TEXT, bitti INTEGER DEFAULT 0)""")
-    for k in ("v_oran", "x_adil", "v_adil", "ek_oran"):
+    for k in ("v_oran", "x_adil", "v_adil", "ek_oran", "o_fav", "o_pf", "o_L"):
         try:
             c.execute(f"ALTER TABLE sinyal ADD COLUMN {k} REAL")
         except sqlite3.OperationalError:
@@ -330,6 +330,65 @@ def ek_tuttu(ek_sec, final):
         return b >= a
     s, cz = ek_sec.split()
     return (a + b > float(cz)) if s == "Üst" else (a + b < float(cz))
+
+
+# ---------- 16.11.2026 kullanıcı isteği: maç öncesi bağlam (Oto Tahmin: favori, favori ihtimali, gol çizgisi) — sadece bilgi + karne ----------
+_OTO = {"t": 0, "G": {}}
+
+
+def _oto_yukle():
+    if time.time() - _OTO["t"] < 600:
+        return _OTO["G"]
+    G = {}
+    try:
+        import oto_tahmin as O
+        for g in O.gunler()[:3]:
+            v = O._oku(g) or {}
+            R5 = O._son5_oku(g)
+            for m, x in (v.get("maclar") or {}).items():
+                F = (R5.get(m) or {}).get("F") or x.get("F") or {}
+                try:
+                    ko = datetime.fromisoformat(x["ko"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                G.setdefault(ko.date().isoformat(), []).append((ko, x["ev"], x["dep"], F))
+    except Exception as e:
+        _last["oto_hata"] = f"{type(e).__name__}: {str(e)[:120]}"
+    _OTO.update(t=time.time(), G=G)
+    return G
+
+
+def oto_baglam(x):
+    """1xbet maçı -> (favori 0/1/2, favori ihtimali, maç öncesi gol çizgisi) ya da (None, None, None)"""
+    G = _oto_yukle()
+    ko0 = datetime.now(timezone.utc) - timedelta(minutes=x["dk"] + (15 if x["dk"] > 45 else 0))
+    best = None
+    for gun in {ko0.date().isoformat(), (ko0 - timedelta(days=1)).date().isoformat()}:
+        for ko, e, d, F in G.get(gun, []):
+            if abs((ko - ko0).total_seconds()) > 2700:
+                continue
+            s1, s2 = _bz(x["ev"], e), _bz(x["dep"], d)
+            if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
+                best = (s1 + s2, F)
+    if not best:
+        return None, None, None
+    F = best[1]
+    return F.get("fav"), F.get("pf"), F.get("L")
+
+
+def oto_etiket(r):
+    """karne / kart için: MS -> favori/sürpriz, A/Ü -> maç öncesi gol çizgisi kovası"""
+    if r.get("o_fav") is None and r.get("o_L") is None and r.get("o_pf") is None:
+        return None
+    s = r["sec"]
+    if s in ("MS 1", "MS 2"):
+        tm = 0 if s == "MS 1" else 2
+        return "MS · favoriye" if r.get("o_fav") == tm else "MS · sürprize (favori rakip)" if r.get("o_fav") in (0, 2) else "MS · favorisiz maç"
+    if s == "MS X":
+        return None
+    L = r.get("o_L")
+    k = "çizgi yok" if L is None else "≤2.25" if L <= 2.25 else "2.5–2.75" if L <= 2.75 else "3.0–3.25" if L <= 3.25 else "3.5+"
+    return f"{s.split()[0]} · maç öncesi gol çizgisi {k}"
 
 
 def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis"):
@@ -850,11 +909,16 @@ def tur():
                 yeni += 1
                 _seri_gun(("sinyal", x["I"], sec), SN)
                 es, eo = ek_takip(i, x, sec, io, cz)
+                try:
+                    of, opf, oL = oto_baglam(x)
+                except Exception:
+                    of = opf = oL = None
                 c.execute("""INSERT INTO sinyal (xid, sec, iid, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
-                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
+                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran, o_fav, o_pf, o_L)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?)""",
                           (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            io, xo[0], round(adil, 3), round(d, 4), io, round(d, 4), at, vo[0],
-                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None, es, eo))
+                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None, es, eo, of, opf, oL))
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * SN else 0)
@@ -1111,6 +1175,7 @@ def get_page_data(gun=None, kaynak="iddaa"):
         r["supheli"] = (r["deger"] or 0) > SUPHELI
         if kaynak not in _SITE:
             r["kural"] = iddaa_kural(r["sec"], r["iddaa"] or 0, r["deger"], r["dk"] or 0, r["skor"], r["cizgi"])
+            r["oto"] = oto_etiket(r)
         try:                               # 13.11.2026: fark şu an hâlâ açık mı (son taramada görüldü) — link sadece o zaman gösterilir
             r["simdi"] = (datetime.now(timezone.utc) - datetime.fromisoformat(r["son_at"])).total_seconds() <= 3 * SN
         except (TypeError, ValueError):
@@ -1132,6 +1197,8 @@ def get_page_data(gun=None, kaynak="iddaa"):
         ekle("Açık kalma süresi", _kova(r["sure"] or 0, (10, 30, 60, 180), ("<10 sn (tek tarama)", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+")), r)
         if kaynak not in _SITE:              # 16.11.2026: yeni kupon kuralları ve ek takip (sadece karne)
             ekle("Kural (16.11)", "kurala uyan (kupon açılabilir)" if not r["kural"] else "elenen: " + r["kural"].split(" (")[0], r)
+            if r.get("oto"):
+                ekle("Maç öncesi (16.11)", r["oto"], r)
             if r.get("ek_sec") and r.get("ek_oran") and r.get("final"):
                 k = ek_tuttu(r["ek_sec"], r["final"])
                 if k is not None:
