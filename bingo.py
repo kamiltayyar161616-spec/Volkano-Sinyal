@@ -747,6 +747,48 @@ GENEL = {"calcio", "ssd", "asd", "usd", "ssc", "spor", "sport", "sporting", "foo
          "deportivo", "sociedad", "olympique", "dynamo", "dinamo", "racing", "union", "ssdarl", "srl", "arl", "fbc", "1907", "1913"}
 
 
+# 16.11.2026: iddaa milli takımları Türkçe yazıyor (Almanya, İsviçre...), 1xbet İngilizce — yalnız iddaa↔1xbet
+# eşleştirme karşılaştırmasında ad çevrilir; kayıtlı/gösterilen adlara dokunulmaz. Ad ülke adıyla BAŞLIYORSA çevrilir.
+_ULKE = {
+    "almanya": "Germany", "hollanda": "Netherlands Holland", "isvicre": "Switzerland", "iskocya": "Scotland", "cebelitarik": "Gibraltar",
+    "kuzey makedonya": "North Macedonia", "makedonya": "Macedonia", "slovenya": "Slovenia", "yunanistan": "Greece", "sirbistan": "Serbia",
+    "ingiltere": "England", "fransa": "France", "porto riko": "Puerto Rico", "ispanya": "Spain", "italya": "Italy", "portekiz": "Portugal",
+    "belcika": "Belgium", "avusturya": "Austria", "danimarka": "Denmark", "isvec": "Sweden", "norvec": "Norway", "finlandiya": "Finland",
+    "izlanda": "Iceland", "kuzey irlanda": "Northern Ireland", "irlanda": "Ireland", "galler": "Wales", "polonya": "Poland",
+    "cekya": "Czech Republic Czechia", "cek cumhuriyeti": "Czech Republic Czechia", "slovakya": "Slovakia", "macaristan": "Hungary",
+    "romanya": "Romania", "bulgaristan": "Bulgaria", "hirvatistan": "Croatia", "bosna hersek": "Bosnia Herzegovina",
+    "bosna-hersek": "Bosnia Herzegovina", "karadag": "Montenegro", "arnavutluk": "Albania", "kosova": "Kosovo", "turkiye": "Turkey Turkiye",
+    "kibris": "Cyprus", "gurcistan": "Georgia", "ermenistan": "Armenia", "azerbaycan": "Azerbaijan", "rusya": "Russia", "ukrayna": "Ukraine",
+    "litvanya": "Lithuania", "letonya": "Latvia", "estonya": "Estonia", "luksemburg": "Luxembourg", "lihtenstayn": "Liechtenstein",
+    "faroe adalari": "Faroe Islands", "kazakistan": "Kazakhstan", "ozbekistan": "Uzbekistan", "kirgizistan": "Kyrgyzstan",
+    "tacikistan": "Tajikistan", "turkmenistan": "Turkmenistan", "israil": "Israel", "brezilya": "Brazil", "arjantin": "Argentina",
+    "sili": "Chile", "kolombiya": "Colombia", "meksika": "Mexico", "abd": "USA United States", "kanada": "Canada", "ekvador": "Ecuador",
+    "bolivya": "Bolivia", "kosta rika": "Costa Rica", "jamaika": "Jamaica", "kuba": "Cuba", "dominik cumhuriyeti": "Dominican Republic",
+    "trinidad ve tobago": "Trinidad and Tobago", "japonya": "Japan", "guney kore": "South Korea Republic", "kuzey kore": "North Korea",
+    "cin": "China", "avustralya": "Australia", "yeni zelanda": "New Zealand", "hindistan": "India", "endonezya": "Indonesia",
+    "tayland": "Thailand", "malezya": "Malaysia", "filipinler": "Philippines", "singapur": "Singapore", "misir": "Egypt", "fas": "Morocco",
+    "cezayir": "Algeria", "tunus": "Tunisia", "nijerya": "Nigeria", "gana": "Ghana", "kamerun": "Cameroon",
+    "fildisi sahili": "Ivory Coast Cote d'Ivoire", "guney afrika": "South Africa", "zambiya": "Zambia", "etiyopya": "Ethiopia",
+    "tanzanya": "Tanzania", "suudi arabistan": "Saudi Arabia", "katar": "Qatar", "bae": "UAE United Arab Emirates",
+    "birlesik arap emirlikleri": "UAE United Arab Emirates", "irak": "Iraq", "urdun": "Jordan", "suriye": "Syria", "lubnan": "Lebanon",
+    "kuveyt": "Kuwait", "bahreyn": "Bahrain", "umman": "Oman", "filistin": "Palestine", "galler": "Wales",
+}
+_ULKE_S = sorted(_ULKE, key=len, reverse=True)
+_ULKE_TR = str.maketrans("İIıŞşĞğÜüÖöÇç", "iiissgguuoocc")
+
+
+def _ulke(ad):
+    if not ad:
+        return ad
+    f = str(ad).translate(_ULKE_TR).lower()
+    if len(f) != len(str(ad)):
+        return ad
+    for k in _ULKE_S:
+        if f == k or f.startswith(k + " "):
+            return _ULKE[k] + str(ad)[len(k):]
+    return ad
+
+
 def _bz(a, b):
     """IS._benz gibi ama 'Calcio', 'SSD' gibi genel kelimeler sayılmaz (15.11.2026: 'Trapani Calcio – SSD Palermo' ↔
     'Trastevere Calcio – SSD Albalonga' 0.5 ile eşleşiyordu)"""
@@ -758,7 +800,7 @@ def _bz(a, b):
 
 
 def _ad_tutar(i, x):
-    return _bz(i["ev"], x["ev"]) >= 0.5 and _bz(i["dep"], x["dep"]) >= 0.5
+    return _bz(_ulke(i["ev"]), x["ev"]) >= 0.5 and _bz(_ulke(i["dep"]), x["dep"]) >= 0.5
 
 
 def _eslestir(i, X):
@@ -776,7 +818,7 @@ def _eslestir(i, X):
     for x in X.values():
         if abs((x["S"] or 0) - i["d"]) > 1800:
             continue
-        s1, s2 = _bz(i["ev"], x["ev"]), _bz(i["dep"], x["dep"])
+        s1, s2 = _bz(_ulke(i["ev"]), x["ev"]), _bz(_ulke(i["dep"]), x["dep"])
         if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
             best = (s1 + s2, x)
     _esle[i["i"]] = best[1]["I"] if best else time.time()
