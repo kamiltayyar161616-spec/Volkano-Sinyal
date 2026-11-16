@@ -63,7 +63,7 @@ KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 1
 # eski: 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
+SIRA = ("Tümü", "Kural (16.11)", "Ek takip (16.11)", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
 SUPHELI = 1.30                  # oran/adil bunun ustu: buyuk ihtimalle veri/cizgi hatasi (gercek gecikme degil), bahis iptal riski
 VERGI = 0.12                    # vergili ROI satiri: net kazancin %12si (iyms_analiz ile ayni kural)
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
@@ -109,11 +109,15 @@ def db():
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS mac (xid INTEGER PRIMARY KEY, ev TEXT, dep TEXT, lig TEXT, s1 INTEGER, s2 INTEGER, dk INTEGER,
                  son_at TEXT, bitti INTEGER DEFAULT 0)""")
-    for k in ("v_oran", "x_adil", "v_adil"):
+    for k in ("v_oran", "x_adil", "v_adil", "ek_oran"):
         try:
             c.execute(f"ALTER TABLE sinyal ADD COLUMN {k} REAL")
         except sqlite3.OperationalError:
             pass
+    try:                                   # 16.11.2026: ek takip seçeneği (çifte şans / bir üst çizgi) — sadece karne
+        c.execute("ALTER TABLE sinyal ADD COLUMN ek_sec TEXT")
+    except sqlite3.OperationalError:
+        pass
     c.execute("""CREATE TABLE IF NOT EXISTS bahis (xid INTEGER, sec TEXT, at TEXT, oran REAL, p REAL, kelly REAL, tutar REAL, durum TEXT,
                  getiri REAL, PRIMARY KEY (xid, sec))""")
     # VOLKANO sekmesi: aynı yapı; 'iddaa' sütunu burada oynanan Volkano oranını tutar, adil = yalnız 1xbet
@@ -259,6 +263,73 @@ SITE_KELLY, SITE_MAX_PAY, SITE_MIN = 0.25, 0.02, 10.0
 
 def _site_kupon_uygun(sec, oran, deger, dk):
     return oran <= SITE_MAX_ORAN and deger <= SITE_MAX_DEGER and dk <= SITE_MAX_DK and not sec.startswith("Alt")
+
+
+# ---------- 16.11.2026 kullanıcı onayı: iddaa kupon kuralları (637 sinyallik inceleme; sinyaller karnede kalır, sadece kupon açılmaz) ----------
+def _durum(sec, skor):
+    """MS 1 / MS 2: sinyal verilen takımın skora göre durumu (+ önde, 0 eşit, - geride)"""
+    a, b = (int(v) for v in skor.split("-")[:2])
+    return (a - b) if sec == "MS 1" else (b - a)
+
+
+def iddaa_kural(sec, oran, deger, dk, skor, cizgi):
+    """None = kupon açılır; yoksa kupon açılmama sebebi"""
+    try:
+        gol = sum(int(v) for v in skor.split("-")[:2])
+    except (AttributeError, ValueError):
+        return None
+    if sec.startswith("MS"):
+        if (deger or 0) > SUPHELI:
+            return "MS değer ×1.30 üstü (şüpheli, takip)"
+        if sec == "MS X":
+            return "MS X oran ≥ 5" if oran >= 5 else None
+        dr = _durum(sec, skor)
+        return None if dr > 0 else "MS takım geride" if dr < 0 else "MS takım eşitken (çifte şans takipte)"
+    if sec.startswith("Alt"):
+        if (deger or 0) > SUPHELI:
+            return "Alt değer ×1.30 üstü (şüpheli, takip)"
+        if cizgi is not None and round(cizgi - 0.5 - gol) == 0 and dk < 30:
+            return "0 gol izinli Alt, 30. dk öncesi"
+        return None
+    if sec.startswith("Üst") and cizgi is not None:
+        need = round(cizgi + 0.5 - gol)
+        if need >= 3:
+            return "Üst 3+ gol gerekiyor"
+        if need == 1 and dk >= 75:
+            return "Üst 1 gol daha, 75. dk sonrası"
+    return None
+
+
+def ek_takip(i, x, sec, io, cizgi):
+    """(ek_sec, ek_oran) — çifte şans (MS eşitken, iddaa MS'ten tahmini) / bir üst çizgi (Alt 60+ 0 gol izinli, Üst 30–45 1 gol) — sadece karne"""
+    gol = x["s1"] + x["s2"]
+    P = i["P"]
+    if sec in ("MS 1", "MS 2") and x["s1"] == x["s2"]:
+        ix = (P.get("ms") or {}).get("0")
+        if ix and io:
+            return ("ÇŞ 1-0" if sec == "MS 1" else "ÇŞ 0-2"), round(1 / (1 / io + 1 / ix), 2)
+    elif sec.startswith("Alt") and cizgi is not None and round(cizgi - 0.5 - gol) == 0 and x["dk"] >= 60:
+        o = ((P.get("au") or {}).get(cizgi + 1) or {}).get("Alt")
+        if o:
+            return f"Alt {cizgi + 1:g}", o
+    elif sec.startswith("Üst") and cizgi is not None and round(cizgi + 0.5 - gol) == 1 and 30 <= x["dk"] <= 45:
+        o = ((P.get("au") or {}).get(cizgi + 1) or {}).get("Üst")
+        if o:
+            return f"Üst {cizgi + 1:g}", o
+    return None, None
+
+
+def ek_tuttu(ek_sec, final):
+    try:
+        a, b = (int(v) for v in final.split()[0].split("-")[:2])
+    except (AttributeError, ValueError, IndexError):
+        return None
+    if ek_sec == "ÇŞ 1-0":
+        return a >= b
+    if ek_sec == "ÇŞ 0-2":
+        return b >= a
+    s, cz = ek_sec.split()
+    return (a + b > float(cz)) if s == "Üst" else (a + b < float(cz))
 
 
 def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis"):
@@ -778,15 +849,16 @@ def tur():
             if r is None:
                 yeni += 1
                 _seri_gun(("sinyal", x["I"], sec), SN)
+                es, eo = ek_takip(i, x, sec, io, cz)
                 c.execute("""INSERT INTO sinyal (xid, sec, iid, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
-                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)""",
+                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
                           (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            io, xo[0], round(adil, 3), round(d, 4), io, round(d, 4), at, vo[0],
-                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None))
+                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None, es, eo))
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * SN else 0)
-                if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
+                if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN and iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz) is None:
                     _bahis_ac(c, x["I"], sec, io, p, at)
                 c.execute("""UPDATE sinyal SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
@@ -1037,6 +1109,8 @@ def get_page_data(gun=None, kaynak="iddaa"):
         t = datetime.fromisoformat(r["at"]).astimezone(TR)
         r["gun"], r["saat"] = t.date().isoformat(), t.strftime("%H:%M")
         r["supheli"] = (r["deger"] or 0) > SUPHELI
+        if kaynak not in _SITE:
+            r["kural"] = iddaa_kural(r["sec"], r["iddaa"] or 0, r["deger"], r["dk"] or 0, r["skor"], r["cizgi"])
         try:                               # 13.11.2026: fark şu an hâlâ açık mı (son taramada görüldü) — link sadece o zaman gösterilir
             r["simdi"] = (datetime.now(timezone.utc) - datetime.fromisoformat(r["son_at"])).total_seconds() <= 3 * SN
         except (TypeError, ValueError):
@@ -1056,6 +1130,14 @@ def get_page_data(gun=None, kaynak="iddaa"):
             ekle("Skor (Volkano ↔ 1xbet)", "skor bilinmiyor (13.11 11:00 öncesi)" if not r.get("v_skor") else
                  "skor farklıyken gelen (gecikme)" if (r.get("skor_fark") or 0) > 0 else "skor aynıyken gelen (gerçek fark)", r)
         ekle("Açık kalma süresi", _kova(r["sure"] or 0, (10, 30, 60, 180), ("<10 sn (tek tarama)", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+")), r)
+        if kaynak not in _SITE:              # 16.11.2026: yeni kupon kuralları ve ek takip (sadece karne)
+            ekle("Kural (16.11)", "kurala uyan (kupon açılabilir)" if not r["kural"] else "elenen: " + r["kural"].split(" (")[0], r)
+            if r.get("ek_sec") and r.get("ek_oran") and r.get("final"):
+                k = ek_tuttu(r["ek_sec"], r["final"])
+                if k is not None:
+                    ad = ("çifte şans (MS eşitken, ~tahmini oran)" if r["ek_sec"].startswith("ÇŞ") else
+                          "Alt bir üst çizgi (60+, 0 gol izinli yerine)" if r["ek_sec"].startswith("Alt") else "Üst bir üst çizgi (30–45, 1 gol yerine)")
+                    ekle("Ek takip (16.11)", ad, dict(r, sonuc="tuttu" if k else "yattı", iddaa=r["ek_oran"]))
     out["ozet"] = [{"grup": k[0], "ad": k[1], "n": v[0], "w": v[1], "isabet": round(100 * v[1] / v[0]), "roi": round(100 * v[2] / v[0], 1),
                     "roi_v": round(100 * v[3] / v[0], 1), "kar": round(v[2], 2)} for k, v in sorted(G.items(), key=lambda kv: (SIRA.index(kv[0][0]), kv[0][1]))]
     gunler = sorted({r["gun"] for r in R}, reverse=True)
