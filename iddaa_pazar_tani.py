@@ -39,14 +39,10 @@ def rapor():
     if time.time() - _o["t"] < 600 and _o["v"]:
         return _o["v"]
     E = json.loads(_al(URL)[1])["data"]["events"]
-    e = next((e for e in E if e.get("sid") == 1 and e.get("il")), None)
-    out = {"robots": _al("https://sportsbookv2.iddaa.com/robots.txt")[1][:600]}
-    if e:
-        i = e["i"]
-        for u in (f"https://sportsbookv2.iddaa.com/sportsbook/event?id={i}", f"https://sportsbookv2.iddaa.com/sportsbook/events/{i}",
-                  f"https://sportsbookv2.iddaa.com/sportsbook/event/{i}", f"https://sportsbookv2.iddaa.com/sportsbook/events?st=1&type=1&version=0&eventId={i}",
-                  f"https://sportsbookv2.iddaa.com/sportsbook/event-detail/{i}", f"https://sportsbookv2.iddaa.com/sportsbook/markets?eventId={i}"):
-            k, b = _al(u)
-            out[u.split("iddaa.com")[1]] = {"kod": k, "bas": b[:400], "st": _st(b) if k == 200 else None}
+    now = time.time()
+    canli = [e for e in E if e.get("sid") == 1 and e.get("m") and (e.get("d") or 0) < now][:4]
+    for e in canli:
+        k, b = _al(f"https://sportsbookv2.iddaa.com/sportsbook/event/{e['i']}")
+        out[f"{e['hn']} - {e['an']}"] = {"kod": k, "st": _st(b) if k == 200 else b[:200], "liste_st": sorted({str(m.get("st")) for m in e["m"]})}
     _o.update(t=time.time(), v=out)
     return out
