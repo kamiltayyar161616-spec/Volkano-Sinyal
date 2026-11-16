@@ -459,6 +459,41 @@ def canli_ajan_page():
     return render_template("canli_ajan.html", d=canli_ajan.get_page_data(request.args.get("gun")), active_page="ajan")
 
 
+@app.route("/tum-veri")
+def tum_veri_page():
+    """17.11.2026: SAHA'da biriken bütün veri tek dosyada (tum_veri.py)"""
+    import tum_veri
+    from flask import render_template_string
+    if request.args.get("olustur"):
+        tum_veri.baslat_simdi()
+    r = tum_veri.rapor()
+    return render_template_string("""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SAHA · Tüm Veri</title>{% if r.durum == 'oluşturuluyor' %}<meta http-equiv="refresh" content="15">{% endif %}
+<style>body{background:#0b1220;color:#e8edf5;font:15px/1.5 system-ui,sans-serif;margin:0;padding:18px;max-width:720px}
+a.b{display:inline-block;padding:10px 16px;border-radius:10px;background:#e0a030;color:#111;font-weight:800;text-decoration:none;margin:6px 8px 6px 0}
+a.k{background:#1f2a40;color:#e8edf5}.m{color:#93a0b8;font-size:13px}code{background:#1f2a40;padding:1px 5px;border-radius:5px}</style></head><body>
+<h2>🗄️ SAHA · Tüm Biriken Veri</h2>
+<p>Bütün sekmelerin veritabanları — sinyaller, kuponlar, oranlar, tahminler, sonuçlar — <b>tek bir JSON</b> dosyasında (gzip ile sıkıştırılmış).
+Dosyanın içinde her tablonun sütun adları ve hangi sekmeye ait olduğu (<code>rehber</code>) yazar; üçüncü kişiler de doğrudan analiz edebilir.</p>
+{% if r.dosya_boyut_mb %}<a class="b" href="/tum-veri/indir">⬇ tum_veri.json.gz indir ({{ r.dosya_boyut_mb }} MB)</a>{% endif %}
+<a class="b k" href="/tum-veri?olustur=1">🔄 Şimdi yeniden oluştur</a>
+<p class="m">Durum: <b>{{ r.durum }}</b>{% if r.su_an %} · şu an: {{ r.su_an }} · {{ r.satir }} satır{% endif %}
+{% if r.dosya_at %} · son dosya: {{ r.dosya_at[:16].replace('T', ' ') }} UTC{% endif %}{% if r.tablo %} · {{ r.tablo }} tablo, {{ r.satir }} satır, {{ r.sure }} sn{% endif %}
+{% if r.hata %}<br>⚠ {{ r.hata }}{% endif %}</p>
+<p class="m">Her gece 05:30'da kendiliğinden yenilenir. Açmak için: <code>gunzip tum_veri.json.gz</code> ya da Python'da <code>json.load(gzip.open('tum_veri.json.gz','rt'))</code>.
+Dışarıda bırakılanlar: türetilmiş önbellekler, ziyaretçi IP listesi, anahtar dosyaları.</p>
+<p><a href="/">← SAHA</a></p></body></html>""", r=r)
+
+
+@app.route("/tum-veri/indir")
+def tum_veri_indir():
+    import tum_veri
+    from flask import send_file
+    if not os.path.exists(tum_veri.CIKTI):
+        return "Dosya henüz oluşturulmadı — /tum-veri sayfasından oluşturun.", 404
+    return send_file(tum_veri.CIKTI, as_attachment=True, download_name="saha_tum_veri.json.gz", mimetype="application/gzip")
+
+
 @app.route("/indir")
 def sayfa_json_indir():
     """Her sekmenin verisini JSON olarak indirir: sayfanin sablona verdigi veri aynen (yol = sekmenin adresi, ?gun= vb. dahil)."""
@@ -667,6 +702,8 @@ if __name__ == "__main__":
     kupon_temizle.start_background()
     avci.start_background()
     bingo.start_background()
+    import tum_veri
+    tum_veri.start_background()
     vk_canli_skor.start_background()
     iddaa_soket.start_background()
     monsure_bakim.start_background()
