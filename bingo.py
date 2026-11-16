@@ -446,8 +446,23 @@ def _m7_kirmizi(x):
         return None
 
 
-def kirmizi_kart(x, takim):
-    """Oynanacak takımın kırmızı kartı: sayı (0 = yok) ya da None (bilinmiyor). Önce 1xbet, yoksa 7M."""
+def kirmizi_kart(x, takim, i=None):
+    """Oynanacak takımın kırmızı kartı: sayı (0 = yok) ya da None (bilinmiyor).
+    Sıra: iddaa canlı takip istatistiği (Betgenius, olaydaki bgi) -> LiveScore -> 1xbet -> 7M."""
+    yan = "ev" if takim == "1" else "dep"
+    try:
+        import istat_ajan as IS
+        if i and i.get("bgi"):
+            s = IS.idd_istat(i["bgi"], zorla=True)
+            if s and yan in s:
+                return s[yan]["kirmizi"]
+        e = IS.esle(x["ev"], x["dep"])
+        if e:
+            s = IS.istat(e["eid"], zorla=True)
+            if s and yan in s:
+                return s[yan]["kirmizi"]
+    except Exception:
+        pass
     k = x.get("k1" if takim == "1" else "k2")
     if k is not None:
         return k
@@ -476,7 +491,7 @@ def _iy_ms(c, i, x, plan, adim, at):
     if not o:
         return False
     sec = f"MS {plan['takim']}"
-    kk = kirmizi_kart(x, plan["takim"])           # 17.11.2026 kullanıcı: oynanacak takım kırmızı kart gördüyse bahis yok (Perugia örneği)
+    kk = kirmizi_kart(x, plan["takim"], i)           # 17.11.2026 kullanıcı: oynanacak takım kırmızı kart gördüyse bahis yok (Perugia örneği)
     if kk:
         _iy_kaydet(c, i, x, plan, sec, adim, o, False, f"🟥 takım kırmızı kart gördü ({kk}) — oynanmadı", at)
         return True
@@ -638,7 +653,7 @@ def iddaa():
                 P.setdefault("au", {})[float(m["sov"])] = o
             elif st == 34:
                 P["olmaz"] = o.get("Olmaz")
-        L.append({"i": e["i"], "ev": e["hn"], "dep": e["an"], "d": e.get("d") or 0, "P": P})
+        L.append({"i": e["i"], "ev": e["hn"], "dep": e["an"], "d": e.get("d") or 0, "P": P, "bgi": e.get("bgi")})
     return L
 
 
