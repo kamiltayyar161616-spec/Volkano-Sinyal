@@ -222,10 +222,27 @@ def _hesap():
     return {"zaman": time.strftime("%H:%M"), "sinyal": len(S), "analiz": len(R), "nowgoal_eslesen": n_ng, "gruplar": out}
 
 
+def _iyms():
+    import sqlite3, bingo
+    c = sqlite3.connect(f"file:{bingo.DB}?mode=ro", uri=True, timeout=20)
+    c.row_factory = sqlite3.Row
+    R = [dict(r) for r in c.execute("SELECT s.*, p.pf FROM iysinyal s LEFT JOIN iyplan p ON p.xid=s.xid")]
+    B = {(r["xid"], r["sec"][6:]): dict(r) for r in c.execute("SELECT * FROM bahis WHERE sec LIKE 'İY/MS·%'")}
+    c.close()
+    for r in R:
+        b = B.get((r["xid"], r["sec"]))
+        r["b_durum"] = b and b["durum"]; r["b_net"] = b and round((b["getiri"] or 0) - b["tutar"], 1)
+    return R
+
+
 def rapor():
     if time.time() - _o["t"] > 3600 or _o["v"] is None:
         try:
             _o["v"] = _hesap()
+            try:
+                _o["v"]["iyms_ham"] = _iyms()
+            except Exception as e:
+                _o["v"]["iyms_ham"] = f"HATA {type(e).__name__}: {e}"
         except Exception as e:
             import traceback
             _o["v"] = {"HATA": f"{type(e).__name__}: {e}", "iz": traceback.format_exc()[-1500:]}
