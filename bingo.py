@@ -739,10 +739,7 @@ def iyms_tur(c, ciftler, at):
             pf_tk = (pfv if (fav == 0 and tk == "1") or (fav == 2 and tk == "2") else None) if pfv is not None else None   # sadece favoriyse
             c.execute("INSERT OR IGNORE INTO iyplan (xid, iid, ev, dep, lig, iyms, takim, durum, at, pf) VALUES (?,?,?,?,?,?,?,?,?,?)",
                       (x["I"], i["i"], x["ev"], x["dep"], x["lig"], iy, tk, durum, at, pf_tk))
-            if durum == "iy":
-                plan = {"iyms": iy, "takim": tk}
-                o, notu = _iy_oran(i["i"], tk)
-                _iy_kaydet(c, i, x, plan, f"İY {tk}", "maç başı", o, bool(o), notu if not o else None, at)
+            # 17.11.2026 kullanıcı: maç başı İY bahsi kaldırıldı (zarar) — plan sürüyor, 2. yarı başı / 70' / 80' MS adımları aynı
             continue
         plan = {"iyms": r[0], "takim": r[1]}
         durum = r[2]
@@ -1456,11 +1453,7 @@ def tur():
                     ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
                     kr = iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz, ngo, ngd)
                     if kr is None:
-                        kat = 1.0
-                        if sec in ("MS 1", "MS 2") and ((x["s1"] - x["s2"]) if sec == "MS 1" else (x["s2"] - x["s1"])) > 0:
-                            kt = keskin_takim(x, sec)
-                            kat = KESKIN_KAT if kt is not None and kt >= KESKIN_ONDE else 1.0
-                        _bahis_ac(c, x["I"], sec, io, p, at, kat=kat)
+                        _bahis_ac(c, x["I"], sec, io, p, at)
                     elif kr.startswith("TERS"):          # 17.11.2026: eksi ROI'li Alt kısmı tersine — aynı çizgide Gol olur / Üst
                         to = _ters_oran(i, x, cz)
                         if to and to > 1.0:
@@ -1470,7 +1463,7 @@ def tur():
     sonuclandir(c, X, now)
     bahis_kapat(c)
     ters_kapat(c)
-    for fn, tb in ((desen_canli_tur, "dsinyal"), (keskin_tur, "ksinyal")):     # 17.11.2026: Desen canlı + keskin para sinyalleri
+    for fn, tb in ((desen_canli_tur, "dsinyal"),):     # 17.11.2026: Desen canlı (keskin para bölümü aynı gün kaldırıldı — 7M testi: değer yok)
         try:
             fn(c, ciftler, at)
             sonuclandir(c, X, now, tb)
@@ -1808,7 +1801,7 @@ def get_page_data(gun=None, kaynak="iddaa"):
                        "kupon": {"n": len(BY), "acik": sum(1 for b in BY.values() if b["durum"] == "açık"),
                                  "kar": round(sum((b["getiri"] or 0) - b["tutar"] for b in BK), 2)},
                        "hata": _last.get("iyms_hata"), "st": _last.get("iy_pazar_st")}
-        for tb, ad in (("dsinyal", "desen"), ("ksinyal", "keskin")):        # 17.11.2026
+        for tb, ad in (("dsinyal", "desen"),):        # 17.11.2026
             try:
                 c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
                 c.row_factory = sqlite3.Row
