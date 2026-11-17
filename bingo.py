@@ -628,6 +628,17 @@ def iyms_kapat(c, X, now):
 
 
 _NGB = {}                    # xid -> (ng_ok, drift) — maç başına bir kez
+_NGD = {}                    # xid -> keskin para kayması [1, X, 2] (açılış→son)
+KESKIN_ONDE, KESKIN_KAT = 0.02, 1.5     # 17.11.2026 kullanıcı onayı: MS önde + keskin para takıma ≥2p → %87 tuttu, ROI +131 (n15) → tutar ×1.5
+
+
+def keskin_takim(x, sec):
+    """MS 1/2 sinyalinin takımına keskin para kayması (p) ya da None"""
+    if sec not in ("MS 1", "MS 2"):
+        return None
+    ng_baglam(x)
+    ds = _NGD.get(x["I"])
+    return ds[0 if sec == "MS 1" else 2] if ds else None
 
 
 def ng_baglam(x):
@@ -655,10 +666,13 @@ def ng_baglam(x):
             if mk and len(mk) == 3:
                 fav = 0 if mk[0] >= mk[2] else 2
                 sonuc = (True, ds[fav] if ds and len(ds) == 3 else None)
+                if ds and len(ds) == 3:
+                    _NGD[x["I"]] = ds
     except Exception:
         sonuc = (None, None)                  # okunamadı: kural uygulanmaz
     if len(_NGB) > 5000:
         _NGB.clear()
+        _NGD.clear()
     _NGB[x["I"]] = sonuc
     return sonuc
 
@@ -680,7 +694,7 @@ def ters_kapat(c):
             c.execute("UPDATE bahis SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
 
 
-def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis"):
+def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis", kat=1.0):
     b = oran - 1
     f = (b * p - (1 - p)) / b if b > 0 else 0
     if f <= 0:
@@ -694,7 +708,7 @@ def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis"):
         c.execute(f"INSERT OR IGNORE INTO {b_tab} (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
                   (xid, sec, at, oran, round(p, 4), round(f, 4), t))
         return
-    t = max(MIN_BAHIS, min(MAX_BAHIS, round(k["serbest"] * f * KELLY_PAY / 5) * 5))
+    t = max(MIN_BAHIS, min(MAX_BAHIS * kat, round(k["serbest"] * f * KELLY_PAY * kat / 5) * 5))
     if t > k["serbest"]:
         return
     c.execute(f"INSERT OR IGNORE INTO {b_tab} (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
@@ -1271,7 +1285,11 @@ def tur():
                     ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
                     kr = iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz, ngo, ngd)
                     if kr is None:
-                        _bahis_ac(c, x["I"], sec, io, p, at)
+                        kat = 1.0
+                        if sec in ("MS 1", "MS 2") and ((x["s1"] - x["s2"]) if sec == "MS 1" else (x["s2"] - x["s1"])) > 0:
+                            kt = keskin_takim(x, sec)
+                            kat = KESKIN_KAT if kt is not None and kt >= KESKIN_ONDE else 1.0
+                        _bahis_ac(c, x["I"], sec, io, p, at, kat=kat)
                     elif kr.startswith("TERS"):          # 17.11.2026: eksi ROI'li Alt kısmı tersine — aynı çizgide Gol olur / Üst
                         to = _ters_oran(i, x, cz)
                         if to and to > 1.0:
