@@ -1467,7 +1467,9 @@ def tur():
                 if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
                     ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
                     kr = iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz, ngo, ngd)
-                    if not (kr or "").startswith("TERS"):     # 17.11.2026 kullanıcı: her sinyale kupon — kural sadece etiket (karnede ayrı)
+                    if (kr or "").startswith("MS takım geride"):
+                        pass                                # 17.11.2026 kullanıcı: geride takıma MS kuponu yok (büyük analiz: −79.8, n41) — sadece karnede
+                    elif not (kr or "").startswith("TERS"):     # 17.11.2026 kullanıcı: her sinyale kupon — kural sadece etiket (karnede ayrı)
                         _bahis_ac(c, x["I"], sec, io, p, at)
                     else:          # 17.11.2026: eksi ROI'li Alt kısmı tersine — aynı çizgide Gol olur / Üst
                         to = _ters_oran(i, x, cz)
