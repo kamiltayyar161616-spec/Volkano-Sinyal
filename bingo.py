@@ -311,7 +311,7 @@ def iddaa_kural(sec, oran, deger, dk, skor, cizgi, ng_ok=None, ng_drift=None):
         if (deger or 0) > SUPHELI:
             return "MS değer ×1.30 üstü (şüpheli, takip)"
         if sec == "MS X":
-            return "MS X oran ≥ 5" if oran >= 5 else None
+            return "MS X oran 5 altı" if oran < 5 else None
         dr = _durum(sec, skor)
         return None if dr > 0 else "MS takım geride" if dr < 0 else "MS takım eşitken (çifte şans takipte)"
     if sec.startswith("Alt"):
