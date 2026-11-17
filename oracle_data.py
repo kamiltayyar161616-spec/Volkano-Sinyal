@@ -7,7 +7,6 @@ import os
 import httpx
 import datetime
 
-ALLSPORTS_API_BASE = "https://apiv2.allsportsapi.com/football/"
 
 CUP_KW = [
     "cup", "kupa", "copa", "coupe", "pokal", "supercup", "super cup",
@@ -153,46 +152,8 @@ _league_fixtures_cache = {}  # league_key -> (fetched_date, slim_match_list)
 
 
 def _fetch_league_fixtures(league_key) -> list:
-    """Bir ligin bu sezonki tum maclarini (yeniden->eskiye sirali) ceker, gun icinde onbellekler."""
-    if not league_key:
-        return []
-    today_str = datetime.date.today().isoformat()
-    cached = _league_fixtures_cache.get(league_key)
-    if cached and cached[0] == today_str:
-        return cached[1]
-
-    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
-    if not api_key:
-        return []
-
-    today = datetime.date.today()
-    yesterday = today - datetime.timedelta(days=1)
-    season_start = datetime.date(today.year, 7, 1) if today.month >= 7 else datetime.date(today.year - 1, 7, 1)
-
-    slim = []
-    try:
-        url = (f"{ALLSPORTS_API_BASE}?met=Fixtures&leagueId={league_key}"
-               f"&from={season_start.isoformat()}&to={yesterday.isoformat()}&APIkey={api_key}")
-        resp = httpx.get(url, timeout=8)
-        if resp.status_code == 200:
-            data = resp.json()
-            for ev in data.get("result", []) or []:
-                slim.append({
-                    "event_key": str(ev.get("event_key", "")),
-                    "event_date": ev.get("event_date", ""),
-                    "home_team_key": ev.get("home_team_key"),
-                    "away_team_key": ev.get("away_team_key"),
-                    "event_final_result": ev.get("event_final_result", ""),
-                    "event_status": ev.get("event_status", ""),
-                    "event_live": ev.get("event_live", "0"),
-                    "league_name": ev.get("league_name", ""),
-                })
-            slim.sort(key=lambda x: x.get("event_date", ""), reverse=True)
-    except Exception:
-        pass
-
-    _league_fixtures_cache[league_key] = (today_str, slim)
-    return slim
+    """17.11.2026: AllSportsAPI SAHA'dan tamamen kaldırıldı (anahtar bitti; veri NowGoal + 7M'den). Boş döner."""
+    return []
 
 
 def _parse_score(s):

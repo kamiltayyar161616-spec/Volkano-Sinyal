@@ -2278,14 +2278,13 @@ def get_sansa_vs_sbbet_performance(days: int = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# ALLSPORTSAPI OLASILIK MODELI -- bahis sitelerinin fiyatlamasindan TAMAMEN
+# BAGIMSIZ OLASILIK MODELI (Kasim 2026: AllSportsAPI yerine Oracle/NowGoal) -- bahis sitelerinin fiyatlamasindan TAMAMEN
 # BAGIMSIZ, AllSportsAPI'nin kendi istatistiksel modelinin uretmedigi kazanma
 # olasiliklari. Kupon'a "Volkano'nun fiyati piyasadan farkli OLSUN, AMA bagimsiz
 # bir istatistik modeli de bu tarafi en olasi sonuc olarak goruyor mu?" sorusunu
 # soran IKINCI, BAGIMSIZ bir teyit katmani olarak eklenir.
 # ---------------------------------------------------------------------------
 
-ALLSPORTS_API_BASE = "https://apiv2.allsportsapi.com/football/"
 _probabilities_cache = {}  # date_str -> {(norm_home, norm_away): {"probs": {...}, "home_key":.., "away_key":..}}
 
 
@@ -2357,77 +2356,8 @@ _team_window_stats_cache = {}  # (team_key, before_date) -> {"general":{...}, "h
 
 
 def _fetch_team_window_stats(team_key, before_date_str: str, num_matches: int = 6):
-    """Bir takimin TEK bir API cagrisiyla hem GENEL (karma) hem SADECE EV hem SADECE DEPLASMAN
-    son 6 macinin istatistigini (puan-basi-ortalama + gol-basi ortalamalari) cikarir.
-    120 gunluk pencere kullanilir (sadece ev/deplasman filtrelenince 6 ornek bulmak icin)."""
-    if not team_key:
-        return None
-    cache_key = (team_key, before_date_str)
-    if cache_key in _team_window_stats_cache:
-        return _team_window_stats_cache[cache_key]
-
-    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
-    if not api_key:
-        return None
-
-    result = None
-    try:
-        before_dt = datetime.strptime(before_date_str, "%Y-%m-%d")
-        from_dt = before_dt - timedelta(days=120)
-        to_dt = before_dt - timedelta(days=1)
-        url = (f"{ALLSPORTS_API_BASE}?met=Fixtures&teamId={team_key}"
-               f"&from={from_dt.strftime('%Y-%m-%d')}&to={to_dt.strftime('%Y-%m-%d')}&APIkey={api_key}")
-        resp = httpx.get(url, timeout=8)
-        if resp.status_code == 200:
-            data = resp.json()
-            all_matches = [ev for ev in (data.get("result", []) or []) if ev.get("event_final_result") not in (None, "", "-")]
-            all_matches.sort(key=lambda ev: ev.get("event_date", ""))
-
-            def summarize(matches, venue):
-                """venue=None -> genel (karma), 'home'/'away' -> o taraf filtrelenmis."""
-                if venue == "home":
-                    filtered = [ev for ev in matches if str(ev.get("home_team_key")) == str(team_key)]
-                elif venue == "away":
-                    filtered = [ev for ev in matches if str(ev.get("away_team_key")) == str(team_key)]
-                else:
-                    filtered = matches
-                recent = filtered[-num_matches:]
-                points, gf, ga = [], [], []
-                for ev in recent:
-                    fs = ev.get("event_final_result", "")
-                    try:
-                        hg, ag = map(int, fs.replace(" ", "").split("-"))
-                    except Exception:
-                        continue
-                    is_home = str(ev.get("home_team_key")) == str(team_key)
-                    scored, conceded = (hg, ag) if is_home else (ag, hg)
-                    gf.append(scored)
-                    ga.append(conceded)
-                    if scored == conceded:
-                        points.append(1)
-                    elif scored > conceded:
-                        points.append(3)
-                    else:
-                        points.append(0)
-                if not points:
-                    return None
-                return {
-                    "ppg": round(sum(points) / len(points), 2),
-                    "gf_avg": round(sum(gf) / len(gf), 2),
-                    "ga_avg": round(sum(ga) / len(ga), 2),
-                    "n": len(points),
-                }
-
-            result = {
-                "general": summarize(all_matches, None),
-                "home": summarize(all_matches, "home"),
-                "away": summarize(all_matches, "away"),
-            }
-    except Exception:
-        pass
-
-    _team_window_stats_cache[cache_key] = result
-    return result
+    """17.11.2026: AllSportsAPI SAHA'dan tamamen kaldırıldı (anahtar bitti; veri NowGoal + 7M'den). Boş döner."""
+    return None
 
 
 def get_team_rating(team_key, before_date_str: str, context_venue: str):
@@ -2906,36 +2836,8 @@ _fixtures_cache = {}  # date_str -> {(norm_home, norm_away): {home_key, away_key
 
 
 def _fetch_fixtures_for_date(date_str: str) -> dict:
-    if date_str in _fixtures_cache:
-        return _fixtures_cache[date_str]
-
-    api_key = os.environ.get("ALLSPORTS_API_KEY", "")
-    if not api_key:
-        return {}
-
-    result = {}
-    try:
-        url = f"{ALLSPORTS_API_BASE}?met=Fixtures&from={date_str}&to={date_str}&APIkey={api_key}"
-        resp = httpx.get(url, timeout=8)
-        if resp.status_code == 200:
-            data = resp.json()
-            for ev in data.get("result", []) or []:
-                home = ev.get("event_home_team")
-                away = ev.get("event_away_team")
-                if not home or not away:
-                    continue
-                result[(_norm(home), _norm(away))] = {
-                    "home_key": ev.get("home_team_key"),
-                    "away_key": ev.get("away_team_key"),
-                    "league_key": ev.get("league_key"),
-                    "league_name": ev.get("league_name"),
-                    "country_name": ev.get("country_name"),
-                }
-    except Exception:
-        pass
-
-    _fixtures_cache[date_str] = result
-    return result
+    """17.11.2026: AllSportsAPI SAHA'dan tamamen kaldırıldı (anahtar bitti; veri NowGoal + 7M'den). Boş döner."""
+    return {}
 
 
 def _lookup_fixture_entry(home: str, away: str, match_time: str):

@@ -16,8 +16,6 @@ import httpx
 
 from match_analyzer import _get_conn, _parse_to_local
 
-API_BASE = "https://apiv2.allsportsapi.com/football/"
-API_KEY = os.environ.get("ALLSPORTS_API_KEY", "")
 
 CHECK_AFTER_HOURS = 3
 FINISHED_STATUSES = {"Finished", "Finished AET", "Finished PEN", "After Pen.", "After Extra Time"}
