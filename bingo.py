@@ -120,6 +120,10 @@ def db():
                  durum TEXT, iy_skor TEXT, at TEXT)""")
     c.execute("""CREATE TABLE IF NOT EXISTS iysinyal (xid INTEGER, sec TEXT, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT, adim TEXT,
                  dk INTEGER, skor TEXT, iyms TEXT, oran REAL, oyna INTEGER, notu TEXT, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
+    try:                                   # 17.11.2026: İY/MS planına takımın maç öncesi ihtimali (değer eşiği için)
+        c.execute("ALTER TABLE iyplan ADD COLUMN pf REAL")
+    except sqlite3.OperationalError:
+        pass
     try:                                   # 16.11.2026: ek takip seçeneği (çifte şans / bir üst çizgi) — sadece karne
         c.execute("ALTER TABLE sinyal ADD COLUMN ek_sec TEXT")
     except sqlite3.OperationalError:
@@ -399,7 +403,15 @@ def oto_etiket(r):
 
 
 # ---------- 16.11.2026 kullanıcı: İY/MS istatistik bahisleri (Oto İY/MS tahmini; 1xbet karşılaştırması yok; iddaa kasasından 100 ₺) ----------
-IYMS_TUTAR, IYMS_MIN_MS = 100.0, 1.50
+IYMS_TUTAR, IYMS_MIN_MS = 100.0, 1.50     # 1.50: 70'/80' adımları için (2. yarı başı artık değer eşiğiyle)
+
+
+def iy_esik(pf):
+    """17.11.2026 kullanıcı onayı: İY berabere bitince 2. yarı başı MS için değer eşiği — takımın maç öncesi kazanma ihtimaline göre
+    (1.370 maç: devre berabere → kazanma %62 / %55 / %41; eşik = başabaş oranın %5 üstü)"""
+    if pf is None:
+        return 2.55
+    return 1.70 if pf >= 0.65 else 1.90 if pf >= 0.55 else 2.55
 _IYP = {"t": {}, "st": {}}                 # iddaa maç detayı önbelleği, görülen pazar tipleri (kontrol)
 
 
@@ -485,8 +497,9 @@ def _iy_kaydet(c, i, x, plan, sec, adim, oran, oyna, notu, at):
                _iy_kupon(c, x["I"], sec, oran, at) if oyna else 0, notu))
 
 
-def _iy_ms(c, i, x, plan, adim, at):
-    """MS bahsi: iddaa MS oranı ≥ 1.50 ise sinyal + kupon; oran yoksa (pazar kapalı) False -> sonraki turda tekrar dene"""
+def _iy_ms(c, i, x, plan, adim, at, esik=None):
+    """MS bahsi: iddaa MS oranı eşiği geçerse sinyal + kupon; oran yoksa (pazar kapalı) False -> sonraki turda tekrar dene"""
+    esik = esik or IYMS_MIN_MS
     o = (i["P"].get("ms") or {}).get(plan["takim"])
     if not o:
         return False
@@ -495,28 +508,29 @@ def _iy_ms(c, i, x, plan, adim, at):
     if kk:
         _iy_kaydet(c, i, x, plan, sec, adim, o, False, f"🟥 takım kırmızı kart gördü ({kk}) — oynanmadı", at)
         return True
-    if o >= IYMS_MIN_MS:
-        _iy_kaydet(c, i, x, plan, sec, adim, o, True, None, at)
+    if o >= esik:
+        _iy_kaydet(c, i, x, plan, sec, adim, o, True, f"eşik {esik}", at)
     else:
-        _iy_kaydet(c, i, x, plan, sec, adim, o, False, f"MS oranı {o} < 1.50 — oynanmadı", at)
+        _iy_kaydet(c, i, x, plan, sec, adim, o, False, f"MS oranı {o} < eşik {esik} — oynanmadı", at)
     return True
 
 
 def iyms_tur(c, ciftler, at):
     for i, x in ciftler:
-        r = c.execute("SELECT iyms, takim, durum, iy_skor FROM iyplan WHERE xid=?", (x["I"],)).fetchone()
+        r = c.execute("SELECT iyms, takim, durum, iy_skor, pf FROM iyplan WHERE xid=?", (x["I"],)).fetchone()
         dk = x["dk"]
         if r is None:
             if dk > 8:
                 continue
             try:
-                _, _, _, iy = oto_baglam(x, iyms=True)
+                fav, pfv, _, iy = oto_baglam(x, iyms=True)
             except Exception:
-                iy = None
+                fav = pfv = iy = None
             tk = iy.split("/")[-1] if iy and "/" in iy else None
             durum = "iy" if tk in ("1", "2") else "yok"
-            c.execute("INSERT OR IGNORE INTO iyplan (xid, iid, ev, dep, lig, iyms, takim, durum, at) VALUES (?,?,?,?,?,?,?,?,?)",
-                      (x["I"], i["i"], x["ev"], x["dep"], x["lig"], iy, tk, durum, at))
+            pf_tk = (pfv if (fav == 0 and tk == "1") or (fav == 2 and tk == "2") else None) if pfv is not None else None   # sadece favoriyse
+            c.execute("INSERT OR IGNORE INTO iyplan (xid, iid, ev, dep, lig, iyms, takim, durum, at, pf) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (x["I"], i["i"], x["ev"], x["dep"], x["lig"], iy, tk, durum, at, pf_tk))
             if durum == "iy":
                 plan = {"iyms": iy, "takim": tk}
                 o, notu = _iy_oran(i["i"], tk)
@@ -538,7 +552,7 @@ def iyms_tur(c, ciftler, at):
         if yeni == "ms2":
             if dk > 60:
                 yeni = "bitti"
-            elif _iy_ms(c, i, x, plan, "2. yarı başı", at):
+            elif _iy_ms(c, i, x, plan, "2. yarı başı", at, iy_esik(r[4])):
                 yeni = "ms"
         if yeni == "b70" and dk >= 70:
             if fark == 0:
