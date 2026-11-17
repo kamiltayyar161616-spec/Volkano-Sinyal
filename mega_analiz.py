@@ -3,6 +3,7 @@ elimizde olan her bilgiyle eşleştirir — NowGoal (maç öncesi piyasa/keskin 
 İY/MS iddaa para (kars), Oto (bingo o_* alanları) — ve her sinyal grubunda her özelliğin aralıklarına göre iddaa oranıyla ROI çıkarır.
 Hiçbir şey yazmaz."""
 import json
+import re
 import sqlite3
 import time
 from datetime import datetime, timedelta
@@ -235,6 +236,65 @@ def _iyms():
     return R
 
 
+def _iy7080():
+    """7M arşivi: maç öncesi Pinnacle AH+ÜA -> takım kazanma ihtimali (Poisson); 70'/80' berabere iken takım kazanma oranı"""
+    import math, m7_arsiv as M
+    from collections import defaultdict
+    c = M.db(); rows = c.execute("SELECT ou, ah, skor, goller, ko FROM mac").fetchall(); c.close()
+    def pz(l, k): return math.exp(-l) * l ** k / math.factorial(k)
+    R = defaultdict(lambda: [0, 0, 0])      # n, kazandı, berabere
+    n_ok = 0
+    for ou, ah, sk, gl, ko in rows:
+        skor = M.skor_al(sk, gl, M._ko_tahmin(ko, ou))
+        if not skor:
+            continue
+        try:
+            A = json.loads(ah or "{}").get("Pinnacle Sports"); O = json.loads(ou or "{}").get("Pinnacle Sports")
+            G = json.loads(gl) if gl else []
+        except Exception:
+            continue
+        if not A or not O or O["kap"][2] <= 1 or O["kap"][3] <= 1:
+            continue
+        T = M.gol_bekl(O["kap"][1], O["kap"][2], O["kap"][3]); s = -A["kap"][1]
+        lh, la = max(0.05, (T + s) / 2), max(0.05, (T - s) / 2)
+        ph = sum(pz(lh, i) * pz(la, j) for i in range(11) for j in range(11) if i > j)
+        pa = sum(pz(lh, i) * pz(la, j) for i in range(11) for j in range(11) if i < j)
+        sc = []                               # (dk, h, a)
+        for dk, x in G:
+            m = re.match(r"^(\d+)-(\d+)$", x or ""); d = M._dk(dk)
+            if m and d is not None:
+                sc.append((d, int(m.group(1)), int(m.group(2))))
+        fh, fa = (int(v) for v in skor.split("-"))
+        if (sc[-1][1:] if sc else (0, 0)) != (fh, fa):
+            continue
+        n_ok += 1
+        def at(dk, ht=False):
+            h = a = 0
+            for d, x, y in sc:
+                if d <= dk and not (ht and d > 45):
+                    h, a = x, y
+            return h, a
+        ht = at(45, True)
+        for taraf, pf in (("1", ph), ("2", pa)):
+            b = "≥.65" if pf >= .65 else ".55-.65" if pf >= .55 else ".45-.55" if pf >= .45 else ".35-.45" if pf >= .35 else "<.35"
+            iy_g = (ht[0] < ht[1]) if taraf == "1" else (ht[1] < ht[0])
+            win = (fh > fa) if taraf == "1" else (fa > fh)
+            for dk in (70, 80):
+                h, a = at(dk)
+                if h != a:
+                    continue
+                for k in (f"{dk}' berabere | pf {b}", f"{dk}' berabere, İY geride | pf {b}"):
+                    if "geride" in k and not iy_g:
+                        continue
+                    x = R[k]; x[0] += 1; x[1] += win; x[2] += fh == fa
+    out = {"maç": n_ok}
+    for k in sorted(R):
+        n, w, d = R[k]
+        out[k] = {"n": n, "kazan%": round(100 * w / n, 1), "ber%": round(100 * d / n, 1),
+                  "başabaş": round(n / w, 2) if w else None, "eşik+5%": round(1.05 * n / w, 2) if w else None}
+    return out
+
+
 def rapor():
     if time.time() - _o["t"] > 3600 or _o["v"] is None:
         try:
@@ -243,6 +303,11 @@ def rapor():
                 _o["v"]["iyms_ham"] = _iyms()
             except Exception as e:
                 _o["v"]["iyms_ham"] = f"HATA {type(e).__name__}: {e}"
+            try:
+                _o["v"]["iy7080"] = _iy7080()
+            except Exception as e:
+                import traceback
+                _o["v"]["iy7080"] = {"HATA": traceback.format_exc()[-800:]}
         except Exception as e:
             import traceback
             _o["v"] = {"HATA": f"{type(e).__name__}: {e}", "iz": traceback.format_exc()[-1500:]}
