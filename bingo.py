@@ -412,7 +412,7 @@ def oto_etiket(r):
 
 
 # ---------- 16.11.2026 kullanıcı: İY/MS istatistik bahisleri (Oto İY/MS tahmini; 1xbet karşılaştırması yok; iddaa kasasından 100 ₺) ----------
-IYMS_TUTAR, IYMS_MIN_MS = 100.0, 1.50     # 17.11.2026: tüm adımlar değer eşiğiyle (iy_esik, gec_esik); 1.50 sadece yedek
+IYMS_TUTAR, IYMS_MIN_MS = 100.0, 1.50     # 2. yarı başı: iy_esik; 70./80.: istatistik baskısı + oran ≥ 1.50
 
 
 def iy_esik(pf):
@@ -421,15 +421,6 @@ def iy_esik(pf):
     if pf is None:
         return 2.55
     return 1.70 if pf >= 0.65 else 1.90 if pf >= 0.55 else 2.55
-def gec_esik(dk, pf):
-    """17.11.2026 kullanıcı onayı: 70'/80' berabere MS değer eşiği — 7M arşivi 8.680 maç (Pinnacle maç öncesi → takım ihtimali),
-    o dakikada berabere iken takımın kazanma oranı; eşik = başabaş oranın %5 üstü. pf yoksa .35–.45 dilimi (temkinli)"""
-    T = {70: (2.20, 2.90, 3.40, 5.05, 7.20), 80: (2.80, 3.90, 4.80, 6.50, 9.10)}[dk]
-    if pf is None:
-        return T[3]
-    return T[0] if pf >= .65 else T[1] if pf >= .55 else T[2] if pf >= .45 else T[3] if pf >= .35 else T[4]
-
-
 _IYP = {"t": {}, "st": {}}                 # iddaa maç detayı önbelleği, görülen pazar tipleri (kontrol)
 
 
@@ -515,8 +506,26 @@ def _iy_kaydet(c, i, x, plan, sec, adim, oran, oyna, notu, at):
                _iy_kupon(c, x["I"], sec, oran, at) if oyna else 0, notu))
 
 
-def _iy_ms(c, i, x, plan, adim, at, esik=None):
-    """MS bahsi: iddaa MS oranı eşiği geçerse sinyal + kupon; oran yoksa (pazar kapalı) False -> sonraki turda tekrar dene"""
+def iy_baski(x, i):
+    """Canlı istatistik baskısı (istat_ajan.ozet: korner / isabetli şut / şut payı / tehlikeli atak): (1/2/None, kısa özet) ya da (None, None) = istatistik yok"""
+    try:
+        import istat_ajan as IS
+        s = IS.idd_istat(i["bgi"]) if i.get("bgi") else None
+        if not s:
+            e = IS.esle(x["ev"], x["dep"])
+            s = IS.istat(e["eid"]) if e else None
+        o = IS.ozet(s)
+    except Exception:
+        o = None
+    if not o:
+        return None, None
+    oz = f"isabetli {o['isabetli']} · şut {o['sut']} · korner {o['korner']}" + (f" · tehlikeli atak {o['tatak']}" if o.get("tatak") else "")
+    return o["baski"], oz
+
+
+def _iy_ms(c, i, x, plan, adim, at, esik=None, istat_son=None):
+    """MS bahsi: iddaa MS oranı eşiği geçerse sinyal + kupon; oran yoksa (pazar kapalı) False -> sonraki turda tekrar dene.
+    istat_son (70'/80'): 17.11.2026 kullanıcı — oran değil istatistik: takım baskılıysa oyna (oran ≥ 1.50); baskı yoksa istat_son. dk'ya kadar bekle"""
     esik = esik or IYMS_MIN_MS
     o = (i["P"].get("ms") or {}).get(plan["takim"])
     if not o:
@@ -525,6 +534,16 @@ def _iy_ms(c, i, x, plan, adim, at, esik=None):
     kk = kirmizi_kart(x, plan["takim"], i)           # 17.11.2026 kullanıcı: oynanacak takım kırmızı kart gördüyse bahis yok (Perugia örneği)
     if kk:
         _iy_kaydet(c, i, x, plan, sec, adim, o, False, f"🟥 takım kırmızı kart gördü ({kk}) — oynanmadı", at)
+        return True
+    if istat_son is not None and o >= esik:
+        b, oz = iy_baski(x, i)
+        if b is not None and str(b) == plan["takim"]:
+            _iy_kaydet(c, i, x, plan, sec, adim, o, True, f"📊 istatistik baskısı takımda ({oz})", at)
+            return True
+        if x["dk"] < istat_son:
+            return False
+        _iy_kaydet(c, i, x, plan, sec, adim, o, False,
+                   f"📊 {'istatistik yok' if oz is None else 'baskı takımda değil (' + oz + ')'} — oynanmadı", at)
         return True
     if o >= esik:
         _iy_kaydet(c, i, x, plan, sec, adim, o, True, f"eşik {esik}", at)
@@ -574,14 +593,14 @@ def iyms_tur(c, ciftler, at):
                 yeni = "ms"
         if yeni == "b70" and dk >= 70:
             if fark == 0:
-                yeni = "ms" if _iy_ms(c, i, x, plan, "70. dk (berabere)", at, gec_esik(70, r[4])) else ("b70" if dk <= 75 else "bitti")
+                yeni = "ms" if _iy_ms(c, i, x, plan, "70. dk (berabere)", at, istat_son=75) else ("b70" if dk <= 75 else "bitti")
             elif fark < 0:
                 yeni = "b80"
             else:
                 yeni = "bitti"
         if yeni == "b80" and dk >= 80:
             if fark == 0:
-                yeni = "ms" if _iy_ms(c, i, x, plan, "80. dk (berabere)", at, gec_esik(80, r[4])) else ("b80" if dk <= 85 else "bitti")
+                yeni = "ms" if _iy_ms(c, i, x, plan, "80. dk (berabere)", at, istat_son=85) else ("b80" if dk <= 85 else "bitti")
             else:
                 yeni = "bitti"
         if yeni != durum:
