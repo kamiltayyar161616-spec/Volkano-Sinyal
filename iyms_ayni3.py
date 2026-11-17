@@ -22,7 +22,35 @@ def satir(m, uc):
     return f"      {m['ko'][:10]}  {m['ev'][:22]:22s} – {m['dep'][:22]:22s}  İY {m['iy']:4s} MS {m['skor']:4s}  İY/MS {m['sonuc']:4s}  {g} gol  {au}  {tut}"
 
 
+def cakisma():
+    """para giren 3'lü = EN UZAK 3'lü / para çıkan 3'lü = EN YAKIN 3'lü olan geçmiş maçlar: maç maç sonuç"""
+    M = K.hesap()["maclar"]
+    for ad, A, B in (("💸 PARA GİREN = EN UZAK", KAT[0][1], KAT[3][1]), ("🔻 PARA ÇIKAN = EN YAKIN", KAT[1][1], KAT[2][1])):
+        L = sorted([m for m in M if anahtar(A(m)) and anahtar(A(m)) == anahtar(B(m))], key=lambda m: m["ko"], reverse=True)
+        biten = [m for m in L if m["sonuc"] and m["skor"]]
+        print(f"\n=== {ad}: {len(L)} maç ({len(biten)} biten)")
+        if biten:
+            h = sum(m["sonuc"] in anahtar(A(m)) for m in biten)
+            G = [sum(int(v) for v in m["skor"].split("-")) for m in biten]
+            S = defaultdict(int)
+            for m in biten:
+                S[m["sonuc"]] += 1
+            print(f"    3'lüden biri çıktı {h}/{len(biten)} (%{100 * h / len(biten):.0f}) · Ü1.5 %{100 * sum(g > 1.5 for g in G) / len(G):.0f}"
+                  f" · Ü2.5 %{100 * sum(g > 2.5 for g in G) / len(G):.0f} · Ü3.5 %{100 * sum(g > 3.5 for g in G) / len(G):.0f}"
+                  f" · İY/MS: " + ", ".join(f"{s} {n}" for s, n in sorted(S.items(), key=lambda z: -z[1])))
+            ev = sum(1 for m in biten if m["sonuc"][-1] == "1"); dep = sum(1 for m in biten if m["sonuc"][-1] == "2")
+            print(f"    MS: 1 → {ev} · X → {len(biten) - ev - dep} · 2 → {dep}")
+        for m in L:
+            if m["sonuc"] and m["skor"]:
+                print(satir(m, anahtar(A(m))) + f"   [{'·'.join(anahtar(A(m)))}]")
+            else:
+                print(f"      {m['ko'][:16]}  {m['ev'][:22]:22s} – {m['dep'][:22]:22s}  bekliyor   [{'·'.join(anahtar(A(m)))}]")
+
+
 def main():
+    import sys
+    if "--cakisma" in sys.argv:
+        return cakisma()
     M = K.hesap()["maclar"]
     biten = [m for m in M if m["sonuc"] and m["skor"]]
     bekleyen = sorted([m for m in M if not m["sonuc"]], key=lambda m: m["ko"])
