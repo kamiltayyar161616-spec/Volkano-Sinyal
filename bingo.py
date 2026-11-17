@@ -187,6 +187,18 @@ def db():
         c.commit()
         c.close()
         return db()
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_sifir_1711'").fetchone():
+        # 17.11.2026 kullanıcı: iddaa sayfası sıfırdan — sinyal, kupon, İY/MS, Desen canlı geçmişi arşive (*_eski8), iddaa kasası 20.000'den
+        # (Volkano / Admiral / 75+ sekmelerine dokunulmaz)
+        c.execute("CREATE TABLE kural_sifir_1711 (at TEXT)")
+        c.execute("INSERT INTO kural_sifir_1711 VALUES (datetime('now'))")
+        for tb in ("sinyal", "bahis", "iysinyal", "iyplan", "dsinyal", "ksinyal"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (tb,)).fetchone():
+                c.execute(f"DROP TABLE IF EXISTS {tb}_eski8")
+                c.execute(f"ALTER TABLE {tb} RENAME TO {tb}_eski8")
+        c.commit()
+        c.close()
+        return db()
     if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_donma_geri'").fetchone():
         # 15.11.2026 kullanıcı: donma tespiti beğenilmedi, iddaa bir önceki haline döndü — iddaa sinyal + kupon arşive (*_eski7), iddaa kasası 20.000'den
         c.execute("CREATE TABLE kural_donma_geri (at TEXT)")
@@ -588,6 +600,9 @@ def desen_canli_tur(c, ciftler, at):
                 continue
             _ek_kaydet(c, "dsinyal", i, x, sec, o, esik, tm[0], durum,
                        f"Desen: {s} · arşiv bu durumda %{tm[0]} (n{tm[1]}) · başabaş {round(100 / tm[0], 2)}", at)
+            if kasa(c, "bahis")["serbest"] >= IYMS_TUTAR:      # 17.11.2026 kullanıcı: her sinyale kupon — 100 ₺, iddaa kasasından
+                c.execute("INSERT OR IGNORE INTO bahis (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,NULL,?,'açık')",
+                          (x["I"], "DESEN·" + sec, at, o, round(tm[0] / 100, 4), IYMS_TUTAR))
     _last["desen_canli"] = f"{len(L)} Desen maçı, {n_es} canlı eşleşme"
 
 
@@ -1452,9 +1467,9 @@ def tur():
                 if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
                     ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
                     kr = iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz, ngo, ngd)
-                    if kr is None:
+                    if not (kr or "").startswith("TERS"):     # 17.11.2026 kullanıcı: her sinyale kupon — kural sadece etiket (karnede ayrı)
                         _bahis_ac(c, x["I"], sec, io, p, at)
-                    elif kr.startswith("TERS"):          # 17.11.2026: eksi ROI'li Alt kısmı tersine — aynı çizgide Gol olur / Üst
+                    else:          # 17.11.2026: eksi ROI'li Alt kısmı tersine — aynı çizgide Gol olur / Üst
                         to = _ters_oran(i, x, cz)
                         if to and to > 1.0:
                             _bahis_ac(c, x["I"], "TERS·" + sec, to, 1 - p, at)
@@ -1467,6 +1482,11 @@ def tur():
         try:
             fn(c, ciftler, at)
             sonuclandir(c, X, now, tb)
+            for xid, sec, oran, tutar in c.execute("SELECT xid, sec, oran, tutar FROM bahis WHERE durum='açık' AND sec LIKE 'DESEN·%'").fetchall():
+                s = c.execute("SELECT sonuc FROM dsinyal WHERE xid=? AND sec=?", (xid, sec[6:])).fetchone()
+                if s and s[0]:
+                    d, g = {"tuttu": ("kazandı", tutar * oran), "yattı": ("kaybetti", 0.0)}.get(s[0], ("iade", tutar))
+                    c.execute("UPDATE bahis SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
             _last[f"{tb}_hata"] = None
         except Exception as e:
             _last[f"{tb}_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
@@ -1813,6 +1833,7 @@ def get_page_data(gun=None, kaynak="iddaa"):
             for r in Z:
                 r["saat"] = datetime.fromisoformat(r["at"]).astimezone(TR).strftime("%d.%m %H:%M")
                 r["net"] = (round(100 * (r["oran"] - 1)) if r["sonuc"] == "tuttu" else -100) if r["sonuc"] in ("tuttu", "yattı") else None
+                r["kupon"] = bool(B.get((r["xid"], "DESEN·" + r["sec"]))) if tb == "dsinyal" else False
                 if r["net"] is not None:
                     for k in ("tümü", r["sec"].split()[0] + " · " + (r["durum"] or "")):
                         g = K.setdefault(k, [0, 0, 0])
