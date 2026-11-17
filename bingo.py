@@ -1468,7 +1468,8 @@ def tur():
                 if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
                     ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
                     kr = iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz, ngo, ngd)
-                    if (kr or "").startswith(("MS takım geride", "MS X oran")) or "×1.30 üstü" in (kr or ""):   # + MS X < 5 (−100, n2)
+                    if sec.startswith("MS") or "×1.30 üstü" in (kr or ""):
+                        # 17.11.2026 kullanıcı: ana sinyalde MS kuponu tamamen kapalı (oynanabilir MS 82 sinyal ROI −43) — sadece karnede
                         pass                                # 17.11.2026 kullanıcı: geride takıma MS (−79.8, n41) ve şüpheli değer ×1.30 üstü (MS −54.8 / Alt −30) — kupon yok, sadece karnede
                     elif not (kr or "").startswith("TERS"):     # 17.11.2026 kullanıcı: her sinyale kupon — kural sadece etiket (karnede ayrı)
                         _bahis_ac(c, x["I"], sec, io, p, at)
