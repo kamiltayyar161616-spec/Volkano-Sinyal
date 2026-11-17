@@ -47,7 +47,7 @@
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok — ilk BINGO sinyalinde otomatik açılacak.</div>{% endfor %}
 {% else %}
-{% for blk, bas, alt in [(d.desen, '🎯 DESEN CANLI (1xbet\'ten bağımsız · sadece sinyal, sanal 100 ₺ karne)', 'Desen\'in maç öncesi seçtiği maçta canlı durum (ör. 60\'ta 0-0, favori berabere/geride) arşivde güçlüyse ve iddaa oranı başabaşın %10 üstündeyse (en az 1.50) sinyal · 25–70. dk · gol sonrası 90 sn yok · favori seçimlerinde kırmızı kart varsa yok'))] if blk and not V %}
+{% for blk, bas, alt in [(d.desen, '🎯 DESEN CANLI (1xbet\'ten bağımsız · sadece sinyal, sanal 100 ₺ karne)', 'Desen\'in maç öncesi seçtiği maçta canlı durum (ör. 60\'ta 0-0, favori berabere/geride) arşivde güçlüyse ve iddaa oranı başabaşın %10 üstündeyse (en az 1.50) sinyal · 25–70. dk · gol sonrası 90 sn yok · favori seçimlerinde kırmızı kart varsa yok')] if blk and not V %}
 <h2 class="section">{{ bas }}</h2>
 <div class="section-sub">{{ alt }}{% if blk.log %} · {{ blk.log }}{% endif %}{% if blk.hata %} · ⚠ {{ blk.hata }}{% endif %}</div>
 {% if blk.karne %}<table class="tt" style="margin:0 16px"><tr><th></th><th>n</th><th>tuttu</th><th>net ₺</th><th>ROI</th></tr>{% for k in blk.karne %}<tr><td>{{ k.ad }}</td><td>{{ k.n }}</td><td>{{ k.w }}</td><td>{{ '%+d'|format(k.net) }}</td><td>{{ roi(k.roi) }}</td></tr>{% endfor %}</table>{% endif %}
