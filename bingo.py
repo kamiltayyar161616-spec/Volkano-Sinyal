@@ -768,7 +768,8 @@ def iyms_tur(c, ciftler, at):
             c.execute("UPDATE iysinyal SET sonuc=?, final=? WHERE xid=? AND sec=? AND sonuc IS NULL",
                       ("tuttu" if iy_tuttu else "yattı", f"İY {a}-{b}", x["I"], f"İY {plan['takim']}"))
             c.execute("UPDATE iyplan SET iy_skor=? WHERE xid=?", (f"{a}-{b}", x["I"]))
-            yeni = "bitti" if iy_tuttu else "ms2" if fark == 0 else "b70"      # İY tutmadı: yenik değilse 2. yarı başı MS, yenikse 70'
+            yeni = "bitti" if iy_tuttu or fark == 0 else "b70"      # 17.11.2026 kullanıcı: 2. yarı başı MS kapatıldı (eksi ROI) — sadece yenikse 70' / 80'
+
         if yeni == "ms2":
             if dk > 60:
                 yeni = "bitti"
