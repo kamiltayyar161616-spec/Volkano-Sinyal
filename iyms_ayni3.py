@@ -97,5 +97,22 @@ def main():
             print(f"  {ad:14s} {'·'.join(k):16s} {n:3d} maç · 3'lüden çıktı %{100 * h / n:.0f} · Ü2.5 %{100 * sum(g > 2.5 for g in G) / n:.0f}")
 
 
+def metin():
+    """durum raporu için: --para çıktısı metin olarak (stdout'a dokunmaz)"""
+    import contextlib
+    import io
+    global KAT
+    eski = list(KAT)
+    b = io.StringIO()
+    sys.argv.append("--para")
+    try:
+        with contextlib.redirect_stdout(b):
+            main()
+    finally:
+        sys.argv.remove("--para")
+        KAT = tuple(eski)
+    return b.getvalue()
+
+
 if __name__ == "__main__":
     main()
