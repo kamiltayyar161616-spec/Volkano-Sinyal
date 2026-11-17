@@ -110,7 +110,7 @@ def db():
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS mac (xid INTEGER PRIMARY KEY, ev TEXT, dep TEXT, lig TEXT, s1 INTEGER, s2 INTEGER, dk INTEGER,
                  son_at TEXT, bitti INTEGER DEFAULT 0)""")
-    for k in ("v_oran", "x_adil", "v_adil", "ek_oran", "o_fav", "o_pf", "o_L", "ters_oran"):
+    for k in ("v_oran", "x_adil", "v_adil", "ek_oran", "o_fav", "o_pf", "o_L", "ters_oran", "ng_ok", "ng_drift"):
         try:
             c.execute(f"ALTER TABLE sinyal ADD COLUMN {k} REAL")
         except sqlite3.OperationalError:
@@ -282,8 +282,12 @@ def _durum(sec, skor):
     return (a - b) if sec == "MS 1" else (b - a)
 
 
-def iddaa_kural(sec, oran, deger, dk, skor, cizgi):
-    """None = kupon açılır; yoksa kupon açılmama sebebi"""
+ALT0_MIN_DK = 39      # 17.11.2026 kullanıcı onayı (657 sinyallik büyük analiz): 0 gol izinli Alt 39' öncesi −20.7, sonrası +32.5
+
+
+def iddaa_kural(sec, oran, deger, dk, skor, cizgi, ng_ok=None, ng_drift=None):
+    """None = kupon açılır; 'TERS: …' = sinyalin tersine (aynı çizgide Gol olur / Üst) kupon; başka metin = kupon yok (sebep).
+    ng_ok / ng_drift: NowGoal maç öncesi verisi var mı / keskin paranın favoriye kayması (açılış→son, p); None = bilinmiyor (eski kayıt)"""
     try:
         gol = sum(int(v) for v in skor.split("-")[:2])
     except (AttributeError, ValueError):
@@ -298,8 +302,13 @@ def iddaa_kural(sec, oran, deger, dk, skor, cizgi):
     if sec.startswith("Alt"):
         if (deger or 0) > SUPHELI:
             return "Alt değer ×1.30 üstü (şüpheli, takip)"
-        if cizgi is not None and round(cizgi - 0.5 - gol) == 0 and dk < 30:
-            return "0 gol izinli Alt, 30. dk öncesi"
+        if cizgi is not None and round(cizgi - 0.5 - gol) == 0:      # 17.11.2026: eksi ROI'li kısımlar tersine (Gol olur / Üst)
+            if ng_ok is False:
+                return "TERS: 0 gol izinli Alt, NowGoal maç öncesi verisi yok (−58)"
+            if ng_drift is not None and ng_drift < 0:
+                return "TERS: 0 gol izinli Alt, keskin para favoriden kaçtı (−62)"
+            if dk < ALT0_MIN_DK:
+                return f"TERS: 0 gol izinli Alt, {ALT0_MIN_DK}. dk öncesi (−20.7)"
         return None
     if sec.startswith("Üst") and cizgi is not None:
         need = round(cizgi + 0.5 - gol)
@@ -587,6 +596,59 @@ def iyms_kapat(c, X, now):
         s = c.execute("SELECT sonuc FROM iysinyal WHERE xid=? AND sec=?", (xid, sec[6:])).fetchone()
         if s and s[0]:
             d, g = {"tuttu": ("kazandı", tutar * oran), "yattı": ("kaybetti", 0.0)}.get(s[0], ("iade", tutar))
+            c.execute("UPDATE bahis SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
+
+
+_NGB = {}                    # xid -> (ng_ok, drift) — maç başına bir kez
+
+
+def ng_baglam(x):
+    """NowGoal maç öncesi: (veri var mı, keskin paranın favoriye kayması açılış→son). 17.11.2026"""
+    if x["I"] in _NGB:
+        return _NGB[x["I"]]
+    sonuc = (False, None)
+    try:
+        import nowgoal
+        ko0 = datetime.now(timezone.utc) - timedelta(minutes=x["dk"] + (15 if x["dk"] > 45 else 0))
+        cn = sqlite3.connect(f"file:{nowgoal.DB_FILE}?mode=ro", uri=True, timeout=20)
+        R = cn.execute("SELECT home, away, odds_json, pred_json FROM ng_match WHERE kickoff_utc BETWEEN ? AND ?",
+                       (nowgoal._iso(ko0 - timedelta(minutes=45)), nowgoal._iso(ko0 + timedelta(minutes=45)))).fetchall()
+        cn.close()
+        best = None
+        for h, a, oj, pj in R:
+            s1, s2 = _bz(x["ev"], h or ""), _bz(x["dep"], a or "")
+            if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
+                best = (s1 + s2, oj, pj)
+        if best:
+            O = json.loads(best[1]) if best[1] else {}
+            P = json.loads(best[2]) if best[2] else {}
+            mk = P.get("market") or O.get("sharp_cur") or O.get("cons_cur")
+            ds = O.get("drift_sharp") or O.get("drift_cons")
+            if mk and len(mk) == 3:
+                fav = 0 if mk[0] >= mk[2] else 2
+                sonuc = (True, ds[fav] if ds and len(ds) == 3 else None)
+    except Exception:
+        sonuc = (None, None)                  # okunamadı: kural uygulanmaz
+    if len(_NGB) > 5000:
+        _NGB.clear()
+    _NGB[x["I"]] = sonuc
+    return sonuc
+
+
+def _ters_oran(i, x, cz):
+    """Alt sinyalinin tersi: aynı çizgide iddaa Üst oranı; çizgi skorun hemen üstündeyse 'Gol olur'"""
+    o = ((i["P"].get("au") or {}).get(cz) or {}).get("Üst")
+    if o is None and cz is not None and abs(cz - (x["s1"] + x["s2"] + 0.5)) < 0.01:
+        o = i["P"].get("olur")
+    return o
+
+
+def ters_kapat(c):
+    """TERS kuponları: sinyal yattıysa ters kupon kazandı"""
+    for xid, sec, oran, tutar in c.execute("SELECT xid, sec, oran, tutar FROM bahis WHERE durum='açık' AND sec LIKE 'TERS·%'").fetchall():
+        s = c.execute("SELECT sonuc FROM sinyal WHERE xid=? AND sec=?", (xid, sec[5:])).fetchone()
+        if s and s[0]:
+            d, g = {"yattı": ("kazandı", tutar * oran), "tuttu": ("kaybetti", 0.0)}.get(s[0], ("iade", tutar))
             c.execute("UPDATE bahis SET durum=?, getiri=? WHERE xid=? AND sec=?", (d, round(g, 2), xid, sec))
 
 
@@ -1165,24 +1227,32 @@ def tur():
                 except Exception:
                     of = opf = oL = None
                 # 16.11.2026 kullanıcı: Alt sinyalinin TERSİ — aynı çizgide iddaa'nın o anki Üst oranı (sanal takip, kupon yok)
-                to = ((i["P"].get("au") or {}).get(cz) or {}).get("Üst") if sec.startswith("Alt") and cz is not None else None
-                if to is None and sec.startswith("Alt") and cz is not None and abs(cz - (x["s1"] + x["s2"] + 0.5)) < 0.01:
-                    to = i["P"].get("olur")    # çizgi iddaa'da "Gol olmaz/olur" pazarıyla veriliyor
+                to = _ters_oran(i, x, cz) if sec.startswith("Alt") else None
+                ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
                 c.execute("""INSERT INTO sinyal (xid, sec, iid, at, ev, dep, lig, pazar, cizgi, dk, skor, iddaa, x_oran, adil, deger,
-                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran, o_fav, o_pf, o_L, ters_oran)
-                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?)""",
+                             max_iddaa, max_deger, son_at, sure, v_oran, x_adil, v_adil, ek_sec, ek_oran, o_fav, o_pf, o_L, ters_oran, ng_ok, ng_drift)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?)""",
                           (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], pazar, cz, x["dk"], f"{x['s1']}-{x['s2']}",
                            io, xo[0], round(adil, 3), round(d, 4), io, round(d, 4), at, vo[0],
-                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None, es, eo, of, opf, oL, to))
+                           round(1 / xo[1], 3) if xo[1] else None, round(1 / vo[1], 3) if vo[1] else None, es, eo, of, opf, oL, to,
+                           None if ngo is None else int(ngo), ngd))
             else:
                 ek = int((now - datetime.fromisoformat(r[0])).total_seconds())
                 sure = (r[1] or 0) + (ek if ek <= 3 * SN else 0)
-                if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN and iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz) is None:
-                    _bahis_ac(c, x["I"], sec, io, p, at)
+                if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
+                    ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
+                    kr = iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz, ngo, ngd)
+                    if kr is None:
+                        _bahis_ac(c, x["I"], sec, io, p, at)
+                    elif kr.startswith("TERS"):          # 17.11.2026: eksi ROI'li Alt kısmı tersine — aynı çizgide Gol olur / Üst
+                        to = _ters_oran(i, x, cz)
+                        if to and to > 1.0:
+                            _bahis_ac(c, x["I"], "TERS·" + sec, to, 1 - p, at)
                 c.execute("""UPDATE sinyal SET son_at=?, sure=?, max_iddaa=MAX(max_iddaa, ?), max_deger=MAX(max_deger, ?)
                              WHERE xid=? AND sec=?""", (at, sure, io, round(d, 4), x["I"], sec))
     sonuclandir(c, X, now)
     bahis_kapat(c)
+    ters_kapat(c)
     try:                                       # 16.11.2026: İY/MS istatistik bahisleri
         iyms_tur(c, ciftler, at)
         iyms_kapat(c, X, now)
@@ -1424,6 +1494,10 @@ def get_page_data(gun=None, kaynak="iddaa"):
                      kelly_y=round(100 * b["kelly"], 1), pay_y=round(100 * b["kelly"] * KELLY_PAY, 1),
                      net=round((b["getiri"] or 0) - b["tutar"], 2) if b["durum"] != "açık" else None)
             r["bahis"] = b
+        tb = B.get((r["xid"], "TERS·" + r["sec"]))
+        if tb:
+            tb["net"] = round((tb["getiri"] or 0) - tb["tutar"], 2) if tb["durum"] != "açık" else None
+            r["ters_bahis"] = tb
     G = {}
 
     def ekle(grup, ad, r):
@@ -1438,7 +1512,8 @@ def get_page_data(gun=None, kaynak="iddaa"):
         r["gun"], r["saat"] = t.date().isoformat(), t.strftime("%H:%M")
         r["supheli"] = (r["deger"] or 0) > SUPHELI
         if kaynak not in _SITE:
-            r["kural"] = iddaa_kural(r["sec"], r["iddaa"] or 0, r["deger"], r["dk"] or 0, r["skor"], r["cizgi"])
+            r["kural"] = iddaa_kural(r["sec"], r["iddaa"] or 0, r["deger"], r["dk"] or 0, r["skor"], r["cizgi"],
+                                     None if r.get("ng_ok") is None else bool(r["ng_ok"]), r.get("ng_drift"))
             r["oto"] = oto_etiket(r)
         try:                               # 13.11.2026: fark şu an hâlâ açık mı (son taramada görüldü) — link sadece o zaman gösterilir
             r["simdi"] = (datetime.now(timezone.utc) - datetime.fromisoformat(r["son_at"])).total_seconds() <= 3 * SN
