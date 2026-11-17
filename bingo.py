@@ -108,6 +108,9 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS sinyal (xid INTEGER, sec TEXT, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT, pazar TEXT,
                  cizgi REAL, dk INTEGER, skor TEXT, iddaa REAL, x_oran REAL, adil REAL, deger REAL, max_iddaa REAL, max_deger REAL,
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
+    for tb in ("dsinyal", "ksinyal"):        # 17.11.2026 kullanıcı: Desen canlı + keskin para (1xbet'ten bağımsız) — sadece sinyal, sanal 100 ₺ karne
+        c.execute(f"""CREATE TABLE IF NOT EXISTS {tb} (xid INTEGER, sec TEXT, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT, dk INTEGER,
+                     skor TEXT, oran REAL, esik REAL, tutma REAL, durum TEXT, notu TEXT, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
     c.execute("""CREATE TABLE IF NOT EXISTS mac (xid INTEGER PRIMARY KEY, ev TEXT, dep TEXT, lig TEXT, s1 INTEGER, s2 INTEGER, dk INTEGER,
                  son_at TEXT, bitti INTEGER DEFAULT 0)""")
     for k in ("v_oran", "x_adil", "v_adil", "ek_oran", "o_fav", "o_pf", "o_L", "ters_oran", "ng_ok", "ng_drift"):
@@ -442,6 +445,174 @@ def _iy_oran(iid, takim):
         return None, "iddaa'da canlı İY sonucu pazarı yok"
     st, o = sorted(adaylar)[0]
     return o.get(takim), f"İY pazarı st={st}"
+
+
+# ---------- 17.11.2026 kullanıcı onayı: DESEN CANLI + KESKİN PARA (1xbet oranına bağlı değil; skor/dakika canlı akıştan) ----------
+# 7M arşivi 10.308 maç (desen_canli.py): Desen'in maç öncesi seçtiği maçlarda canlı durumda tutma % (n). Eşik = 1.10 / tutma, en az 1.50.
+DESEN_CANLI = {
+    "MS 0.5 ÜST": ("gol", {0: {30: (89.4, 529), 45: (81.3, 300), 60: (69.4, 183), 70: (59.1, 137)}}),
+    "MS 1.5 ÜST": ("gol", {0: {30: (66.9, 245), 45: (50.4, 141), 60: (29.3, 82), 70: (20.9, 67)},
+                           1: {30: (96.3, 301), 45: (89.3, 206), 60: (75.4, 138), 70: (62.9, 105)}}),
+    "MS 2.5 ÜST": ("gol", {0: {30: (49.4, 85)}, 1: {30: (82.5, 120), 45: (66.2, 80)},
+                           2: {30: (96.4, 84), 45: (92.5, 80), 60: (82.6, 69), 70: (70.5, 61)}}),
+    "Favori kazanır": ("fav", {0: {30: (71.2, 344), 45: (65.9, 232), 60: (56.0, 182), 70: (51.2, 162)},
+                               -1: {30: (56.2, 80), 45: (37.2, 86), 60: (25.0, 80), 70: (13.5, 74)}}),
+    "Favori kaybetmez (1X/X2)": ("fav", {0: {30: (90.4, 572), 45: (90.6, 405), 60: (92.4, 314), 70: (93.3, 269)},
+                                         -1: {30: (71.9, 121), 45: (59.4, 133), 60: (47.3, 131), 70: (35.0, 120)}}),
+}
+DC_DK, DC_PAY, DC_MIN = (25, 70), 1.10, 1.50
+_DSN = {"t": 0, "L": []}
+_CS = {}
+
+
+def _desen_maclar():
+    """Desen'in son 3 saatte başlamış seçimli maçları (data/desen.db, salt okunur) — 60 sn önbellek"""
+    if time.time() - _DSN["t"] < 60:
+        return _DSN["L"]
+    L = []
+    try:
+        import desen_tab
+        cn = sqlite3.connect(f"file:{desen_tab.DB}?mode=ro", uri=True, timeout=10)
+        now = datetime.now(timezone.utc)
+        for ko, ev, dep, fav, sec in cn.execute("SELECT ko, ev, dep, fav, secim FROM mac WHERE ko BETWEEN ? AND ? AND secim NOT IN ('{}', '')",
+                                                ((now - timedelta(hours=3)).isoformat()[:19], (now + timedelta(minutes=10)).isoformat()[:19])):
+            S = json.loads(sec or "{}")
+            if any(k in DESEN_CANLI for k in S):
+                L.append({"ko": datetime.fromisoformat(ko).replace(tzinfo=timezone.utc), "ev": ev, "dep": dep, "fav": fav, "S": S})
+        cn.close()
+    except Exception as e:
+        _last["desen_hata"] = f"{type(e).__name__}: {str(e)[:100]}"
+    _DSN.update(t=time.time(), L=L)
+    return L
+
+
+def _desen_esle(x, L):
+    ko0 = datetime.now(timezone.utc) - timedelta(minutes=x["dk"] + (15 if x["dk"] > 45 else 0))
+    best = None
+    for m in L:
+        if abs((m["ko"] - ko0).total_seconds()) > 45 * 60:
+            continue
+        s1, s2 = _bz(x["ev"], m["ev"]), _bz(x["dep"], m["dep"])
+        if s1 >= 0.5 and s2 >= 0.5 and (not best or s1 + s2 > best[0]):
+            best = (s1 + s2, m)
+    return best[1] if best else None
+
+
+def _dc_tutma(T, dk):
+    """dakikanın iki yanındaki satırdan düşük olanı (temkinli) -> (tutma %, n) ya da None"""
+    if not (DC_DK[0] <= dk <= DC_DK[1]):
+        return None
+    lo = [m for m in T if m <= dk]
+    hi = [m for m in T if m >= dk]
+    adaylar = [T[max(lo)]] if lo else []
+    if hi:
+        adaylar.append(T[min(hi)])
+    return min(adaylar) if adaylar else None
+
+
+def _cs_oran(iid, k):
+    """iddaa maç detayından canlı Çifte Şans oranı (k '1X'/'X2'); pazar tipi bilinmediği için adlardan bulunur, en küçük st"""
+    z = _CS.get(iid)
+    if not z or time.time() - z[0] > 20:
+        try:
+            j = _get(f"https://sportsbookv2.iddaa.com/sportsbook/event/{iid}")
+            A = []
+            for m in (j.get("data") or {}).get("m") or []:
+                o = {str(x.get("n")).replace("-", "").replace(" ", ""): x.get("odd") for x in m.get("o") or [] if x.get("odd")}
+                if {"1X", "X2"} <= set(o) and m.get("s") == 1 and m.get("sov") in (None, ""):
+                    A.append((m.get("st"), o))
+            z = (time.time(), sorted(A, key=lambda a: a[0] or 0)[0] if A else None)
+        except Exception:
+            z = (time.time(), None)
+        _CS[iid] = z
+        if len(_CS) > 500:
+            _CS.clear()
+    if not z[1]:
+        return None, None
+    return z[1][1].get(k), z[1][0]
+
+
+def _ek_kaydet(c, tb, i, x, sec, oran, esik, tutma, durum, notu, at):
+    c.execute(f"""INSERT OR IGNORE INTO {tb} (xid, sec, iid, at, ev, dep, lig, dk, skor, oran, esik, tutma, durum, notu)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+              (x["I"], sec, i["i"], at, x["ev"], x["dep"], x["lig"], x["dk"], f"{x['s1']}-{x['s2']}", oran, esik, tutma, durum, notu))
+
+
+def desen_canli_tur(c, ciftler, at):
+    L = _desen_maclar()
+    n_es = 0
+    for i, x in ciftler:
+        if not L or time.time() - _skor.get(x["I"], (None, 0))[1] < GOL_BEKLE:
+            continue
+        m = _desen_esle(x, L)
+        if not m:
+            continue
+        n_es += 1
+        gol, P = x["s1"] + x["s2"], i["P"]
+        for s in m["S"]:
+            if s not in DESEN_CANLI:
+                continue
+            tur, TT = DESEN_CANLI[s]
+            if tur == "gol":
+                T = TT.get(gol)
+                L_ = float(s.split()[1])
+                sec = f"Üst {L_}"
+                durum = f"{gol} gol"
+            else:
+                if m["fav"] not in (0, 2):
+                    continue
+                ff = (x["s1"] - x["s2"]) if m["fav"] == 0 else (x["s2"] - x["s1"])
+                T = TT.get(0 if ff == 0 else -1 if ff < 0 else None)
+                taraf = "1" if m["fav"] == 0 else "2"
+                sec = (f"MS {taraf}" if s == "Favori kazanır" else f"ÇŞ {'1X' if taraf == '1' else 'X2'}")
+                durum = "favori berabere" if ff == 0 else "favori geride"
+            if not T:
+                continue
+            tm = _dc_tutma(T, x["dk"])
+            if not tm:
+                continue
+            esik = max(DC_MIN, round(DC_PAY * 100 / tm[0], 2))
+            if c.execute("SELECT 1 FROM dsinyal WHERE xid=? AND sec=?", (x["I"], sec)).fetchone():
+                continue
+            if tur == "gol":
+                o = ((P.get("au") or {}).get(L_) or {}).get("Üst")
+                if o is None and abs(L_ - (gol + 0.5)) < 0.01:
+                    o = P.get("olur")
+            elif sec.startswith("MS"):
+                o = (P.get("ms") or {}).get(taraf)
+            else:
+                o, _st = _cs_oran(i["i"], sec[3:])
+            if not o or o < esik:
+                continue
+            if tur == "fav" and kirmizi_kart(x, taraf, i):
+                continue
+            _ek_kaydet(c, "dsinyal", i, x, sec, o, esik, tm[0], durum,
+                       f"Desen: {s} · arşiv bu durumda %{tm[0]} (n{tm[1]}) · başabaş {round(100 / tm[0], 2)}", at)
+    _last["desen_canli"] = f"{len(L)} Desen maçı, {n_es} canlı eşleşme"
+
+
+KS_DK, KS_MIN = (10, 80), 1.50
+
+
+def keskin_tur(c, ciftler, at):
+    """Takım canlıda önde + maç öncesi keskin para (NowGoal açılış→son) takıma ≥2p → MS sinyali (oran ≥ 1.50, kırmızı kart yok)"""
+    n = 0
+    for i, x in ciftler:
+        if not (KS_DK[0] <= x["dk"] <= KS_DK[1]) or x["s1"] == x["s2"] or time.time() - _skor.get(x["I"], (None, 0))[1] < GOL_BEKLE:
+            continue
+        taraf = "1" if x["s1"] > x["s2"] else "2"
+        sec = f"MS {taraf}"
+        if c.execute("SELECT 1 FROM ksinyal WHERE xid=?", (x["I"],)).fetchone():
+            continue
+        kt = keskin_takim(x, sec)
+        if kt is None or kt < KESKIN_ONDE:
+            continue
+        n += 1
+        o = (i["P"].get("ms") or {}).get(taraf)
+        if not o or o < KS_MIN or kirmizi_kart(x, taraf, i):
+            continue
+        _ek_kaydet(c, "ksinyal", i, x, sec, o, KS_MIN, None, f"{x['s1']}-{x['s2']} önde", f"💰 keskin para takıma +{round(100 * kt, 1)}p (NowGoal açılış→son)", at)
+    _last["keskin"] = f"{n} maçta önde takım + keskin para"
 
 
 _M7K = {"t": 0, "L": []}
@@ -1299,6 +1470,13 @@ def tur():
     sonuclandir(c, X, now)
     bahis_kapat(c)
     ters_kapat(c)
+    for fn, tb in ((desen_canli_tur, "dsinyal"), (keskin_tur, "ksinyal")):     # 17.11.2026: Desen canlı + keskin para sinyalleri
+        try:
+            fn(c, ciftler, at)
+            sonuclandir(c, X, now, tb)
+            _last[f"{tb}_hata"] = None
+        except Exception as e:
+            _last[f"{tb}_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     try:                                       # 16.11.2026: İY/MS istatistik bahisleri
         iyms_tur(c, ciftler, at)
         iyms_kapat(c, X, now)
@@ -1459,6 +1637,8 @@ def site_tur(c, X, VF, V, now, at, site):
 
 
 def _kazandi(sec, s1, s2):
+    if sec.startswith("ÇŞ "):
+        return (s1 >= s2) if sec[3:] == "1X" else (s2 >= s1)
     if sec.startswith("MS "):
         k = sec[3:]
         return (s1 > s2) if k == "1" else (s1 == s2) if k == "X" else (s2 > s1)
@@ -1628,6 +1808,26 @@ def get_page_data(gun=None, kaynak="iddaa"):
                        "kupon": {"n": len(BY), "acik": sum(1 for b in BY.values() if b["durum"] == "açık"),
                                  "kar": round(sum((b["getiri"] or 0) - b["tutar"] for b in BK), 2)},
                        "hata": _last.get("iyms_hata"), "st": _last.get("iy_pazar_st")}
+        for tb, ad in (("dsinyal", "desen"), ("ksinyal", "keskin")):        # 17.11.2026
+            try:
+                c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+                c.row_factory = sqlite3.Row
+                Z = [dict(r) for r in c.execute(f"SELECT * FROM {tb} ORDER BY at DESC LIMIT 300")]
+                c.close()
+            except sqlite3.OperationalError:
+                Z = []
+            K = {}
+            for r in Z:
+                r["saat"] = datetime.fromisoformat(r["at"]).astimezone(TR).strftime("%d.%m %H:%M")
+                r["net"] = (round(100 * (r["oran"] - 1)) if r["sonuc"] == "tuttu" else -100) if r["sonuc"] in ("tuttu", "yattı") else None
+                if r["net"] is not None:
+                    for k in ("tümü", r["sec"].split()[0] + " · " + (r["durum"] or "")):
+                        g = K.setdefault(k, [0, 0, 0])
+                        g[0] += 1
+                        g[1] += r["sonuc"] == "tuttu"
+                        g[2] += r["net"]
+            out[ad] = {"L": Z[:40], "karne": [{"ad": k, "n": v[0], "w": v[1], "net": v[2], "roi": round(v[2] / v[0], 1)} for k, v in K.items()],
+                       "log": _last.get("desen_canli" if ad == "desen" else "keskin"), "hata": _last.get(f"{tb}_hata")}
     return out
 
 

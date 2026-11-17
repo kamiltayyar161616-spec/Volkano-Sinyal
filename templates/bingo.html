@@ -47,6 +47,20 @@
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok — ilk BINGO sinyalinde otomatik açılacak.</div>{% endfor %}
 {% else %}
+{% for blk, bas, alt in [(d.desen, '🎯 DESEN CANLI (1xbet\'ten bağımsız · sadece sinyal, sanal 100 ₺ karne)', 'Desen\'in maç öncesi seçtiği maçta canlı durum (ör. 60\'ta 0-0, favori berabere/geride) arşivde güçlüyse ve iddaa oranı başabaşın %10 üstündeyse (en az 1.50) sinyal · 25–70. dk · gol sonrası 90 sn yok · favori seçimlerinde kırmızı kart varsa yok'), (d.keskin, '💰 KESKİN PARA (1xbet\'ten bağımsız · sadece sinyal, sanal 100 ₺ karne)', 'Takım canlıda önde + NowGoal maç öncesi keskin para (açılış→son) takıma ≥ 2 puan → MS takım · oran ≥ 1.50 · 10–80. dk · kırmızı kart varsa yok')] if blk and not V %}
+<h2 class="section">{{ bas }}</h2>
+<div class="section-sub">{{ alt }}{% if blk.log %} · {{ blk.log }}{% endif %}{% if blk.hata %} · ⚠ {{ blk.hata }}{% endif %}</div>
+{% if blk.karne %}<table class="tt" style="margin:0 16px"><tr><th></th><th>n</th><th>tuttu</th><th>net ₺</th><th>ROI</th></tr>{% for k in blk.karne %}<tr><td>{{ k.ad }}</td><td>{{ k.n }}</td><td>{{ k.w }}</td><td>{{ '%+d'|format(k.net) }}</td><td>{{ roi(k.roi) }}</td></tr>{% endfor %}</table>{% endif %}
+{% for x in blk.L[:15] %}
+<div class="kc {{ 'ok' if x.sonuc == 'tuttu' else 'no' if x.sonuc == 'yattı' else 'canli' }}">
+  <div class="r1"><span class="dk">{{ x.dk }}'</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span><span class="sn {{ 'p' if x.sonuc == 'tuttu' else 'n' if x.sonuc == 'yattı' else '' }}">{{ x.sonuc or 'bekliyor' }}{% if x.final %} · {{ x.final }}{% endif %}</span></div>
+  <div class="r2">{{ x.saat }} · {{ x.lig or '' }} · o an {{ x.skor }} · {{ x.durum }}</div>
+  <div class="r3"><span class="sec">{{ x.sec }}</span><span class="o">iddaa <b>{{ x.oran }}</b></span><span class="o">eşik {{ x.esik }}</span>{% if x.net is not none %}<span class="o {{ 'p' if x.net > 0 else 'n' }}">{{ '%+d'|format(x.net) }} ₺</span>{% endif %}</div>
+  <div class="r2 meta" style="margin-top:4px">{{ x.notu }}</div>
+  {% if x.iid and not x.sonuc %}<div class="r3" style="margin-top:6px"><a class="chip on" style="margin:0" href="https://www.iddaa.com/program/futbol/mac-detay/2/{{ x.iid }}/tum-oranlar" target="_blank">📲 iddaa'da aç → {{ x.sec }}</a></div>{% endif %}
+</div>
+{% else %}<div class="section-sub">Henüz sinyal yok.</div>{% endfor %}
+{% endfor %}
 {% if d.iyms and not V %}
 <h2 class="section">🧮 İY/MS İSTATİSTİK BAHİSLERİ (Oto İY/MS tahmini · 1xbet karşılaştırması yok · 100 ₺, iddaa kasasından)</h2>
 <div class="section-sub">Maç başında Oto'nun İY/MS tahmini olan takıma <b>İY</b> · İY tutmazsa ve takım yenik değilse <b>2. yarı başında MS</b> — değer eşiği: maç öncesi favori ihtimali %65+ → oran ≥ 1.70, %55–65 → ≥ 1.90, diğer → ≥ 2.55 · İY'de yenikse <b>70'</b>de (70–75') berabereyse MS · 70'te hâlâ yenikse <b>80'</b>de (80–85') berabereyse MS — 70'/80': <b>📊 canlı istatistik baskısı takımdaysa</b> (korner / isabetli şut / şut payı / tehlikeli atak), oran ≥ 1.50 · <b>takım kırmızı kart gördüyse MS bahsi yok</b> 🟥.
