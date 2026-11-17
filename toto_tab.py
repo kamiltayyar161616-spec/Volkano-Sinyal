@@ -554,51 +554,32 @@ def toto_hafta(hafta=None):
 
 
 CANLI_KAL_DK = 120          # baslayan mac bu kadar dk listede kalir
-AS_URL = "https://apiv2.allsportsapi.com/football/?met=Livescore&APIkey={k}"
-AS_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "allsports_key.txt")
-CANLI_TTL = 60              # sn: canli skor en fazla bu siklikla cekilir (sayfa acildikca)
+CANLI_TTL = 60              # sn: 1xbet yedeği en fazla bu sıklıkla çekilir (sayfa açıldıkça)
 _canli = {"at": 0.0, "maclar": [], "hata": None}
 
 
-def _as_key():
-    try:
-        k = open(AS_KEY_FILE).read().strip()
-        if k:
-            return k
-    except OSError:
-        pass
-    return os.environ.get("ALLSPORTS_API_KEY", "").strip()
-
-
 def canli_skorlar():
-    """7M (m7.py) canli skor; yoksa AllSportsAPI Livescore -> [{ev, dep, skor, dk, iy}] (60 sn onbellek)."""
+    """Canlı skor/dakika SAHA'nın kendi veri akışlarından -> [{ev, dep, skor, dk, iy}].
+    17.11.2026 kullanıcı: AllSportsAPI tamamen kaldırıldı. Önce 7M (m7.py), 7M boşsa 1xbet canlı (Bingo'nun kullandığı LiveFeed)."""
     try:
         import m7
         L = m7.canli()
     except Exception:
         L = []
-    if L:                                   # 7M canli skor (AllSportsAPI yerine), yoksa API'ye duser
+    if L:
         _canli["hata"] = None
         return L
     if time.time() - _canli["at"] < CANLI_TTL:
         return _canli["maclar"]
     _canli["at"] = time.time()
-    k = _as_key()
-    if not k:
-        _canli["hata"] = "AllSportsAPI anahtari yok"
-        return []
     try:
-        req = urllib.request.Request(AS_URL.format(k=k), headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            js = json.loads(r.read().decode("utf-8", errors="replace"))
-        out = []
-        for e in js.get("result") or []:
-            out.append({"ev": e.get("event_home_team") or "", "dep": e.get("event_away_team") or "",
-                        "skor": (e.get("event_final_result") or "").replace(" ", ""), "dk": e.get("event_status") or "",
-                        "iy": (e.get("event_halftime_result") or "").replace(" ", "")})
-        _canli["maclar"], _canli["hata"] = out, (None if js.get("success") in (1, "1", True) else str(js.get("error") or js)[:120])
+        import bingo
+        X = bingo.xbet()
+        _canli["maclar"] = [{"ev": x["ev"] or "", "dep": x["dep"] or "", "skor": f"{x['s1']}-{x['s2']}", "dk": str(x["dk"]), "iy": ""}
+                            for x in X.values()]
+        _canli["hata"] = None if _canli["maclar"] else "7M ve 1xbet canlı listesi boş"
     except Exception as ex:
-        _canli["hata"] = str(ex)[:120]
+        _canli["hata"] = f"canlı skor alınamadı (7M boş, 1xbet: {str(ex)[:100]})"
     return _canli["maclar"]
 
 
