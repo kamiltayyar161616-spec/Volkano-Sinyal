@@ -34,7 +34,8 @@ def _hesap():
                                        "kupon": "SELECT * FROM kupon ORDER BY at DESC LIMIT 1"})
     v["avci"] = _ornek(avci.DB, {"say": "SELECT COUNT(*) n FROM sinyal", "ornek": "SELECT * FROM sinyal ORDER BY at DESC LIMIT 1"})
     v["kars"] = _ornek(iyms_kars.DB, {"say": "SELECT COUNT(*) n FROM k", "ornek": "SELECT * FROM k WHERE idd_son5 IS NOT NULL ORDER BY ko DESC LIMIT 1"})
-    v["vk"] = _ornek(iyms_vk.DB, {"say": "SELECT (SELECT COUNT(*) FROM acilis) a, (SELECT COUNT(*) FROM son5) s", "ornek": "SELECT * FROM acilis ORDER BY ko DESC LIMIT 1"})
+    import oto_tahmin as O
+    v["vk"] = _ornek(O.SERI_DB, {"say": "SELECT (SELECT COUNT(*) FROM acilis) a, (SELECT COUNT(*) FROM son5) s", "ornek": "SELECT * FROM acilis ORDER BY ko DESC LIMIT 1"})
     v["av"] = _ornek(iyms_av.DB, {"say": "SELECT COUNT(*) n FROM m", "ornek": "SELECT * FROM m WHERE a5 IS NOT NULL ORDER BY ko DESC LIMIT 1"})
     v["desen"] = _ornek(desen_tab.DB, {"say": "SELECT COUNT(*) n FROM mac", "ornek": "SELECT * FROM mac WHERE skor IS NOT NULL ORDER BY ko DESC LIMIT 1"})
     v["bingo_say"] = _ornek(bingo.DB, {"t": "SELECT name, (SELECT 1) FROM sqlite_master WHERE type='table'"})
