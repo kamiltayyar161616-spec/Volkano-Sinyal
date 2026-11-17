@@ -1,6 +1,7 @@
 """Geçici, salt okunur (17.11.2026): İY/MS iddaa–V verisi — bekleyen maçlardaki 3'lü seçenek grupları
 (para giren / para çıkan / en yakın / en uzak) geçmişte AYNEN çıktığında maçlar nasıl bitmiş: İY/MS, skor, alt/üst.
 Sekmeye ve kayıtlara dokunmaz. Çalıştır: python3 iyms_ayni3.py"""
+import sys
 from collections import defaultdict
 
 import iyms_kars as K
@@ -48,9 +49,11 @@ def cakisma():
 
 
 def main():
-    import sys
     if "--cakisma" in sys.argv:
         return cakisma()
+    global KAT
+    if "--para" in sys.argv:              # sadece en çok para giren 3'lü (sıra fark etmez; sırası da aynıysa ⇄ işareti)
+        KAT = KAT[:1]
     M = K.hesap()["maclar"]
     biten = [m for m in M if m["sonuc"] and m["skor"]]
     bekleyen = sorted([m for m in M if not m["sonuc"]], key=lambda m: m["ko"])
@@ -80,8 +83,10 @@ def main():
             print(f"  {ad} {'·'.join(k)}: geçmişte {len(L)} maç · 3'lüden biri çıktı {h}/{len(L)} (%{100 * h / len(L):.0f})"
                   f" · Ü1.5 %{100 * sum(g > 1.5 for g in G) / len(G):.0f} · Ü2.5 %{100 * sum(g > 2.5 for g in G) / len(G):.0f}"
                   f" · çıkan İY/MS: " + ", ".join(f"{s} {n}" for s, n in sorted(S.items(), key=lambda z: -z[1])))
-            for x in L[:12]:
-                print(satir(x, k))
+            sira = [s["sec"] for s in f(m)]
+            for x in L[:30]:
+                ayni = [s["sec"] for s in f(x)] == sira
+                print(satir(x, k) + f"   [{' '.join(s['sec'] + ' ' + format(s['d'], '+d') + '%' for s in f(x))}]" + ("  ⇄ sıra da aynı" if ayni else ""))
         print()
     print("=== En sık tekrar eden 3'lüler (tüm biten maçlar, en az 4 maç)")
     for ad, _ in KAT:
