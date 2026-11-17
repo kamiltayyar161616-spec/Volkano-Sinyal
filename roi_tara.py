@@ -46,11 +46,16 @@ def ozellik(r, gec=False):
         F["düşüş"] = kova(r.get("dusus"), [0.05, 0.10, 0.20])
     else:
         F["değer"] = kova(r.get("deger"), [1.08, 1.12, 1.20, 1.30])
-        F["açık kalma"] = kova(r.get("sure"), [10, 30, 60, 180], ["<10 sn", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+"])
+        if not OYNA:                 # giriş anında bilinmez — oynanabilir taramada kullanılmaz
+            F["açık kalma"] = kova(r.get("sure"), [10, 30, 60, 180], ["<10 sn", "10–30 sn", "30–60 sn", "1–3 dk", "3 dk+"])
     return F
 
 
-def yukle(c, desen, gec=False):
+import sys
+OYNA = "--oyna" in sys.argv        # sadece kupon açılabilecek sinyaller: iddaa ≥ 50 sn, Volkano/Admiral ≥ 20 sn açık kaldıysa
+
+
+def yukle(c, desen, gec=False, min_sn=0):
     tabs = [t for (t,) in c.execute("SELECT name FROM sqlite_master WHERE type='table'") if t == desen or t.startswith(desen + "_eski")]
     R = []
     for tb in tabs:
@@ -60,6 +65,8 @@ def yukle(c, desen, gec=False):
             continue
         for r in c.execute(f"SELECT * FROM {tb} WHERE sonuc IN ('tuttu','yattı') AND {oran} > 1"):
             r = dict(r)
+            if OYNA and min_sn and (r.get("sure") or 0) < min_sn:
+                continue
             F = ozellik(r, gec)
             if F:
                 net = (r[oran] - 1) if r["sonuc"] == "tuttu" else -1.0
@@ -115,9 +122,10 @@ def tara(ad, R):
 def main():
     c = sqlite3.connect(f"file:{B.DB}?mode=ro", uri=True)
     c.row_factory = sqlite3.Row
-    for ad, desen, gec in (("iddaa (1xbet → iddaa)", "sinyal", False), ("VOLKANO", "vsinyal", False),
-                           ("ADMIRAL", "asinyal", False), ("75+ 1xbet düşüş", "gsinyal", True)):
-        R, tabs = yukle(c, desen, gec)
+    for ad, desen, gec, sn in (("iddaa (1xbet → iddaa)", "sinyal", False, 50), ("VOLKANO", "vsinyal", False, 20),
+                               ("ADMIRAL", "asinyal", False, 20), ("75+ 1xbet düşüş", "gsinyal", True, 0)):
+        R, tabs = yukle(c, desen, gec, sn)
+        ad += " · SADECE OYNANABİLİR" if OYNA else ""
         print(f"\n[{ad}] tablolar: {', '.join(tabs)}")
         tara(ad, R)
     c.close()
