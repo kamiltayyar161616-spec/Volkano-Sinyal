@@ -49,7 +49,7 @@
 {% else %}
 {% if d.iyms and not V %}
 <h2 class="section">🧮 İY/MS İSTATİSTİK BAHİSLERİ (Oto İY/MS tahmini · 1xbet karşılaştırması yok · 100 ₺, iddaa kasasından)</h2>
-<div class="section-sub">Maç başında Oto'nun İY/MS tahmini olan takıma <b>İY</b> · İY tutmazsa ve takım yenik değilse <b>2. yarı başında MS</b> — değer eşiği: maç öncesi favori ihtimali %65+ → oran ≥ 1.70, %55–65 → ≥ 1.90, diğer → ≥ 2.55 · İY'de yenikse <b>70'</b>de berabereyse MS · 70'te hâlâ yenikse <b>80'</b>de berabereyse MS · <b>takım kırmızı kart gördüyse MS bahsi yok</b> 🟥.
+<div class="section-sub">Maç başında Oto'nun İY/MS tahmini olan takıma <b>İY</b> · İY tutmazsa ve takım yenik değilse <b>2. yarı başında MS</b> — değer eşiği: maç öncesi favori ihtimali %65+ → oran ≥ 1.70, %55–65 → ≥ 1.90, diğer → ≥ 2.55 · İY'de yenikse <b>70'</b>de berabereyse MS (eşik: %65+ → 2.20, %55–65 → 2.90, %45–55 → 3.40, %35–45 → 5.05, altı → 7.20) · 70'te hâlâ yenikse <b>80'</b>de berabereyse MS (2.80 / 3.90 / 4.80 / 6.50 / 9.10) · <b>takım kırmızı kart gördüyse MS bahsi yok</b> 🟥.
  Kupon: {{ d.iyms.kupon.n }} ({{ d.iyms.kupon.acik }} açık) · kâr {{ '%+.2f'|format(d.iyms.kupon.kar) }} ₺{% if d.iyms.hata %} · ⚠ {{ d.iyms.hata }}{% endif %}</div>
 {% if d.iyms.karne %}<table class="tt" style="margin:0 16px"><tr><th></th><th>n</th><th>tuttu</th><th>ROI</th></tr>{% for k in d.iyms.karne %}<tr><td>{{ k.ad }}</td><td>{{ k.n }}</td><td>{{ k.w }}</td><td>{{ roi(k.roi) }}</td></tr>{% endfor %}</table>{% endif %}
 {% for x in d.iyms.L[:20] %}
