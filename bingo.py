@@ -188,6 +188,18 @@ def db():
         c.commit()
         c.close()
         return db()
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='sinyal_sifir_1811'").fetchone() and \
+            c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_sifir_1711'").fetchone():
+        # 18.11.2026 kullanıcı: iddaa sinyalleri de sıfır — sinyal, İY/MS, Desen canlı arşive (*_eski9); kupon sıfırlaması ayrıca
+        c.execute("CREATE TABLE sinyal_sifir_1811 (at TEXT)")
+        c.execute("INSERT INTO sinyal_sifir_1811 VALUES (datetime('now'))")
+        for tb in ("sinyal", "iysinyal", "iyplan", "dsinyal", "ksinyal"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (tb,)).fetchone():
+                c.execute(f"DROP TABLE IF EXISTS {tb}_eski9")
+                c.execute(f"ALTER TABLE {tb} RENAME TO {tb}_eski9")
+        c.commit()
+        c.close()
+        return db()
     if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kupon_sifir_1811'").fetchone() and \
             c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_sifir_1711'").fetchone():
         # 18.11.2026 kullanıcı: iddaa kasası ve kupon geçmişi sıfır — 5.000 ₺, her kupon 50 ₺ (sinyaller kalır)
