@@ -64,7 +64,7 @@ KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 1
 # eski: 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
-SIRA = ("Tümü", "Kural (16.11)", "Ek takip (16.11)", "Maç öncesi (16.11)", "Ters: Alt yerine Üst (16.11)", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
+SIRA = ("Kupon (kasa)", "Tümü", "Kural (16.11)", "Ek takip (16.11)", "Maç öncesi (16.11)", "Ters: Alt yerine Üst (16.11)", "Filtre", "Açık kalma süresi", "Pazar", "oran / adil", "oran", "Dakika", "Skor (Volkano ↔ 1xbet)")
 SUPHELI = 1.30                  # oran/adil bunun ustu: buyuk ihtimalle veri/cizgi hatasi (gercek gecikme degil), bahis iptal riski
 VERGI = 0.12                    # vergili ROI satiri: net kazancin %12si (iyms_analiz ile ayni kural)
 _esle = {}                  # iddaa i -> 1xbet I ("" = yok)
@@ -298,6 +298,18 @@ def _durum(sec, skor):
 
 
 ALT0_MIN_DK = 39      # 17.11.2026 kullanıcı onayı (657 sinyallik büyük analiz): 0 gol izinli Alt 39' öncesi −20.7, sonrası +32.5
+
+
+IDD_SABIT = 100.0       # 18.11.2026 kullanıcı: iddaa kuponu sabit 100 ₺ (yarım Kelly'de kupon başı ~1.000 ₺ gidiyordu)
+
+
+def kupon_var(sec, kr):
+    """18.11.2026 kullanıcı: iddaa ana sinyalinde kupon sadece Üst'e (75. dk sonrası 1 gol gerekenler hariç) ve
+    0 gol izinli Alt'ın TERS'ine (o da Gol olur / Üst). MS ve Alt kuponsuz — sadece karnede."""
+    kr = kr or ""
+    if kr.startswith("TERS"):
+        return True
+    return sec.startswith("Üst") and not kr.startswith("Üst 1 gol daha") and "×1.30 üstü" not in kr
 
 
 def iddaa_kural(sec, oran, deger, dk, skor, cizgi, ng_ok=None, ng_drift=None):
@@ -892,7 +904,7 @@ def _bahis_ac(c, xid, sec, oran, p, at, b_tab="bahis", kat=1.0):
         c.execute(f"INSERT OR IGNORE INTO {b_tab} (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
                   (xid, sec, at, oran, round(p, 4), round(f, 4), t))
         return
-    t = max(MIN_BAHIS, min(MAX_BAHIS * kat, round(k["serbest"] * f * KELLY_PAY * kat / 5) * 5))
+    t = IDD_SABIT                          # 18.11.2026 kullanıcı: sabit 100 ₺ (değer varsa — f > 0)
     if t > k["serbest"]:
         return
     c.execute(f"INSERT OR IGNORE INTO {b_tab} (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,?,?,'açık')",
@@ -1468,10 +1480,9 @@ def tur():
                 if _seri_gun(("sinyal", x["I"], sec), SN) >= OYNA_SN:
                     ngo, ngd = ng_baglam(x) if sec.startswith("Alt") else (None, None)
                     kr = iddaa_kural(sec, io, d, x["dk"], f"{x['s1']}-{x['s2']}", cz, ngo, ngd)
-                    if sec.startswith("MS") or "×1.30 üstü" in (kr or ""):
-                        # 17.11.2026 kullanıcı: ana sinyalde MS kuponu tamamen kapalı (oynanabilir MS 82 sinyal ROI −43) — sadece karnede
-                        pass                                # 17.11.2026 kullanıcı: geride takıma MS (−79.8, n41) ve şüpheli değer ×1.30 üstü (MS −54.8 / Alt −30) — kupon yok, sadece karnede
-                    elif not (kr or "").startswith("TERS"):     # 17.11.2026 kullanıcı: her sinyale kupon — kural sadece etiket (karnede ayrı)
+                    if not kupon_var(sec, kr):
+                        pass                                # 18.11.2026 kullanıcı: sadece Üst'e kupon (MS −43, Alt ~0/−59.7, Üst 75+ 1 gol −49.9) — diğerleri sadece karnede
+                    elif not (kr or "").startswith("TERS"):
                         _bahis_ac(c, x["I"], sec, io, p, at)
                     else:          # 17.11.2026: eksi ROI'li Alt kısmı tersine — aynı çizgide Gol olur / Üst
                         to = _ters_oran(i, x, cz)
@@ -1757,6 +1768,7 @@ def get_page_data(gun=None, kaynak="iddaa"):
         if kaynak not in _SITE:
             r["kural"] = iddaa_kural(r["sec"], r["iddaa"] or 0, r["deger"], r["dk"] or 0, r["skor"], r["cizgi"],
                                      None if r.get("ng_ok") is None else bool(r["ng_ok"]), r.get("ng_drift"))
+            r["kupon_yok"] = not kupon_var(r["sec"], r["kural"])
             r["oto"] = oto_etiket(r)
         try:                               # 13.11.2026: fark şu an hâlâ açık mı (son taramada görüldü) — link sadece o zaman gösterilir
             r["simdi"] = (datetime.now(timezone.utc) - datetime.fromisoformat(r["son_at"])).total_seconds() <= 3 * SN
@@ -1765,6 +1777,13 @@ def get_page_data(gun=None, kaynak="iddaa"):
         if r["sonuc"] not in ("tuttu", "yattı"):
             continue
         ekle("Tümü", "tüm sinyaller", r)
+        if kaynak not in _SITE:              # 18.11.2026: kasayla aynı rakam — gerçekten açılan kuponlar (kupon oranıyla)
+            for kb, ters in ((r.get("bahis"), False), (r.get("ters_bahis"), True)):
+                if kb and kb["durum"] in ("kazandı", "kaybetti"):
+                    ekle("Kupon (kasa)", "açılan kuponlar (TERS dahil)", dict(r, iddaa=kb["oran"], sonuc="tuttu" if kb["durum"] == "kazandı" else "yattı"))
+                    ekle("Kupon (kasa)", ("TERS (Alt yerine Gol olur / Üst)" if ters else r["sec"].split()[0]) + " kuponları", dict(r, iddaa=kb["oran"], sonuc="tuttu" if kb["durum"] == "kazandı" else "yattı"))
+            if not r.get("bahis") and not r.get("ters_bahis"):
+                ekle("Kupon (kasa)", "kupon açılmayan sinyaller (sadece karne)", r)
         ekle("Pazar", r["pazar"] if r["pazar"] != "A/Ü" else ("Üst" if r["sec"].startswith("Üst") else "Alt"), r)
         ekle("oran / adil", _kova(r["deger"], (1.10, 1.20, SUPHELI), ("1.05–1.10", "1.10–1.20", "1.20–1.30", "1.30+ ⚠ şüpheli veri")), r)
         if not r["supheli"]:
