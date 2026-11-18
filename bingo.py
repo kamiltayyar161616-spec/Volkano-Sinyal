@@ -60,7 +60,8 @@ def _seri_gun(key, ara):
         for k in [k for k, v in _seri.items() if t - v[1] > 600]:
             del _seri[k]
     return t - bas
-KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 13.11.2026 kullanıcı: kasa 20.000, üst limit yok
+KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 20000.0, 100.0, float("inf"), 0.5   # 13.11.2026 kullanıcı: kasa 20.000, üst limit yok (Volkano/Admiral)
+IDD_KASA0 = 5000.0      # 18.11.2026 kullanıcı: iddaa kasası 5.000 ₺'den yeniden (kupon geçmişi bahis_eski9'da)
 # eski: 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her BINGO sinyaline tek maçlık kupon (p = 1xbet adil)
 BITIS_DK = 85               # akıştan düştüğünde son görülen dakika bu kadarsa maç bitti sayılır
 _last = {"at": None, "log": "", "hata": None, "eslesen": 0, "iddaa": 0, "xbet": 0, "acik": []}
@@ -187,6 +188,17 @@ def db():
         c.commit()
         c.close()
         return db()
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kupon_sifir_1811'").fetchone() and \
+            c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_sifir_1711'").fetchone():
+        # 18.11.2026 kullanıcı: iddaa kasası ve kupon geçmişi sıfır — 5.000 ₺, her kupon 50 ₺ (sinyaller kalır)
+        c.execute("CREATE TABLE kupon_sifir_1811 (at TEXT)")
+        c.execute("INSERT INTO kupon_sifir_1811 VALUES (datetime('now'))")
+        if c.execute("SELECT 1 FROM sqlite_master WHERE name='bahis'").fetchone():
+            c.execute("DROP TABLE IF EXISTS bahis_eski9")
+            c.execute("ALTER TABLE bahis RENAME TO bahis_eski9")
+        c.commit()
+        c.close()
+        return db()
     if not c.execute("SELECT 1 FROM sqlite_master WHERE name='kural_sifir_1711'").fetchone():
         # 17.11.2026 kullanıcı: iddaa sayfası sıfırdan — sinyal, kupon, İY/MS, Desen canlı geçmişi arşive (*_eski8), iddaa kasası 20.000'den
         # (Volkano / Admiral / 75+ sekmelerine dokunulmaz)
@@ -262,7 +274,8 @@ def kasa(c=None, b="bahis"):
     kapat = c is None
     if c is None:
         if not os.path.exists(DB):
-            return {"bakiye": KASA0, "serbest": KASA0, "acik": 0.0, "n": 0, "biten": 0, "kazanan": 0, "kar": 0.0, "roi": None, "oynanan": 0.0}
+            k0 = IDD_KASA0 if b == "bahis" else KASA0
+            return {"bakiye": k0, "serbest": k0, "acik": 0.0, "n": 0, "biten": 0, "kazanan": 0, "kar": 0.0, "roi": None, "oynanan": 0.0}
         c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
     try:
         R = c.execute(f"SELECT tutar, durum, getiri FROM {b}").fetchall()
@@ -274,7 +287,8 @@ def kasa(c=None, b="bahis"):
     kar = sum((r[2] or 0) - r[0] for r in bit)
     acik = sum(r[0] for r in R if r[1] == "açık")
     oyn = sum(r[0] for r in bit if r[1] != "iade")
-    return {"bakiye": round(KASA0 + kar, 2), "serbest": round(KASA0 + kar - acik, 2), "acik": round(acik, 2), "n": len(R),
+    k0 = IDD_KASA0 if b == "bahis" else KASA0
+    return {"bakiye": round(k0 + kar, 2), "serbest": round(k0 + kar - acik, 2), "acik": round(acik, 2), "n": len(R),
             "biten": len(bit), "kazanan": sum(1 for r in bit if r[1] == "kazandı"), "kar": round(kar, 2),
             "roi": round(100 * kar / oyn, 1) if oyn else None, "oynanan": round(oyn, 2)}
 
@@ -300,7 +314,7 @@ def _durum(sec, skor):
 ALT0_MIN_DK = 39      # 17.11.2026 kullanıcı onayı (657 sinyallik büyük analiz): 0 gol izinli Alt 39' öncesi −20.7, sonrası +32.5
 
 
-IDD_SABIT = 100.0       # 18.11.2026 kullanıcı: iddaa kuponu sabit 100 ₺ (yarım Kelly'de kupon başı ~1.000 ₺ gidiyordu)
+IDD_SABIT = 50.0        # 18.11.2026 kullanıcı: iddaa kuponu sabit 50 ₺, kasa 5.000 ₺'den yeniden
 
 
 def kupon_var(sec, kr):
@@ -439,7 +453,7 @@ def oto_etiket(r):
 
 
 # ---------- 16.11.2026 kullanıcı: İY/MS istatistik bahisleri (Oto İY/MS tahmini; 1xbet karşılaştırması yok; iddaa kasasından 100 ₺) ----------
-IYMS_TUTAR, IYMS_MIN_MS = 100.0, 1.50     # 2. yarı başı: iy_esik; 70./80.: istatistik baskısı + oran ≥ 1.50
+IYMS_TUTAR, IYMS_MIN_MS = 50.0, 1.50      # 18.11.2026: İY/MS ve Desen canlı kuponları da 50 ₺     # 2. yarı başı: iy_esik; 70./80.: istatistik baskısı + oran ≥ 1.50
 
 
 def iy_esik(pf):
