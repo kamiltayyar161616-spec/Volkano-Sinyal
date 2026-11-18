@@ -16,6 +16,7 @@ Sonuç: 1xbet canlı skoru. Üst kazanınca hemen, diğerleri maç akıştan dü
 import gzip
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -109,6 +110,9 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS sinyal (xid INTEGER, sec TEXT, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT, pazar TEXT,
                  cizgi REAL, dk INTEGER, skor TEXT, iddaa REAL, x_oran REAL, adil REAL, deger REAL, max_iddaa REAL, max_deger REAL,
                  son_at TEXT, sure INTEGER, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
+    # 18.11.2026 kullanıcı: canlı skor gözlemi (kuponsuz) — 1-1 / 2-0 / 0-2 iken iddaa'nın 2-1 ve 1-2 oranı, 5 dk'lık dilimlerde
+    c.execute("""CREATE TABLE IF NOT EXISTS sgozlem (xid INTEGER, sec TEXT, dkb INTEGER, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT,
+                 dk INTEGER, skor TEXT, fav INTEGER, oran REAL, st INTEGER, pazar TEXT, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec, dkb))""")
     for tb in ("dsinyal", "ksinyal"):        # 17.11.2026 kullanıcı: Desen canlı + keskin para (1xbet'ten bağımsız) — sadece sinyal, sanal 100 ₺ karne
         c.execute(f"""CREATE TABLE IF NOT EXISTS {tb} (xid INTEGER, sec TEXT, iid INTEGER, at TEXT, ev TEXT, dep TEXT, lig TEXT, dk INTEGER,
                      skor TEXT, oran REAL, esik REAL, tutma REAL, durum TEXT, notu TEXT, sonuc TEXT, final TEXT, PRIMARY KEY (xid, sec))""")
@@ -642,6 +646,58 @@ def desen_canli_tur(c, ciftler, at):
                 c.execute("INSERT OR IGNORE INTO bahis (xid, sec, at, oran, p, kelly, tutar, durum) VALUES (?,?,?,?,?,NULL,?,'açık')",
                           (x["I"], "DESEN·" + sec, at, o, round(tm[0] / 100, 4), IYMS_TUTAR))
     _last["desen_canli"] = f"{len(L)} Desen maçı, {n_es} canlı eşleşme"
+
+
+_SK = {}
+
+
+def _sk_oran(iid):
+    """iddaa maç detayından canlı maç skoru pazarı -> ({'2-1': oran, ...}, st, pazar adı); adlardan bulunur, en küçük st (İY skoru değil)"""
+    z = _SK.get(iid)
+    if not z or time.time() - z[0] > 20:
+        try:
+            j = _get(f"https://sportsbookv2.iddaa.com/sportsbook/event/{iid}")
+            A = []
+            for m in (j.get("data") or {}).get("m") or []:
+                o = {}
+                for x in m.get("o") or []:
+                    n = str(x.get("n") or "").replace(":", "-").replace(" ", "")
+                    if re.match(r"^\d+-\d+$", n) and x.get("odd"):
+                        o[n] = x["odd"]
+                if len(o) >= 6 and "2-1" in o and "1-1" in o and m.get("s") == 1:
+                    A.append((m.get("st") or 0, o, str(m.get("n") or m.get("mn") or "")[:40]))
+            z = (time.time(), sorted(A, key=lambda a: a[0])[0] if A else None)
+        except Exception:
+            z = (time.time(), None)
+        _SK[iid] = z
+        if len(_SK) > 500:
+            _SK.clear()
+    return (z[1][1], z[1][0], z[1][2]) if z[1] else ({}, None, None)
+
+
+def skor_gozlem_tur(c, ciftler, at):
+    """kuponsuz gözlem: 50–80. dk, skor 1-1 / 2-0 / 0-2 iken iddaa 'SK 2-1' ve 'SK 1-2' oranı (maç başına 5 dk'da bir)"""
+    n = 0
+    for i, x in ciftler:
+        if not (50 <= x["dk"] <= 80) or (x["s1"], x["s2"]) not in ((1, 1), (2, 0), (0, 2)):
+            continue
+        if time.time() - _skor.get(x["I"], (None, 0))[1] < GOL_BEKLE:
+            continue
+        dkb = x["dk"] // 5 * 5
+        if c.execute("SELECT 1 FROM sgozlem WHERE xid=? AND dkb=? LIMIT 1", (x["I"], dkb)).fetchone():
+            continue
+        O, st, ad = _sk_oran(i["i"])
+        try:
+            fav = oto_baglam(x)[0]
+        except Exception:
+            fav = None
+        for sec in ("SK 2-1", "SK 1-2"):
+            c.execute("""INSERT OR IGNORE INTO sgozlem (xid, sec, dkb, iid, at, ev, dep, lig, dk, skor, fav, oran, st, pazar)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (x["I"], sec, dkb, i["i"], at, x["ev"], x["dep"], x["lig"], x["dk"], f"{x['s1']}-{x['s2']}", fav,
+                       O.get(sec[3:]), st, ad))
+        n += 1
+    _last["skor_gozlem"] = f"{n} yeni gözlem"
 
 
 KS_DK, KS_MIN = (10, 80), 1.50
@@ -1519,6 +1575,12 @@ def tur():
     sonuclandir(c, X, now)
     bahis_kapat(c)
     ters_kapat(c)
+    try:                                       # 18.11.2026: canlı skor gözlemi (kuponsuz)
+        skor_gozlem_tur(c, ciftler, at)
+        sonuclandir(c, X, now, "sgozlem")
+        _last["sgozlem_hata"] = None
+    except Exception as e:
+        _last["sgozlem_hata"] = f"{type(e).__name__}: {str(e)[:150]}"
     for fn, tb in ((desen_canli_tur, "dsinyal"),):     # 17.11.2026: Desen canlı (keskin para bölümü aynı gün kaldırıldı — 7M testi: değer yok)
         try:
             fn(c, ciftler, at)
@@ -1691,6 +1753,9 @@ def site_tur(c, X, VF, V, now, at, site):
 
 
 def _kazandi(sec, s1, s2):
+    if sec.startswith("SK "):
+        a, b = sec[3:].split("-")
+        return (s1, s2) == (int(a), int(b))
     if sec.startswith("ÇŞ "):
         return (s1 >= s2) if sec[3:] == "1X" else (s2 >= s1)
     if sec.startswith("MS "):
