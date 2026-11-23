@@ -171,6 +171,21 @@ def _komsu(h):
     return eklenen
 
 
+def _yanlis_esles(h):
+    """iddaa maç saati ile NowGoal başlama saati 3 saatten fazla tutmuyorsa eşleşme yanlıştır (ör. 'Sporting Lizbon - Manchester
+    United' → 'Samaleswari Sporting Club - FC Bengaluru United'): eşleşme ve ona bağlı oran alanları silinir, gün gün yeniden eşleşir"""
+    k = 0
+    for m in h["maclar"]:
+        if not m.get("mid") or m.get("elle"):
+            continue
+        t, ko = _ko_utc((m.get("iddaa") or {}).get("tarih")), _ko_utc(m.get("ko") or "")
+        if t and ko and abs((t - ko).total_seconds()) > 3 * 3600:
+            for a in ("mid", "ng", "ko", "simdi", "pin", "m7", "simdi_at", "ilk", "son"):
+                m.pop(a, None)
+            k += 1
+    return k
+
+
 def _ko_utc(s):
     try:
         t = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
@@ -254,6 +269,9 @@ def tur():
             m["iddaa"] = {"no": e.get("eventNo"), "ad": e.get("eventName"), "lig": e.get("competitionName"), "tarih": e.get("eventDate"),
                           "yuzde": [e.get("homePercentage"), e.get("drawPercentage"), e.get("awayPercentage")]}
             degisti |= _sonuc_yaz(m, e)
+        k = _yanlis_esles(h)
+        if k:
+            log.append(f"{ad}: saati tutmayan {k} yanlış eşleşme kaldırıldı")
         n = _esle_ek(h)
         if n:
             log.append(f"{ad}: ülke adı çevirisiyle +{n} eşleşme")
@@ -276,6 +294,19 @@ def tur():
         if not x.get("devre") and mm:
             x["devre"] = int(mm.group(1)) + FARK
             degisti = True
+    # 23.11.2026: önceki 2 devrede eşleşmesi eksik kalan maçlar (www.nowgoal engeli sırasında oynananlar) — ad goaloo'dan, kayıt için
+    for x in sorted(H.values(), key=lambda h: h.get("devre") or 0, reverse=True):
+        dv = x.get("devre")
+        if not dv or dv == devre or dv < devre - 2 or all(m.get("mid") for m in x["maclar"]):
+            continue
+        try:
+            k0 = _yanlis_esles(x)
+            n2, ck = _gun_gun(x)
+            if n2 or k0:
+                log.append(f"{x['hafta']}: geriye dönük +{n2} eşleşme ({ck} ad çekildi, {k0} yanlış kaldırıldı)")
+                degisti = True
+        except Exception as e:
+            log.append(f"{x['hafta']} geriye dönük hata {type(e).__name__}: {str(e)[:80]}")
     # onceki devrelerin sonuclari (son 3 devre)
     for x in sorted(H.values(), key=lambda h: h.get("devre") or 0, reverse=True):
         dv = x.get("devre")
