@@ -29,13 +29,18 @@ def rapor():
         c.close()
     except Exception as e:
         return {"db": str(e)[:100]}
-    for s in ("https://football.nowgoal.net", "https://www.nowgoal.pro"):
+    for s in ("https://football.nowgoal.net", "https://free1.nowgoal.plus", "https://www.nowgoal.plus"):
         for y in ("/robots.txt", f"/match/h2h-{mid[0]}", f"/match/live-{bit[0] if bit else mid[0]}", f"/flashdata/get?id={mid[0]}"):
             r = _dene(s + y)
             if r.get("ok"):
                 try:
                     req = urllib.request.Request(s + y, headers=dict(ng.HEADERS, Referer=s + "/"))
-                    b = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", "replace")
+                    import gzip
+                    b = urllib.request.urlopen(req, timeout=12).read()
+                    b = (gzip.decompress(b) if b[:2] == b"\x1f\x8b" else b).decode("utf-8", "replace")
+                    r["kb_acik"] = round(len(b) / 1024)
+                    import re as _re
+                    r["title"] = (_re.search(r"<title>(.*?)</title>", b, _re.S) or [None, None])[1]
                     r["isaret"] = {"Vs_eOdds": "Vs_eOdds" in b, "tr1_": 'id="tr1_' in b, "ftstat": "ftstat" in b, "^": b.count("^")}
                     r["bas"] = b[:160].replace("\n", " ")
                 except Exception as e:
