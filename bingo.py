@@ -648,12 +648,12 @@ def desen_canli_tur(c, ciftler, at):
     _last["desen_canli"] = f"{len(L)} Desen maçı, {n_es} canlı eşleşme"
 
 
-_SK = {}
+_SKO = {}                     # 23.11.2026: canlı skor pazarı önbelleği (eski adı _SK soket sayacıyla çakışıyordu → KeyError fark)
 
 
 def _sk_oran(iid):
     """iddaa maç detayından canlı maç skoru pazarı -> ({'2-1': oran, ...}, st, pazar adı); adlardan bulunur, en küçük st (İY skoru değil)"""
-    z = _SK.get(iid)
+    z = _SKO.get(iid)
     if not z or time.time() - z[0] > 20:
         try:
             j = _get(f"https://sportsbookv2.iddaa.com/sportsbook/event/{iid}")
@@ -669,9 +669,9 @@ def _sk_oran(iid):
             z = (time.time(), sorted(A, key=lambda a: a[0])[0] if A else None)
         except Exception:
             z = (time.time(), None)
-        _SK[iid] = z
-        if len(_SK) > 500:
-            _SK.clear()
+        _SKO[iid] = z
+        if len(_SKO) > 500:
+            _SKO.clear()
     return (z[1][1], z[1][0], z[1][2]) if z[1] else ({}, None, None)
 
 

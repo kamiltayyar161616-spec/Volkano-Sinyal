@@ -716,7 +716,13 @@ def _probe_neighbors(log):
 
 
 def collect(log):
-    ids = list(dict.fromkeys(_sitemap_ids() + _home_ids()))
+    ids = []                                   # 23.11.2026: harita/ana sayfa zaman aşımı turu durdurmasın (h2h ve oran adımları sürsün)
+    for ad, fn in (("harita", _sitemap_ids), ("ana sayfa", _home_ids)):
+        try:
+            ids += fn()
+        except Exception as e:
+            log.append(f"{ad} hata {type(e).__name__}: {str(e)[:60]}")
+    ids = list(dict.fromkeys(ids))
     with _db_lock:
         c = _conn()
         known = {r[0] for r in c.execute("SELECT mid FROM ng_match")}
