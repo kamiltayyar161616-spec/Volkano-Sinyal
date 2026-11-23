@@ -22,16 +22,23 @@ def _dene(url, zaman=12):
 
 def rapor():
     out = {}
-    for s in SITELER:
-        for y in YOLLAR:
-            out[s + y] = _dene(s + y)
     try:
         c = ng._conn()
-        mid = c.execute("SELECT mid FROM ng_match WHERE status='new' ORDER BY kickoff_utc DESC LIMIT 1").fetchone()
+        mid = c.execute("SELECT mid FROM ng_match WHERE status='new' AND kickoff_utc > datetime('now') ORDER BY kickoff_utc LIMIT 1").fetchone()
+        bit = c.execute("SELECT mid FROM ng_match WHERE status IN ('done','past','stats') ORDER BY kickoff_utc DESC LIMIT 1").fetchone()
         c.close()
-        if mid:
-            for s in SITELER[:2]:
-                out[f"{s}/match/h2h-{mid[0]}"] = _dene(f"{s}/match/h2h-{mid[0]}")
     except Exception as e:
-        out["h2h"] = str(e)[:100]
+        return {"db": str(e)[:100]}
+    for s in ("https://football.nowgoal.net", "https://www.nowgoal.pro"):
+        for y in ("/robots.txt", f"/match/h2h-{mid[0]}", f"/match/live-{bit[0] if bit else mid[0]}", f"/flashdata/get?id={mid[0]}"):
+            r = _dene(s + y)
+            if r.get("ok"):
+                try:
+                    req = urllib.request.Request(s + y, headers=dict(ng.HEADERS, Referer=s + "/"))
+                    b = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", "replace")
+                    r["isaret"] = {"Vs_eOdds": "Vs_eOdds" in b, "tr1_": 'id="tr1_' in b, "ftstat": "ftstat" in b, "^": b.count("^")}
+                    r["bas"] = b[:160].replace("\n", " ")
+                except Exception as e:
+                    r["oku"] = str(e)[:60]
+            out[s + y] = r
     return out
