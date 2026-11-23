@@ -1174,6 +1174,37 @@ def js_doldur(log):
                 c.close()
         time.sleep(BEKLE)
     log.append(f"js yedek (www kapalı): {len(rows)} maç, +{n_ad} ad, {n_or} oran, {n_yok} dosya yok")
+    # piyasa + Volkano eşleşmesi (evaluate 'stats' ister; www kapalıyken yedek maçlar için) — Oto Tahmin, Bingo, TOTO bunu okur
+    markets = _load_markets()
+    with _db_lock:
+        c = _conn()
+        R = c.execute("""SELECT mid, home, away, kickoff_utc, odds_json FROM ng_match WHERE status='new' AND home IS NOT NULL
+                         AND kickoff_utc BETWEEN ? AND ?""",
+                      (_iso(_now() + timedelta(minutes=5)), _iso(_now() + timedelta(hours=LOOKAHEAD_H)))).fetchall()
+        c.close()
+    n_vk = 0
+    for r in R:
+        of = json.loads(r["odds_json"]) if r["odds_json"] else None
+        mk_b, vk = match_market(markets, r["home"] or "", r["away"] or "", r["kickoff_utc"])
+        if of and of.get("sharp_cur") and of["n_sharp"] >= 2:
+            mk = {"p": of["sharp_cur"], "sources": of["sharp_names"], "src": "keskin"}
+        elif of and of.get("cons_cur") and of["n_books"] >= 5:
+            mk = {"p": of["cons_cur"], "sources": [f"{of['n_books']} bahisçi ort."], "src": "ortalama"}
+        else:
+            mk = dict(mk_b, src="balkan") if mk_b else None
+        if mk:
+            mk["balkan"] = mk_b["p"] if mk_b else None
+            mk["odds"] = of
+        n_vk += bool(vk)
+        with _db_lock:
+            c = _conn()
+            c.execute("""UPDATE ng_match SET pred_at=?, pred_json=?, market_json=?, volkano_json=?, league_vk=? WHERE mid=?""",
+                      (_iso(_now()), json.dumps({"market": mk["p"] if mk else None, "final": None, "odds": of, "yedek": "js"}),
+                       json.dumps(mk) if mk else None, json.dumps(vk, ensure_ascii=False) if vk else None,
+                       vk["league"] if vk else None, r["mid"]))
+            c.commit()
+            c.close()
+    log.append(f"yedek piyasa: {len(R)} maç, Volkano eşleşen {n_vk}")
 
 
 def run_cycle():
