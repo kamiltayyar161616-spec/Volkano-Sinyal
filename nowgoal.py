@@ -1132,6 +1132,54 @@ def _www_ok():
     return _WWW["ok"]
 
 
+def _yerel_satir(r, ad_ev, ad_dep):
+    """ng_match satırı -> analiz sayfası satırı biçimi (team_profile'ın beklediği): skor, kapanış 1X2 (marjsız → oran), AH/ÜA çizgisi"""
+    of = json.loads(r["odds_json"]) if r["odds_json"] else None
+    p = (of or {}).get("sharp_cur") or (of or {}).get("cons_cur")
+    return {"mid": r["mid"], "date": r["kickoff_utc"], "lg": r["league_ng"], "home": ad_ev, "away": ad_dep,
+            "ft": [r["ft_h"], r["ft_a"]], "ht": [r["ht_h"], r["ht_a"]] if r["ht_h"] is not None else None, "co": None,
+            "x12o": None, "x12c": [round(1 / x, 4) for x in p] if p and all(p) else None,
+            "aho": None, "ahc": [None, r["ah_kapanis"], None] if r["ah_kapanis"] is not None else None,
+            "ou": [None, r["ou_kapanis"]] if r["ou_kapanis"] is not None else None}
+
+
+def yerel_ozellik(c, home, away, ko, lig=None):
+    """23.11.2026: www.nowgoal (h2h sayfası) kapalıyken takım formu kendi veritabanımızdan: lig json'undan gelen skorlar +
+    goaloo'dan gelen kapanış oranları + lig json'undaki kapanış AH/ÜA çizgileri. Biçim parse_analysis ile aynı → build_features."""
+    q = """SELECT mid, kickoff_utc, home, away, league_ng, ft_h, ft_a, ht_h, ht_a, odds_json, ah_kapanis, ou_kapanis FROM ng_match
+           WHERE ft_h IS NOT NULL AND kickoff_utc < ? AND (home=? OR away=?) ORDER BY kickoff_utc DESC LIMIT 20"""
+    st = {"home_last": [_yerel_satir(r, r["home"], r["away"]) for r in c.execute(q, (ko, home, home))],
+          "away_last": [_yerel_satir(r, r["home"], r["away"]) for r in c.execute(q, (ko, away, away))],
+          "h2h": [_yerel_satir(r, r["home"], r["away"]) for r in c.execute(
+              """SELECT mid, kickoff_utc, home, away, league_ng, ft_h, ft_a, ht_h, ht_a, odds_json, ah_kapanis, ou_kapanis FROM ng_match
+                 WHERE ft_h IS NOT NULL AND kickoff_utc < ? AND ((home=? AND away=?) OR (home=? AND away=?))
+                 ORDER BY kickoff_utc DESC LIMIT 10""", (ko, home, away, away, home))],
+          "home_team": home, "away_team": away, "league": lig, "kaynak": "yerel"}
+    return st
+
+
+def yerel_stats(log):
+    """www kapalıyken: adı dolu, istatistiği olmayan yaklaşan maçlara yerel form → status 'stats' (evaluate/tahmin normal akışta)"""
+    now = _now()
+    with _db_lock:
+        c = _conn()
+        R = c.execute("""SELECT mid, home, away, kickoff_utc, league_ng FROM ng_match WHERE status='new' AND home IS NOT NULL
+                         AND away IS NOT NULL AND kickoff_utc BETWEEN ? AND ?""",
+                      (_iso(now + timedelta(minutes=10)), _iso(now + timedelta(hours=LOOKAHEAD_H)))).fetchall()
+        n = az = 0
+        for r in R:
+            st = yerel_ozellik(c, r["home"], r["away"], r["kickoff_utc"], r["league_ng"])
+            feat = build_features(st)
+            if not st["home_last"] and not st["away_last"]:
+                az += 1                            # geçmişi hiç yok: tahmin yine piyasa ağırlıklı (residual 0)
+            c.execute("""UPDATE ng_match SET stats_at=?, stats_json=?, features_json=?, status='stats' WHERE mid=? AND status='new'""",
+                      (_iso(_now()), json.dumps(st, ensure_ascii=False), json.dumps(feat, ensure_ascii=False), r["mid"]))
+            n += 1
+        c.commit()
+        c.close()
+    log.append(f"yerel form: {n} maç istatistikli (geçmişsiz {az})")
+
+
 def js_doldur(log):
     """www kapalıyken: yaklaşan (36 sa) adı boş maçlara goaloo oran js'inden takım/lig adı + oran özeti; başlamaya 90 dk kala son oran"""
     now = _now()
@@ -1211,7 +1259,7 @@ def run_cycle():
     log = []
     if not _www_ok():
         log.append("www.nowgoal kapalı → h2h/flash atlandı")
-        for step in (sweep_leagues, js_doldur):
+        for step in (sweep_leagues, js_doldur, yerel_stats, evaluate):
             try:
                 step(log)
             except Exception as e:
