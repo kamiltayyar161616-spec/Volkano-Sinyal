@@ -347,10 +347,11 @@ def hesap():
     import oto_tahmin as O
     c = db()
     # 15.11.2026 kullanıcı: Volkano İLK oranı alınır ve kilitlenir (sabit); iddaa ilk -> son 5 dk. Karşılaştırma: iddaa son 5 dk ÷ Volkano ilk.
-    K, DV = {}, {}
-    for m, js, ev, dep, lg, ko, ji, ai, j5, vi, vai in c.execute(
-            "SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk, idd_son5, vk_ilk, at_vk_ilk FROM k"):
+    K, DV, II = {}, {}, {}
+    for m, js, ev, dep, lg, ko, ji, ai, j5, vi, vai, ii in c.execute(
+            "SELECT mid, idd_son, ev, dep, lig, ko, idd_ilk, at_ilk, idd_son5, vk_ilk, at_vk_ilk, i FROM k"):
         K[m] = (json.loads(j5) if j5 else json.loads(js), ev, dep, lg, ko, ji, ai, j5)
+        II[m] = ii
         if vi:
             DV[m] = (json.loads(vi), vai, "doğrudan")
     c.close()
@@ -360,6 +361,16 @@ def hesap():
         if m not in VK:
             VK[m] = x
     R = O._sonuclar([str(m) for m in K]) if K else {}
+    try:                                          # 24.11.2026: NowGoal/7M'de yoksa iddaa'nın kendi sonucu (maç no ile, iddaa_skor yedeği)
+        import iddaa_skor
+        for m, ii in II.items():
+            r = R.get(str(m))
+            if ii and (not r or r[0] is None or r[2] is None):
+                s = iddaa_skor.sonuc(ii)
+                if s and s[2] is not None:
+                    R[str(m)] = tuple(s)
+    except Exception:
+        pass
     f = lambda x, y: "1" if x > y else "2" if y > x else "X"
     G = {g: [0, 0, 0.0, 0.0, 0.0] for g in GRUPLAR}
     KV = {g: [0, 0, 0.0, 0.0, 0.0] for g in KOVALAR}
