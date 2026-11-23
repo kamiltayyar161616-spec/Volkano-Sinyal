@@ -179,12 +179,12 @@ def _ng_bagla(c, now):
     """mid'i negatif (sadece iddaa) kayitlari NowGoal macina bagla (sonuc icin): saat ±15 dk + iki ad benzer"""
     import nowgoal as ng
     L = [(m, i, ko, ev, dep) for m, i, ko, ev, dep in c.execute("SELECT mid, i, ko, ev, dep FROM k WHERE mid < 0")
-         if now - timedelta(hours=6) < _dt(ko) < now + timedelta(hours=30)]
+         if now - timedelta(days=4) < _dt(ko) < now + timedelta(hours=30)]   # 23.11: 6 saat -> 4 gün (NowGoal engelinde adlar sonradan geliyor)
     if not L:
         return 0
     g = sqlite3.connect(f"file:{ng.DB_FILE}?mode=ro", uri=True, timeout=30)
     N = g.execute("SELECT mid, kickoff_utc, home, away FROM ng_match WHERE kickoff_utc BETWEEN ? AND ?",
-                  ((now - timedelta(hours=7)).isoformat(), (now + timedelta(hours=31)).isoformat())).fetchall()
+                  ((now - timedelta(days=4, hours=1)).isoformat(), (now + timedelta(hours=31)).isoformat())).fetchall()
     g.close()
     var = {r[0] for r in c.execute("SELECT mid FROM k")}
     n = 0
