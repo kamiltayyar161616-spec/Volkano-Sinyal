@@ -14,7 +14,7 @@ def rapor():
     for (oj,) in R:
         o = json.loads(oj)
         nb.append(o.get("n_books") or 0)
-        for k in (o.get("wb") or {}):
+        for k in (o.get("watch") or {}):
             cnt[k] += 1
     names = [d for _, d, _ in ng.WATCH_BOOKS]
     out["oran_mac"] = len(R)
