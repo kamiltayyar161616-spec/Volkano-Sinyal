@@ -50,6 +50,7 @@ import canli_ajan
 import iyms_kars
 import iddaa_skor
 import iyms_vk
+import skor_tab
 import iyms_av
 import xbet
 import iyms_xv
@@ -568,6 +569,11 @@ def iyms_xv_page():
     return render_template("iyms_xv.html", d=iyms_xv.get_page_data(request.args.get("gun")), active_page="iymsxv")
 
 
+@app.route("/skor")
+def skor_page():
+    return render_template("skor.html", d=skor_tab.get_page_data(request.args.get("gun")), active_page="skor")
+
+
 @app.route("/iyms-kars")
 def iyms_kars_page():
     return render_template("iyms_kars.html", d=iyms_kars.get_page_data(request.args.get("gun")), active_page="iymsk")
@@ -709,6 +715,7 @@ if __name__ == "__main__":
     iyms_kars.start_background()
     iddaa_skor.start_background()
     iyms_vk.start_background()
+    skor_tab.start_background()
     iyms_av.start_background()
     xbet.start_background()
     kupon_ajan.start_background()

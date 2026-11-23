@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Maç Skoru iddaa{% endblock %}
+{% block page_tag %}🔢 MAÇ SKORU · iddaa{% endblock %}
+{% block subtitle %}iddaa'nın doğru skor pazarı (maç sonu). Her maçta 3 an kaydedilir: <b>İLK</b> (iddaa skor pazarını açtığı ilk görülen an), <b>3 SAAT KALA</b> ve <b>SON 5 DK</b> (maçtan 2-7 dk önce). Para = iddaa'nın marjsız ihtimalindeki değişim (oran düştükçe para giriyor). Sonuç iddaa'nın kendi sonuç servisinden.{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; }
+  .meta{ color:var(--chalk-faint); font-size:12px; }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .hd1{ display:flex; align-items:flex-start; gap:8px; }
+  .hd1 .saat{ font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:13px; color:#e0a030; padding:2px 7px; border-radius:7px; background:rgba(224,160,48,.12); flex:none; margin-top:1px; }
+  .hd1 .tk{ flex:1; min-width:0; font-weight:800; font-size:15px; line-height:1.25; }
+  .hd1 .sk{ flex:none; text-align:right; font-weight:800; font-size:15px; line-height:1.2; color:#3ccf7a; }
+  .hd1 .sk small{ display:block; font-size:10.5px; color:var(--chalk-faint); font-weight:600; }
+  .hd3{ display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 2px; }
+  .pl{ font-size:10.5px; padding:2px 7px; border-radius:10px; background:rgba(255,255,255,.05); color:var(--chalk-faint); white-space:nowrap; }
+  .pl.ok{ color:#3ccf7a; background:rgba(60,207,122,.12); } .pl.bek{ color:#e0a030; background:rgba(224,160,48,.12); }
+  .pr{ display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-top:7px; }
+  .pr .pt{ font-size:11px; color:var(--chalk-faint); width:100%; }
+  .pr .c{ font-size:11.5px; padding:3px 7px; border-radius:8px; background:var(--navy-deep); white-space:nowrap; }
+  .pr .c b{ font-weight:800; } .pr .c i{ font-style:normal; color:var(--chalk-faint); font-size:10.5px; }
+  .pr .c.gir b{ color:#3ccf7a; } .pr .c.cik b{ color:#ff8a80; }
+  .pr .c.ok{ box-shadow:inset 0 0 0 1px rgba(60,207,122,.7); background:rgba(40,160,90,.25); }
+  .st{ width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; font-family:'Space Grotesk',sans-serif; }
+  .st th{ color:var(--chalk-faint); font-weight:600; font-size:10.5px; padding:3px 2px; text-align:right; } .st th:first-child,.st td:first-child{ text-align:left; }
+  .st td{ padding:4px 2px; border-top:1px solid var(--navy-line); text-align:right; white-space:nowrap; }
+  .st td.s{ font-weight:800; font-size:13px; }
+  .st tr.ok td{ background:rgba(40,160,90,.30); }
+  .st .a{ color:#3ccf7a; font-weight:700; } .st .e{ color:#ff8a80; font-weight:700; } .st .z{ color:var(--chalk-faint); }
+  details summary{ color:var(--chalk-faint); font-size:11.5px; margin-top:6px; cursor:pointer; }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="300">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% macro dd(v) %}{% if v is none %}<span class="z">·</span>{% else %}<span class="{{ 'a' if v >= 5 else 'e' if v <= -5 else 'z' }}">{{ '%+d'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% macro satir(s) %}<tr class="{{ 'ok' if s.tuttu else '' }}"><td class="s">{{ s.sec }}{{ ' ✓' if s.tuttu else '' }}</td><td>{{ s.ilk or '·' }}</td><td>{{ s.u3 or '·' }}</td><td><b>{{ s.son or '·' }}</b></td><td>{{ dd(s.d) }}</td><td>{{ dd(s.d3) }}</td><td class="z">%{{ s.p }}</td></tr>{% endmacro %}
+{% block content %}
+<div class="section-sub">Son bülten taraması: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~4 dk sonra)' }} · {{ d.last.log }}{% if d.last.son %} · {{ d.last.son }}{% endif %}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %}</div>
+
+<h2 class="section">📈 TÜM ZAMANLAR ({{ d.ozet.biten or 0 }} biten maç · {{ d.ozet.kayit or 0 }} kayıtlı)</h2>
+{% if d.ozet.biten %}
+<table class="tt"><tr><th>iddaa'nın en olası gördüğü</th><th>tuttu</th><th>%</th><th>beklenen</th></tr>
+{% for x in d.ozet.isabet %}<tr><td><b>ilk {{ x.k }} skor</b></td><td>{{ x.w }}</td><td>%{{ x.pct }}</td><td>{{ x.e }}</td></tr>{% endfor %}</table>
+<div class="section-sub">Sıralama son 5 dk oranına göre. Sonucu iddaa listesinde olmayan (Diğer) maç: {{ d.ozet.diger }}.</div>
+<table class="tt"><tr><th>seçim</th><th>n</th><th>tuttu</th><th>beklenen</th><th>ROI</th></tr>
+{% for x in d.secim %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}<br><span class="meta">{{ '%+.2f'|format(x.kar) }} br</span></td></tr>{% endfor %}</table>
+<h2 class="section">💸 PARA KOVALARI</h2>
+<table class="tt"><tr><th>ilk → son 5 dk</th><th>seçenek</th><th>tuttu</th><th>beklenen</th><th>ROI</th></tr>
+{% for x in d.kova %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>
+<table class="tt"><tr><th>3 saat kala → son 5 dk</th><th>seçenek</th><th>tuttu</th><th>beklenen</th><th>ROI</th></tr>
+{% for x in d.kova3 %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>
+<div class="section-sub">Beklenen = son 5 dk marjsız ihtimal toplamı. "Tuttu" beklenenden belirgin fazlaysa o grup bilgi taşıyor. ROI = her seçime 1 birim, son 5 dk oranıyla. İlk kaydı maçtan 1 saatten az önce alınan maçlar ilk → son hesabına girmez.</div>
+{% else %}<div class="section-sub">Henüz son 5 dk kaydı olan biten maç yok. İlk sonuçlar maçlar bittikçe gelir.</div>{% endif %}
+
+<h2 class="section">📅 GÜN GÜN</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/skor?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+
+{% for x in d.L %}
+<div class="kc">
+  <div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>
+  <div class="hd3">{% if x.i_ilk %}<span class="pl">ilk · {{ x.i_ilk }}</span>{% endif %}{% if x.var3 %}<span class="pl ok">✓ 3 sa kala</span>{% else %}<span class="pl bek">⏳ 3 sa kala</span>{% endif %}{% if x.var5 %}<span class="pl ok">✓ son 5 dk</span>{% else %}<span class="pl bek">⏳ son 5 dk</span>{% endif %}<span class="pl">marj %{{ x.marj }}</span>{% if x.skor and not x.listede %}<span class="pl bek">sonuç listede yok (Diğer)</span>{% endif %}</div>
+  {% if x.para %}<div class="pr"><span class="pt">💸 para girdi (ilk → {{ 'son 5 dk' if x.var5 else '3 sa kala' }}, oranı en çok düşen)</span>{% for p in x.para %}<span class="c gir {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b> <i>{{ p.ilk }}→{{ p.son }}</i></span>{% endfor %}</div>{% endif %}
+  {% if x.cikan %}<div class="pr"><span class="pt">🔻 para çıktı (oranı en çok yükselen)</span>{% for p in x.cikan %}<span class="c cik {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b> <i>{{ p.ilk }}→{{ p.son }}</i></span>{% endfor %}</div>{% endif %}
+  <table class="st"><tr><th>skor</th><th>ilk</th><th>3 sa</th><th>son 5</th><th>ilk→son</th><th>3sa→son</th><th>ihtimal</th></tr>
+  {% for s in x.S[:12] %}{{ satir(s) }}{% endfor %}</table>
+  {% if x.S|length > 12 %}<details><summary>diğer {{ x.S|length - 12 }} skor</summary><table class="st">{% for s in x.S[12:] %}{{ satir(s) }}{% endfor %}</table></details>{% endif %}
+</div>
+{% else %}<div class="section-sub">Bu gün için kayıtlı maç yok.</div>{% endfor %}
+{% endblock %}
