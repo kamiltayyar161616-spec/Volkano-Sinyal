@@ -146,6 +146,8 @@ def _komsu(h):
         c = ng._conn()
         var = {r[0] for r in c.execute("SELECT mid FROM ng_match")}
         c.close()
+    if not ng._www_ok():                       # 23.11.2026: flashdata www.nowgoal'da (sunucuya kapalı) — fikstür lig json'undan geliyor
+        return 0
     aday = sorted({b + k for b in bilinen for k in range(-KOMSU, KOMSU + 1)} - var - _komsu_denendi)[:250]
     eklenen = 0
     for mid in aday:
@@ -199,8 +201,11 @@ def _gun_gun(h):
             _ad_denendi[mid] = time.time()
             cekilen += 1
             try:
-                pg = ng._get(f"/match/h2h-{mid}", valid=lambda b: "<title>" in b.lower())
-                ev, dep = ng._title_teams(pg)
+                if ng._www_ok():
+                    pg = ng._get(f"/match/h2h-{mid}", valid=lambda b: "<title>" in b.lower())
+                    ev, dep = ng._title_teams(pg)
+                else:                          # 23.11.2026: www.nowgoal kapalı → ad goaloo oran dosyasından (hometeam/guestteam)
+                    ev, dep, _lg = ng.js_adlar(ng._odds_js(mid))
             except Exception:
                 continue
             if ev and dep:
