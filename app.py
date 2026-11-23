@@ -48,6 +48,7 @@ import desen_tab
 import oto_tahmin
 import canli_ajan
 import iyms_kars
+import iddaa_skor
 import iyms_vk
 import iyms_av
 import xbet
@@ -706,6 +707,7 @@ if __name__ == "__main__":
     oto_tahmin.start_background()
     canli_ajan.start_background()
     iyms_kars.start_background()
+    iddaa_skor.start_background()
     iyms_vk.start_background()
     iyms_av.start_background()
     xbet.start_background()
