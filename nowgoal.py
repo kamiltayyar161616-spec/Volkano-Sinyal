@@ -524,11 +524,22 @@ def _reasons(feat, pred, side_idx):
 
 # ------------------------------------------------------------------ 1X2 oran karsilastirma (keskin piyasa)
 
-def fetch_odds_books(mid):
-    """goaloo 1x2 JS -> bahisci listesi. game satiri: id|oddsId|ad|acilisH|D|A|...|guncelH|D|A|...|kellyH|D|A|guncelleme|..."""
+def _odds_js(mid):
     req = urllib.request.Request(ODDS_JS_URL.format(mid=mid), headers=dict(HEADERS, Referer="https://www.nowgoal.net/"))
     with urllib.request.urlopen(req, timeout=25) as r:
-        body = r.read().decode("utf-8", errors="replace")
+        return r.read().decode("utf-8", errors="replace")
+
+
+def js_adlar(body):
+    """23.11.2026: goaloo oran js'inde takım/lig adları var (hometeam, guestteam, matchname) — www.nowgoal engelliyken ad kaynağı"""
+    v = dict(re.findall(r'var (hometeam|guestteam|matchname)\s*=\s*"([^"]*)"', body))
+    return v.get("hometeam") or None, v.get("guestteam") or None, v.get("matchname") or None
+
+
+def fetch_odds_books(mid, body=None):
+    """goaloo 1x2 JS -> bahisci listesi. game satiri: id|oddsId|ad|acilisH|D|A|...|guncelH|D|A|...|kellyH|D|A|guncelleme|..."""
+    if body is None:
+        body = _odds_js(mid)
     m = re.search(r"var game=Array\((.*?)\);", body, re.S)
     if not m:
         return []
@@ -1099,8 +1110,85 @@ def sweep_leagues(log):
     log.append(f"lig taramasi {len(todo)} lig, yeni mac {n_new}, saat degisen {n_upd}, hata {n_err}")
 
 
+_WWW = {"t": 0, "ok": True}
+JS_PER_CYCLE = 150
+
+
+def _www_ok():
+    """23.11.2026: www.nowgoal.net/.world sunucu IP'sine kapalı (20.11'den beri zaman aşımı). 15 dk'da bir 8 sn'lik tek deneme;
+    kapalıysa www'ye giden adımlar (komşu yoklama, harita, h2h, flash sonuç) atlanır — her biri 40 sn bekletip turu kilitliyordu."""
+    if time.time() - _WWW["t"] > 900:
+        ok = False
+        for site in SITES:
+            try:
+                req = urllib.request.Request(site + "/", headers=dict(HEADERS, Referer=site + "/"))
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                if ok:
+                    break
+            except Exception:
+                pass
+        _WWW.update(t=time.time(), ok=ok)
+    return _WWW["ok"]
+
+
+def js_doldur(log):
+    """www kapalıyken: yaklaşan (36 sa) adı boş maçlara goaloo oran js'inden takım/lig adı + oran özeti; başlamaya 90 dk kala son oran"""
+    now = _now()
+    with _db_lock:
+        c = _conn()
+        rows = c.execute("""SELECT mid, kickoff_utc, home, odds_json, odds_final, odds_at FROM ng_match
+                            WHERE status='new' AND kickoff_utc BETWEEN ? AND ?
+                              AND (home IS NULL OR (odds_final IS NOT 1 AND kickoff_utc < ?))
+                              AND (odds_at IS NULL OR odds_at < ? OR kickoff_utc < ?)
+                            ORDER BY kickoff_utc LIMIT ?""",
+                         (_iso(now - timedelta(minutes=10)), _iso(now + timedelta(hours=LOOKAHEAD_H)),
+                          _iso(now + timedelta(minutes=ODDS_FINAL_MIN)), _iso(now - timedelta(hours=3)),
+                          _iso(now + timedelta(minutes=ODDS_FINAL_MIN)), JS_PER_CYCLE)).fetchall()
+        c.close()
+    n_ad = n_or = n_yok = 0
+    for r in rows:
+        try:
+            body = _odds_js(r["mid"])
+            h, a, lg = js_adlar(body)
+            of = odds_features(fetch_odds_books(r["mid"], body))
+            son = (datetime.fromisoformat(r["kickoff_utc"]) - _now()).total_seconds() / 60 <= ODDS_FINAL_MIN
+            with _db_lock:
+                c = _conn()
+                if h and a:
+                    c.execute("UPDATE ng_match SET home=COALESCE(home, ?), away=COALESCE(away, ?), league_ng=COALESCE(league_ng, ?) WHERE mid=?",
+                              (h, a, lg, r["mid"]))
+                    n_ad += r["home"] is None
+                oj = json.dumps(of) if of else None
+                c.execute("""UPDATE ng_match SET odds_json=COALESCE(?, odds_json), odds_at=?, odds_final=?, odds_first=COALESCE(odds_first, ?)
+                             WHERE mid=?""", (oj, _iso(_now()), 1 if son else 0, oj, r["mid"]))
+                c.commit()
+                c.close()
+            n_or += bool(of)
+        except Exception as e:
+            n_yok += 1
+            with _db_lock:
+                c = _conn()
+                c.execute("UPDATE ng_match SET odds_at=? WHERE mid=?", (_iso(_now()), r["mid"]))
+                c.commit()
+                c.close()
+        time.sleep(BEKLE)
+    log.append(f"js yedek (www kapalı): {len(rows)} maç, +{n_ad} ad, {n_or} oran, {n_yok} dosya yok")
+
+
 def run_cycle():
     log = []
+    if not _www_ok():
+        log.append("www.nowgoal kapalı → h2h/flash atlandı")
+        for step in (sweep_leagues, js_doldur):
+            try:
+                step(log)
+            except Exception as e:
+                log.append(f"{step.__name__} HATA: {e}")
+        _last_cycle["at"] = _iso(_now())
+        _last_cycle["log"] = " | ".join(log)
+        print(f"[nowgoal] {_last_cycle['log']}")
+        return
     for step in (sweep_leagues, _probe_neighbors, collect, evaluate, resolve):
         try:
             step(log)

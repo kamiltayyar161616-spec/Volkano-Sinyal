@@ -130,6 +130,8 @@ def ng_istat(mid, zorla=False):
     x = _d["istat"].get(key)
     if x and not zorla and time.time() - x["t"] < ISTAT_SN:
         return x
+    if not ng._www_ok():                       # 23.11.2026: www.nowgoal sunucu IP'sine kapalı — her maçta 25 sn beklememek için atla
+        return x
     r = urllib.request.Request(f"https://www.nowgoal.net/match/live-{mid}", headers=dict(ng.HEADERS, Referer="https://www.nowgoal.net/"))
     with urllib.request.urlopen(r, timeout=25) as f:
         h = f.read().decode("utf-8", "replace")
