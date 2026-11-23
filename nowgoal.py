@@ -1222,6 +1222,29 @@ def js_doldur(log):
                 c.close()
         time.sleep(BEKLE)
     log.append(f"js yedek (www kapalı): {len(rows)} maç, +{n_ad} ad, {n_or} oran, {n_yok} dosya yok")
+    # 23.11.2026: engel sırasında oynanmış (son 3 gün) adsız maçlar — ad olmadan İY/MS iddaa–V, Toto vb. eşleşip skor alamıyor
+    with _db_lock:
+        c = _conn()
+        G = c.execute("""SELECT mid FROM ng_match WHERE home IS NULL AND kickoff_utc BETWEEN ? AND ? ORDER BY kickoff_utc DESC LIMIT ?""",
+                      (_iso(_now() - timedelta(days=3)), _iso(_now() + timedelta(minutes=10)), JS_PER_CYCLE)).fetchall()
+        c.close()
+    n_g = 0
+    for (mid,) in G:
+        try:
+            h, a, lg = js_adlar(_odds_js(mid))
+        except Exception:
+            h = a = None
+        with _db_lock:
+            c = _conn()
+            if h and a:
+                c.execute("UPDATE ng_match SET home=?, away=?, league_ng=COALESCE(league_ng, ?) WHERE mid=? AND home IS NULL", (h, a, lg, mid))
+                n_g += 1
+            else:
+                c.execute("UPDATE ng_match SET home='' WHERE mid=? AND home IS NULL", (mid,))   # dosyası yok: tekrar denenmesin
+            c.commit()
+            c.close()
+        time.sleep(BEKLE)
+    log.append(f"geçmiş adsız: {len(G)} maç, +{n_g} ad")
     # piyasa + Volkano eşleşmesi (evaluate 'stats' ister; www kapalıyken yedek maçlar için) — Oto Tahmin, Bingo, TOTO bunu okur
     markets = _load_markets()
     with _db_lock:
