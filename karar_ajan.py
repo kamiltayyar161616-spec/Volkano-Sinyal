@@ -182,7 +182,7 @@ def karar(dk, h, a, F, r, st, ah, ou, kay, kirmizi, idd=None, serbest=None):
     out = []
     adlar = {"ev": "MS 1", "x": "MS X", "dep": "MS 2"}
     for k in ("ev", "x", "dep", "gol"):
-        if k == cur:
+        if k == cur or k not in (PY or {}):       # 23.11.2026: iddaa'da o pazar yoksa (ör. "Maçta gol olur") KeyError 'gol' yerine atla
             continue
         kaynak, destek = [], []
         wt = W.get("ARŞİV", 1.0)
