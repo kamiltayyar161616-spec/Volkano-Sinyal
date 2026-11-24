@@ -28,8 +28,13 @@
 {% endmacro %}
 {% block content %}
 {% if d.hata %}<div class="section-sub">⚠ {{ d.hata }}</div>{% endif %}
-<div style="margin:0 16px 10px"><a class="chip on" href="#bot">🤖 Bot kasası</a> <a class="chip" href="#deger">💎 Değer kupon</a> <a class="chip" href="#vk">🌋 Volkano kupon</a></div>
-<h2 class="section" id="bot">🤖 BOT KASASI</h2>
+<div style="margin:0 16px 12px;display:flex;gap:6px;flex-wrap:wrap">
+  <a class="chip" data-t="bot" href="#bot">🤖 Bot · {{ d.toplam|int }} TL</a>
+  <a class="chip" data-t="deger" href="#deger">💎 Değer · {{ d.deger.toplam|int }} TL</a>
+  <a class="chip" data-t="vk" href="#vk">🌋 Volkano · {{ '%.2f'|format(d.vk.toplam or 0) }} €</a>
+</div>
+<div class="tab" id="t-bot">
+<h2 class="section">🤖 BOT KASASI</h2>
 {{ kasa(d) }}
 <h2 class="section">🧾 KUPONLAR</h2>
 {% for x in d.K %}
@@ -40,7 +45,9 @@
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok. Bot bir sinyal verdiğinde burada görünür.</div>{% endfor %}
 
-<h2 class="section" id="deger">💎 DEĞER KUPON</h2>
+</div>
+<div class="tab" id="t-deger">
+<h2 class="section">💎 DEĞER KUPON</h2>
 <div class="section-sub">Değer 90 sekmesinde <b>▶ OYNA</b> olan her seçenek (3–8 sa kala listede + 1 sa kala hâlâ listede), <b>1 sa kala (son) oranıyla tekli</b>. Kasa <b>{{ d.deger.kasa0|int }} TL</b>'den başladı ({{ d.deger.basla }}). Yarım Kelly × kasa, en az 50 TL, üst sınır yok. Kelly'deki ihtimal keskin büro modelinden.</div>
 {{ kasa(d.deger) }}
 {% for x in d.deger.K %}
@@ -51,7 +58,9 @@
 </div>
 {% else %}<div class="section-sub">Henüz ▶ OYNA seçeneği yok.</div>{% endfor %}
 
-<h2 class="section" id="vk">🌋 VOLKANO KUPON</h2>
+</div>
+<div class="tab" id="t-vk">
+<h2 class="section">🌋 VOLKANO KUPON</h2>
 <div class="section-sub">Değer 90'da <b>▶ OYNA</b> olan seçenek, 1 sa kala teyit anında Volkano'da eşleştirilir ve <b>o anki Volkano oranıyla tekli</b> oynanır. Kasa <b>{{ '%.0f'|format(d.vk.kasa0) }} €</b> ({{ d.vk.basla }}'dan itibaren), en az 0.50 €, yarım Kelly, üst sınır yok. Oran Volkano'nun kendi oranıdır; kupon tutarsa net kârdan %12 vergi düşülür. Volkano'da karşılığı olan pazarlar: MS, İY MS, Alt/Üst, Çifte şans, KG.</div>
 {{ kasa(d.vk, '€') }}
 {% for x in d.vk.K %}
@@ -63,4 +72,18 @@
 </div>
 {% else %}<div class="section-sub">Henüz Volkano kuponu yok.</div>{% endfor %}
 {% if d.vk.yok %}<div class="section-sub">Volkano'da oynanamayan ▶ OYNA seçenekleri: {% for x in d.vk.yok %}{{ x.mac }} · {{ x.bahis }} ({{ x.neden }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+</div>
+<script>
+(function(){
+  function ac(t){
+    if(!document.getElementById('t-'+t)) t='bot';
+    document.querySelectorAll('.tab').forEach(function(e){ e.style.display = e.id==='t-'+t ? '' : 'none'; });
+    document.querySelectorAll('.chip[data-t]').forEach(function(e){ e.classList.toggle('on', e.dataset.t===t); });
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(function(e){
+    e.addEventListener('click', function(ev){ ev.preventDefault(); history.replaceState(null,'','#'+e.dataset.t); ac(e.dataset.t); window.scrollTo(0,0); });
+  });
+  ac((location.hash||'#bot').slice(1));
+})();
+</script>
 {% endblock %}
