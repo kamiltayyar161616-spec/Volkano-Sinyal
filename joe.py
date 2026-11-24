@@ -63,12 +63,13 @@ def _kasa(K, kasa0=KASA0, min_t=MIN_TUTAR, nd=0, vergi=0.0):
     """K: zaman sırasında kuponlar (t, bitis, o, p, son, kaz). Yarım Kelly × kasa, en az MIN_TUTAR, üst sınır yok.
     Kupon anında, o ana kadar biten kuponların dönüşü kasaya işlenmiş olur."""
     kasa, acik = kasa0, []
-    g = 1 - vergi                                   # vergi: kazanılan tutardan (tutar × oran) düşülür
+    g = 1 - vergi                                   # vergi: net kârdan (tutar × (oran − 1)) düşülür
+    don1 = lambda y: y["tutar"] * (1 + (y["o"] - 1) * g)   # kazanan kuponun ele geçen dönüşü
     for x in K:
         for y in [y for y in acik if y["son"] is not None and y["bitis"] <= x["t"]]:
-            kasa += y["tutar"] * y["o"] * g if y["kaz"] else 0
+            kasa += don1(y) if y["kaz"] else 0
             acik.remove(y)
-        oe = x["o"] * g                             # Kelly vergi sonrası eline geçecek orana göre
+        oe = 1 + (x["o"] - 1) * g                            # Kelly vergi sonrası eline geçecek orana göre
         f = (x["p"] * oe - 1) / (oe - 1) if oe > 1 else 0
         x["kelly"] = round(100 * f / 2, 1)
         x["tutar"] = round(max(min_t, kasa * f / 2), nd)
@@ -80,17 +81,17 @@ def _kasa(K, kasa0=KASA0, min_t=MIN_TUTAR, nd=0, vergi=0.0):
             acik.append(x)
     for y in acik:
         if y["son"] is not None:
-            kasa += y["tutar"] * y["o"] * g if y["kaz"] else 0
+            kasa += don1(y) if y["kaz"] else 0
     bekleyen = sum(y["tutar"] for y in acik if y["son"] is None)
     B = [x for x in K if x["son"] is not None and x["tutar"]]
     w = sum(bool(x["kaz"]) for x in B)
     yat = sum(x["tutar"] for x in B)
-    don = sum(x["tutar"] * x["o"] * g for x in B if x["kaz"])
+    don = sum(don1(x) for x in B if x["kaz"])
     for x in K:
         bitti = x["son"] is not None and x["tutar"]
-        x["kazanc"] = round(x["tutar"] * x["o"], nd) if bitti and x["kaz"] else None
-        x["vergi"] = round(x["tutar"] * x["o"] * vergi, nd) if bitti and x["kaz"] and vergi else None
-        x["net"] = None if not bitti else round(x["tutar"] * x["o"] * g - x["tutar"] if x["kaz"] else -x["tutar"], nd)
+        x["kazanc"] = round(x["tutar"] * (x["o"] - 1), nd) if bitti and x["kaz"] else None
+        x["vergi"] = round(x["tutar"] * (x["o"] - 1) * vergi, nd) if bitti and x["kaz"] and vergi else None
+        x["net"] = None if not bitti else round(don1(x) - x["tutar"] if x["kaz"] else -x["tutar"], nd)
     return {"kasa": round(kasa, nd), "bekleyen": round(bekleyen, nd), "toplam": round(kasa + bekleyen, nd), "n": len(K), "biten": len(B), "w": w,
             "yat": round(yat, nd), "net": round(don - yat, nd), "roi": round(100 * (don - yat) / yat, 1) if yat else None, "kasa0": kasa0}
 
@@ -121,7 +122,7 @@ def deger_hesap():
 
 # ---------------- VOLKANO KUPON ----------------
 # Değer 90'da ▶ OYNA olan seçenek, teyit anında (1 sa kala) Volkano'da eşleştirilir ve o anki Volkano oranı kaydedilir (arka plan, 5 dk'da bir).
-# Tekli, kasa 50 EUR, en az 0.50 EUR, yarım Kelly, üst sınır yok. Oran Volkano'nun kendi oranı; %12 vergi kazanılan tutardan (tutar × oran) düşülür.
+# Tekli, kasa 50 EUR, en az 0.50 EUR, yarım Kelly, üst sınır yok. Oran Volkano'nun kendi oranı; %12 vergi net kârdan (tutar × (oran − 1)) düşülür.
 VK_KASA0, VK_MIN, VK_VERGI = 50.0, 0.50, 0.12
 BASLA_VK = datetime(2026, 11, 24, 21, 0, tzinfo=timezone.utc).timestamp()      # 25.11 00:00 TR
 VK_DOSYA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "joe", "vk.json")
