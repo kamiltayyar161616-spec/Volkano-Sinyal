@@ -51,6 +51,7 @@ import iyms_kars
 import iddaa_skor
 import iyms_vk
 import skor_tab
+import deger_tab
 import iyms_av
 import xbet
 import iyms_xv
@@ -567,6 +568,11 @@ def iyms_ortak_page():
 @app.route("/iyms-xv")
 def iyms_xv_page():
     return render_template("iyms_xv.html", d=iyms_xv.get_page_data(request.args.get("gun")), active_page="iymsxv")
+
+
+@app.route("/deger")
+def deger_page():
+    return render_template("deger.html", d=deger_tab.get_page_data(request.args.get("gun")), active_page="deger")
 
 
 @app.route("/skor")

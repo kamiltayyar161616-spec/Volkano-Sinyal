@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Değer 90{% endblock %}
+{% block page_tag %}💎 DEĞER 90 · iddaa maç önü{% endblock %}
+{% block subtitle %}iddaa-bot'un saatlik otomatik taramasında <b>değeri 0.90–0.95</b> çıkan maç önü seçenekleri (maç sonu marketleri + İY MS). Her maç+seçenek bir kez sayılır: maça <b>≤{{ d.ufuk }} saat</b> kala ilk görüldüğü tarama ve o andaki oran. ROI = her seçeneğe <b>50 TL tekli</b> bahis. Değer = iddaa oranı × keskin büro (Pinnacle/SBOBET/Crown) modelinin olasılığı.{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; } .z{ color:var(--chalk-faint); }
+  .kc{ margin:0 16px 10px; padding:9px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .hd1{ display:flex; align-items:flex-start; gap:8px; }
+  .hd1 .saat{ font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:13px; color:#e0a030; padding:2px 7px; border-radius:7px; background:rgba(224,160,48,.12); flex:none; }
+  .hd1 .tk{ flex:1; min-width:0; font-weight:800; font-size:14.5px; line-height:1.25; }
+  .hd1 .sk{ flex:none; text-align:right; font-weight:800; font-size:14.5px; } .hd1 .sk small{ display:block; font-size:10.5px; color:var(--chalk-faint); font-weight:600; }
+  .sl{ display:flex; justify-content:space-between; align-items:center; gap:6px; padding:6px 8px; border-radius:8px; margin-top:6px; background:var(--navy-deep); font-size:13px; }
+  .sl b{ font-weight:800; } .sl .m{ color:var(--chalk-faint); font-size:11px; }
+  .sl.ok{ background:rgba(40,160,90,.30); box-shadow:inset 0 0 0 1px rgba(60,207,122,.6); } .sl.no{ background:rgba(255,90,79,.12); }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="300">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% macro tablo(baslik, L) %}<table class="tt"><tr><th>{{ baslik }}</th><th>bahis</th><th>tuttu</th><th>%</th><th>ROI</th><th>50 TL net</th><th>ort oran</th></tr>
+{% for o in L %}<tr><td><b>{{ o.ad }}</b></td><td>{{ o.n }}</td><td>{{ o.w }}</td><td>%{{ o.pct }}</td><td>{{ roi(o.roi) }}</td><td><span class="{{ 'p' if o.tl > 0 else 'n' }}">{{ '%+d'|format(o.tl) }} TL</span></td><td>{{ o.ort }}</td></tr>{% endfor %}</table>{% endmacro %}
+{% macro secenek(x) %}<div class="sl {{ 'ok' if x.kazandi else 'no' if x.kazandi == false else '' }}"><span><b>{{ x.sec }}</b>{{ ' ✓' if x.kazandi else ' ✗' if x.kazandi == false else '' }}<br><span class="m">ilk görüldü {{ x.ilk_s }} ({{ x.kala }} sa kala){% if x.kac > 1 %} · {{ x.kac }} taramada · son {{ x.son_odd }} x{{ '%.2f'|format(x.son_r) }}{% endif %}</span></span><span style="text-align:right">@<b>{{ x.odd }}</b><br><span class="m">x{{ '%.2f'|format(x.r) }} · %{{ (100 * x.p)|round|int }}</span></span></div>{% endmacro %}
+{% block content %}
+<div class="section-sub">Son güncelleme: {{ d.at }}{% if d.hata %} · ⚠ {{ d.hata }}{% endif %}</div>
+
+<h2 class="section">📈 KARNE (tüm zamanlar · 50 TL tekli)</h2>
+{% if d.genel %}{{ tablo('', d.genel) }}{{ tablo('oran', d.oran) }}{{ tablo('market', d.market) }}{{ tablo('gün', d.gunluk) }}
+{% else %}<div class="section-sub">Henüz sonuçlanan seçenek yok.</div>{% endif %}
+
+<h2 class="section">⏳ BAŞLAMAMIŞ MAÇLAR ({{ d.gelecek|length }} seçenek)</h2>
+{% set ns = namespace(m=None) %}
+{% for x in d.gelecek %}{% if x.iid != ns.m %}{% if ns.m is not none %}</div>{% endif %}{% set ns.m = x.iid %}
+<div class="kc"><div class="hd1"><span class="saat">{{ x.gun[8:10] }}.{{ x.gun[5:7] }} {{ x.saat }}</span><span class="tk">{{ x.mac }}</span></div>{% endif %}
+{{ secenek(x) }}{% if loop.last %}</div>{% endif %}
+{% else %}<div class="section-sub">Şu an kurala uyan başlamamış maç yok (tarama her saat :47'de).</div>{% endfor %}
+
+<h2 class="section">📅 GÜN GÜN (başlamış / biten)</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/deger?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+{% if d.gun_oz %}{{ tablo(d.gun[8:10] ~ '.' ~ d.gun[5:7], [d.gun_oz]) }}{% endif %}
+{% set ns2 = namespace(m=None) %}
+{% for x in d.L %}{% if x.iid != ns2.m %}{% if ns2.m is not none %}</div>{% endif %}{% set ns2.m = x.iid %}
+<div class="kc"><div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.mac }}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>{% endif %}
+{{ secenek(x) }}{% if loop.last %}</div>{% endif %}
+{% else %}<div class="section-sub">Bu gün için başlamış maç yok.</div>{% endfor %}
+{% endblock %}
