@@ -9,6 +9,7 @@ Token: telefondaki tarayıcıda Volkano'ya giriş yapılır, localStorage "x-aut
 Kullanım:
   python3 vk_bot.py kesif     # site kodundan eksik alanları dök (okur)
   python3 vk_bot.py kontrol   # token geçerli mi, oyuncu/bakiye alanları (okur)
+  python3 vk_bot.py yenile    # token'ı zorla yenile + kontrol
   python3 vk_bot.py ornek     # sıradaki ▶ OYNA için kurulacak kuponu göster, GÖNDERMEZ
   python3 vk_bot.py kuru      # döngü: kuponları hazırlar, kayda yazar, GÖNDERMEZ
   python3 vk_bot.py canli     # döngü: GERÇEK PARAYLA gönderir (sadece /root/volkano-bot/CANLI dosyası varsa)
@@ -101,15 +102,15 @@ def _jwt_bitis(t):
         return None
 
 
-def token():
-    """geçerli erişim anahtarı; süresi bitmek üzereyse yenile"""
+def token(zorla=False):
+    """geçerli erişim anahtarı; süresi bitmek üzereyse (ya da zorla) yenile"""
     d = _tok_oku()
     at = d.get("accessToken") or d.get("token")
-    if (_jwt_bitis(at) or 0) - time.time() > 300:
+    if not zorla and (_jwt_bitis(at) or 0) - time.time() > 300:
         return at, d
     rt = d.get("refreshToken")
     for yol in ("api/public/refresh",):                  # site: auth.api + api/public/refresh {refreshToken}, Authorization yok
-        st, y = _http(env("auth.api") + yol, {"refreshToken": rt})
+        st, y = _http(env("auth.api") + yol, {"refreshToken": rt}, tok=at)
         if st == 200 and isinstance(y, dict) and (y.get("token") or y.get("accessToken")):
             d["accessToken"] = y.get("token") or y.get("accessToken")
             d["refreshToken"] = y.get("refreshToken") or rt
@@ -140,17 +141,26 @@ def kesif():
     print("auth.api =", env("auth.api"), "| user.api.player =", env("user.api.player"), "| sport.api.integration =", env("sport.api.integration"))
 
 
-def kontrol():
-    at, d = token()
+def _ara(y, yol=""):
+    """iç içe cevapta bakiye/para alanlarını bul"""
+    if isinstance(y, dict):
+        for k, v in y.items():
+            if re.search("balance|spendable|amount|currency|wallet|money", k, re.I) and not isinstance(v, (dict, list)):
+                print("   ", yol + k, "=", v)
+            _ara(v, yol + k + ".")
+    elif isinstance(y, list):
+        for i, v in enumerate(y[:5]):
+            _ara(v, yol + f"{i}.")
+
+
+def kontrol(zorla=False):
+    at, d = token(zorla)
     print("token bitiş:", datetime.fromtimestamp(_jwt_bitis(at) or 0).strftime("%d.%m %H:%M"), "| yenileme bitiş:",
           datetime.fromtimestamp(_jwt_bitis(d.get("refreshToken") or "") or 0).strftime("%d.%m %H:%M"))
-    for yol in ("api/public/Player/GetPlayerData", "api/public/Player/getSnapshot"):
+    for yol in ("api/public/Player/GetFullPlayerState", "api/public/player/FetchConfiguration", "api/public/Player/GetPlayerData"):
         st, y = _http(env("user.api.player") + yol, {}, tok=at, params={"t": env("tenant.id")})
-        if isinstance(y, dict):
-            print(yol, st, "alanlar:", sorted(y)[:40])
-            print("   bakiye/para:", {k: v for k, v in y.items() if re.search("balance|amount|money|currency|spendable|wallet", k, re.I)})
-        else:
-            print(yol, st, str(y)[:200])
+        print(yol, st, ("alanlar: " + str(sorted(y)[:25])) if isinstance(y, dict) else str(y)[:150])
+        _ara(y)
 
 
 def _kayit():
@@ -304,5 +314,5 @@ def dongu(canli):
 
 if __name__ == "__main__":
     k = (sys.argv[1:] or ["?"])[0]
-    {"kesif": kesif, "kontrol": kontrol, "ornek": ornek, "kuru": lambda: dongu(False), "canli": lambda: dongu(True)}.get(
+    {"kesif": kesif, "kontrol": kontrol, "yenile": lambda: kontrol(True), "ornek": ornek, "kuru": lambda: dongu(False), "canli": lambda: dongu(True)}.get(
         k, lambda: print(__doc__))()
