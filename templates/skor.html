@@ -38,7 +38,7 @@
 {% endblock %}
 {% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
 {% macro dd(v) %}{% if v is none %}<span class="z">·</span>{% else %}<span class="{{ 'a' if v >= 5 else 'e' if v <= -5 else 'z' }}">{{ '%+d'|format(v) }}%</span>{% endif %}{% endmacro %}
-{% macro satir(s) %}<tr class="{{ 'ok' if s.tuttu else '' }}"><td class="s">{{ s.sec }}{{ ' ✓' if s.tuttu else '' }}</td><td>{{ s.ilk or '·' }}</td><td>{{ s.u3 or '·' }}</td><td><b>{{ s.son or '·' }}</b></td><td>{{ dd(s.d) }}</td><td>{{ dd(s.d3) }}</td><td class="z">%{{ s.p }}</td></tr>{% endmacro %}
+{% macro satir(s) %}<tr class="{{ 'ok' if s.tuttu else '' }}"><td class="s">{{ s.sec }}{{ ' ✓' if s.tuttu else '' }}</td><td>{{ s.ilk or '·' }}</td><td>{{ s.u3 or '·' }}</td><td><b>{{ s.son or '·' }}</b></td><td>{{ dd(s.d) }}</td><td>{{ dd(s.d3) }}</td><td class="z">{{ s.x or '·' }}</td><td>{% if s.dg %}<span class="{{ 'a' if s.dg >= 1 else 'z' }}">{{ '💎' if s.dg >= 1 }}{{ '%.2f'|format(s.dg) }}</span>{% else %}<span class="z">·</span>{% endif %}</td></tr>{% endmacro %}
 {% block content %}
 <div class="section-sub">Son bülten taraması: {{ (d.last.at[:19] ~ '+00:00') | localdatetime if d.last.at else 'henüz yok (uygulama açıldıktan ~4 dk sonra)' }} · {{ d.last.log }}{% if d.last.son %} · {{ d.last.son }}{% endif %}{% if d.last.hata or d.hata %} · ⚠ {{ d.last.hata or d.hata }}{% endif %}</div>
 
@@ -54,6 +54,8 @@
 {% for x in d.kova %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>
 <table class="tt"><tr><th>3 saat kala → son 5 dk</th><th>seçenek</th><th>tuttu</th><th>beklenen</th><th>ROI</th></tr>
 {% for x in d.kova3 %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>
+{% if d.dkova %}<table class="tt"><tr><th>💎 değer (iddaa × 1xBet ihtimali, son 5 dk)</th><th>seçenek</th><th>tuttu</th><th>beklenen</th><th>ROI</th></tr>
+{% for x in d.dkova %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>{% endif %}
 <div class="section-sub">Beklenen = son 5 dk marjsız ihtimal toplamı. "Tuttu" beklenenden belirgin fazlaysa o grup bilgi taşıyor. ROI = her seçime 1 birim, son 5 dk oranıyla. İlk kaydı maçtan 1 saatten az önce alınan maçlar ilk → son hesabına girmez.</div>
 {% else %}<div class="section-sub">Henüz son 5 dk kaydı olan biten maç yok. İlk sonuçlar maçlar bittikçe gelir.</div>{% endif %}
 
@@ -66,7 +68,8 @@
   <div class="hd3">{% if x.i_ilk %}<span class="pl">ilk · {{ x.i_ilk }}</span>{% endif %}{% if x.var3 %}<span class="pl ok">✓ 3 sa kala</span>{% else %}<span class="pl bek">⏳ 3 sa kala</span>{% endif %}{% if x.var5 %}<span class="pl ok">✓ son 5 dk</span>{% else %}<span class="pl bek">⏳ son 5 dk</span>{% endif %}<span class="pl">marj %{{ x.marj }}</span>{% if x.skor and not x.listede %}<span class="pl bek">sonuç listede yok (Diğer)</span>{% endif %}</div>
   {% if x.para %}<div class="pr"><span class="pt">💸 para girdi (ilk → {{ 'son 5 dk' if x.var5 else '3 sa kala' }}, oranı en çok düşen)</span>{% for p in x.para %}<span class="c gir {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b> <i>{{ p.ilk }}→{{ p.son }}</i></span>{% endfor %}</div>{% endif %}
   {% if x.cikan %}<div class="pr"><span class="pt">🔻 para çıktı (oranı en çok yükselen)</span>{% for p in x.cikan %}<span class="c cik {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>{{ '%+d'|format(p.d) }}%</b> <i>{{ p.ilk }}→{{ p.son }}</i></span>{% endfor %}</div>{% endif %}
-  <table class="st"><tr><th>skor</th><th>ilk</th><th>3 sa</th><th>son 5</th><th>ilk→son</th><th>3sa→son</th><th>ihtimal</th></tr>
+  {% if x.deger %}<div class="pr"><span class="pt">💎 değerli (iddaa oranı × 1xBet marjsız ihtimali ≥ 1.00)</span>{% for p in x.deger %}<span class="c gir {{ 'ok' if p.tuttu else '' }}">{{ p.sec }} <b>x{{ '%.2f'|format(p.dg) }}</b> <i>iddaa {{ p.son or p.u3 or p.ilk }} · 1xBet {{ p.x }}</i></span>{% endfor %}</div>{% endif %}
+  <table class="st"><tr><th>skor</th><th>ilk</th><th>3 sa</th><th>son 5</th><th>ilk→son</th><th>3sa→son</th><th>1xBet</th><th>değer</th></tr>
   {% for s in x.S[:12] %}{{ satir(s) }}{% endfor %}</table>
   {% if x.S|length > 12 %}<details><summary>diğer {{ x.S|length - 12 }} skor</summary><table class="st">{% for s in x.S[12:] %}{{ satir(s) }}{% endfor %}</table></details>{% endif %}
 </div>
