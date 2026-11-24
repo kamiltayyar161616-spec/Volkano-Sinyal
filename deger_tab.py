@@ -1,6 +1,6 @@
 """DEĞER 90 — iddaa maç önü değer 0.90-0.95 seçenekleri (iddaa-bot otomatik taraması). Sadece okur, bahis yok.
 Kaynak: /root/iddaa-bot/deger_tablo.json (iddaa-bot/deger_tablo.py saatlik yazar: deger_kayit.jsonl'den her maç+seçenek
-bir kez, maça ≤6 saat kala ilk görüldüğü tarama; sonuç iddaa_sonuc / 7M). ROI: her seçeneğe 50 TL tekli, ilk görüldüğü oranla."""
+bir kez; KURAL: maça 5-8 saat kala listede + 0.5-2 saat kala hâlâ listede -> OYNA). ROI: her seçeneğe 50 TL tekli, 1 saat kala (teyit) oranıyla."""
 import json
 import os
 import time
@@ -19,7 +19,7 @@ def _sec(x):
 
 
 def _ozet(ad, L):
-    L = [x for x in L if x["kazandi"] is not None]
+    L = [x for x in L if x["kazandi"] is not None and x.get("durum", "oyna") == "oyna"]
     if not L:
         return None
     w = sum(x["kazandi"] for x in L)
@@ -40,6 +40,8 @@ def get_page_data(gun=None):
         x["gun"], x["saat"], x["sec"] = t.date().isoformat(), t.strftime("%H:%M"), _sec(x)
         x["ilk_s"] = datetime.fromtimestamp(x["ilk"], TR).strftime("%H:%M")
         x["kala"] = round((x["baslama"] - x["ilk"]) / 3600, 1)
+        x["teyit_s"] = datetime.fromtimestamp(x["teyit"], TR).strftime("%H:%M") if x.get("teyit") else None
+        x["tkala"] = round((x["baslama"] - x["teyit"]) / 3600, 1) if x.get("teyit") else None
         x["basladi"] = x["baslama"] <= simdi
     gunler = sorted({x["gun"] for x in L}, reverse=True)
     bugun = datetime.now(TR).date().isoformat()
@@ -54,6 +56,6 @@ def get_page_data(gun=None):
     gunluk = [o for o in (_ozet(g[8:10] + "." + g[5:7], [x for x in L if x["gun"] == g]) for g in gunler) if o]
     for o in market:
         o["ad"] = o["ad"].replace("Cifte sans", "Çifte şans").replace("Alt/Ust", "Alt/Üst").replace("IY MS", "İY MS")
-    return {"at": datetime.fromtimestamp(J.get("at", 0), TR).strftime("%d.%m %H:%M"), "ufuk": J.get("ufuk_saat", 6),
+    return {"at": datetime.fromtimestamp(J.get("at", 0), TR).strftime("%d.%m %H:%M"), "kural": J.get("kural", ""),
             "gunler": gunler, "gun": gun, "gelecek": gelecek, "L": [x for x in L if x["gun"] == gun and x["basladi"]],
             "genel": genel, "oran": oran, "market": market, "gunluk": gunluk, "gun_oz": _ozet("gün", [x for x in L if x["gun"] == gun])}
