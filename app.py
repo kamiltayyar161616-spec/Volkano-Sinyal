@@ -53,6 +53,7 @@ import iyms_vk
 import skor_tab
 import skor_x
 import skor_ortak
+import joe
 import deger_tab
 import iyms_av
 import xbet
@@ -575,6 +576,11 @@ def iyms_xv_page():
 @app.route("/deger")
 def deger_page():
     return render_template("deger.html", d=deger_tab.get_page_data(request.args.get("gun")), active_page="deger")
+
+
+@app.route("/joe")
+def joe_page():
+    return render_template("joe.html", d=joe.get_page_data(), active_page="joe")
 
 
 @app.route("/skor-1x")
