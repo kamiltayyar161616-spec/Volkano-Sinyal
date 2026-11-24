@@ -205,7 +205,7 @@ def kupon_kur(x):
     e, m = e or {}, m or {}
     ev_id = next((v for k in ("ai", "aggregatorId", "id", "mac_id", "event_id") for v in (e.get(k), m.get(k)) if v), None)
     bet = {
-        "BetCode": e.get("bc") or e.get("betCode") or m.get("bc"),
+        "BetCode": m.get("bc") or m.get("betCode"),        # sitede de boş olabiliyor (|| null)
         "EventId": ev_id,
         "EventStartTime": e.get("sd") or e.get("startDate") or m.get("baslama"),
         "EventMarketBetBaseline": b.get("bl"),
@@ -213,11 +213,11 @@ def kupon_kur(x):
         "EventMarketBetName": b.get("n"),
         "EventMarketBetPrice": o,
         "ParticipantId": b.get("pi") or b.get("participantId"),
-        "LeagueId": e.get("lei") or e.get("leagueId") or m.get("lei"),
+        "LeagueId": m.get("lig_id") or m.get("lig") or e.get("leagueId"),
         "MarketId": mk.get("id"),
         "IsFixed": False,
         "SportId": e.get("si") or e.get("sportId") or 1,
-        "IsLive": False,
+        "IsLive": m.get("durum") == "InProgress",
         "MarketName": mk.get("n") or mk.get("name"),
     }
     govde = {
