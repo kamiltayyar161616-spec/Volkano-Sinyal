@@ -133,8 +133,9 @@ def _anahtar(x):
     return f"{x['iid']}|{x['ad']}|{x['n']}|{x.get('sov')}"
 
 
-def _vk_pazarlar(ev, dep, ko_ts):
-    """iddaa maçı -> Volkano pazarları {pazar_id: {çizgi ya da "": {seçenek: oran}}} ya da None"""
+def _vk_pazarlar(ev, dep, ko_ts, ham=False):
+    """iddaa maçı -> Volkano pazarları {pazar_id: {çizgi ya da "": {seçenek: oran}}} ya da None.
+    ham=True: değer {"od", "b", "m"} (bahis ve pazarın ham hali) ve dönüş (pazarlar, olay, fikstür) - vk_bot kuponu bununla kurar"""
     import oto_tahmin as O
     import iyms_kars as IK
     v, fx = IK._vk_fx()
@@ -143,12 +144,13 @@ def _vk_pazarlar(ev, dep, ko_ts):
     m = O.vk_fx_esle(fx, [(ev, dep), (e1, d1), (IK._U.get(e1.lower(), e1), IK._U.get(d1.lower(), d1))], ko)
     i = next((m[k] for k in ("id", "mac_id", "ai", "event_id") if m.get(k)), None) if m else None
     if i is None:
-        return None
+        return (None, None, None) if ham else None
     d = v.get("Offer/GetEventMarkets", [("eventIds", i), ("dpId", v.DP_ID)])
     e = d[0] if isinstance(d, list) and d else d
     out = {}
     for pz in (e or {}).get("m", []):
         x = out.setdefault(str(pz.get("id")), {})
+        pm = {k: pz[k] for k in pz if k != "b"}
         for b in pz.get("b", []):
             try:
                 od = float(b.get("od"))
@@ -159,8 +161,8 @@ def _vk_pazarlar(ev, dep, ko_ts):
                 bl = "" if bl in (None, "") else str(float(bl))
             except (TypeError, ValueError):
                 bl = str(bl)                       # handikap "0:1"
-            x.setdefault(bl, {})[str(b.get("n")).strip().upper().replace(" ", "")] = od
-    return out or None
+            x.setdefault(bl, {})[str(b.get("n")).strip().upper().replace(" ", "")] = {"od": od, "b": b, "m": pm} if ham else od
+    return (out or None, e, m) if ham else (out or None)
 
 
 # Volkano pazar numaraları (Ipswich - Aston Villa dökümünden): maç sonu / ilk yarı / ikinci yarı
@@ -175,7 +177,7 @@ def _tr(s):
 
 
 def _vk_oran(pz, x):
-    """Değer 90 seçeneği -> Volkano oranı (yoksa None)"""
+    """Değer 90 seçeneği -> Volkano oranı (yoksa None). ham pazarlarla çağrılırsa {"od","b","m"} döner."""
     if not pz:
         return None
     a, n, sov = _tr(x["ad"]), _tr(x["n"]), x.get("sov")
