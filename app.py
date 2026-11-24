@@ -741,6 +741,7 @@ if __name__ == "__main__":
     iyms_vk.start_background()
     skor_tab.start_background()
     skor_x.start_background()
+    joe.start_background()
     iyms_av.start_background()
     xbet.start_background()
     kupon_ajan.start_background()

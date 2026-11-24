@@ -16,18 +16,19 @@
 </style>
 <meta http-equiv="refresh" content="120">
 {% endblock %}
-{% macro kasa(d) %}<div class="ks">
-  <div><small>kasa (boşta)</small><b>{{ d.kasa|int }} TL</b></div>
-  <div><small>açık kuponlarda</small><b>{{ (d.bekleyen or 0)|int }} TL</b></div>
-  <div><small>toplam</small><b class="{{ 'p' if d.toplam >= d.kasa0 else 'n' }}">{{ d.toplam|int }} TL</b></div>
+{% macro para(v, bir='TL') %}{{ ('%.2f'|format(v or 0)) if bir == '€' else ((v or 0)|int) }} {{ bir }}{% endmacro %}
+{% macro kasa(d, bir='TL') %}<div class="ks">
+  <div><small>kasa (boşta)</small><b>{{ para(d.kasa, bir) }}</b></div>
+  <div><small>açık kuponlarda</small><b>{{ para(d.bekleyen or 0, bir) }}</b></div>
+  <div><small>toplam</small><b class="{{ 'p' if d.toplam >= d.kasa0 else 'n' }}">{{ para(d.toplam, bir) }}</b></div>
   <div><small>kupon / biten</small><b>{{ d.n or 0 }} / {{ d.biten or 0 }}</b></div>
   <div><small>tuttu</small><b>{{ d.w or 0 }}{% if d.biten %} <span style="font-size:12px">%{{ (100 * d.w / d.biten)|round|int }}</span>{% endif %}</b></div>
-  <div><small>net · ROI</small><b class="{{ 'p' if (d.net or 0) >= 0 else 'n' }}">{{ '%+d'|format(d.net or 0) }}{% if d.roi is not none %} <span style="font-size:12px">{{ '%+.1f'|format(d.roi) }}%</span>{% endif %}</b></div>
+  <div><small>net · ROI</small><b class="{{ 'p' if (d.net or 0) >= 0 else 'n' }}">{{ ('%+.2f'|format(d.net or 0)) if bir == '€' else ('%+d'|format(d.net or 0)) }}{% if d.roi is not none %} <span style="font-size:12px">{{ '%+.1f'|format(d.roi) }}%</span>{% endif %}</b></div>
 </div>
 {% endmacro %}
 {% block content %}
 {% if d.hata %}<div class="section-sub">⚠ {{ d.hata }}</div>{% endif %}
-<div style="margin:0 16px 10px"><a class="chip on" href="#bot">🤖 Bot kasası</a> <a class="chip" href="#deger">💎 Değer kupon</a></div>
+<div style="margin:0 16px 10px"><a class="chip on" href="#bot">🤖 Bot kasası</a> <a class="chip" href="#deger">💎 Değer kupon</a> <a class="chip" href="#vk">🌋 Volkano kupon</a></div>
 <h2 class="section" id="bot">🤖 BOT KASASI</h2>
 {{ kasa(d) }}
 <h2 class="section">🧾 KUPONLAR</h2>
@@ -49,4 +50,16 @@
   <div class="r2"><span>{{ x.saat }}{% if x.lig %} · {{ x.lig }}{% endif %} · değer x{{ '%.2f'|format(x.r or 0) }} · yarım Kelly %{{ x.kelly }}{{ ' (min 50)' if x.kelly <= 0 }}</span><span>kasa {{ x.kasa_sonra|int }}</span></div>
 </div>
 {% else %}<div class="section-sub">Henüz ▶ OYNA seçeneği yok.</div>{% endfor %}
+
+<h2 class="section" id="vk">🌋 VOLKANO KUPON</h2>
+<div class="section-sub">Değer 90'da <b>▶ OYNA</b> olan seçenek, 1 sa kala teyit anında Volkano'da eşleştirilir ve <b>o anki Volkano oranıyla tekli</b> oynanır. Kasa <b>{{ '%.0f'|format(d.vk.kasa0) }} €</b> ({{ d.vk.basla }}'dan itibaren), en az 0.50 €, yarım Kelly, üst sınır yok. Volkano kazancından %12 vergi düşülür (etkin oran = oran × 0.88). Volkano'da karşılığı olan pazarlar: MS, İY MS, Alt/Üst, Çifte şans, KG.</div>
+{{ kasa(d.vk, '€') }}
+{% for x in d.vk.K %}
+<div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">
+  <div class="r1"><span>{{ x.mac }}</span><span>{% if x.net is not none %}<span class="{{ 'p' if x.net > 0 else 'n' }}">{{ '%+.2f'|format(x.net) }} €</span>{% elif not x.tutar %}<span class="n">kasa yetmedi</span>{% else %}⏳{% endif %}</span></div>
+  <div class="r1" style="font-weight:600"><span>{{ x.bahis }} @{{ x.vo }} <span style="color:var(--chalk-faint);font-weight:500">(vergili {{ x.o }})</span> · {{ '%.2f'|format(x.tutar) }} €</span><span>{% if x.son %}{{ x.son }} {{ '✓' if x.kaz else '✗' }}{% endif %}</span></div>
+  <div class="r2"><span>{{ x.saat }}{% if x.lig %} · {{ x.lig }}{% endif %} · iddaa {{ x.io }} · Volkano değer x{{ '%.2f'|format(x.r) }} · yarım Kelly %{{ x.kelly }}{{ ' (min 0.50)' if x.kelly <= 0 }}</span><span>kasa {{ '%.2f'|format(x.kasa_sonra) }}</span></div>
+</div>
+{% else %}<div class="section-sub">Henüz Volkano kuponu yok.</div>{% endfor %}
+{% if d.vk.yok %}<div class="section-sub">Volkano'da oynanamayan ▶ OYNA seçenekleri: {% for x in d.vk.yok %}{{ x.mac }} · {{ x.bahis }} ({{ x.neden }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
 {% endblock %}
