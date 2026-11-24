@@ -134,7 +134,7 @@ def _anahtar(x):
 
 
 def _vk_pazarlar(ev, dep, ko_ts):
-    """iddaa maçı -> Volkano pazarları {"1": {1,X,2}, "60": İY 1X2, "18": {çizgi: {over, under}}, "dc": {1X,X2,12}, "gg": {GG,NG}} ya da None"""
+    """iddaa maçı -> Volkano pazarları {pazar_id: {çizgi ya da "": {seçenek: oran}}} ya da None"""
     import oto_tahmin as O
     import iyms_kars as IK
     v, fx = IK._vk_fx()
@@ -148,46 +148,65 @@ def _vk_pazarlar(ev, dep, ko_ts):
     e = d[0] if isinstance(d, list) and d else d
     out = {}
     for pz in (e or {}).get("m", []):
-        pid = str(pz.get("id"))
-        x = {}
+        x = out.setdefault(str(pz.get("id")), {})
         for b in pz.get("b", []):
             try:
                 od = float(b.get("od"))
             except (TypeError, ValueError):
                 continue
-            n = str(b.get("n")).strip()
-            if pid in ("18", "68"):
-                if b.get("bl") not in (None, ""):
-                    x.setdefault(str(float(b.get("bl"))), {})[n.lower()] = od
-            else:
-                x[n.upper().replace(" ", "")] = od
-        if pid in ("1", "18", "60"):
-            out[pid] = x
-        elif "dc" not in out and {"1X", "X2", "12"} <= set(x):
-            out["dc"] = {k: x[k] for k in ("1X", "X2", "12")}
-        elif "gg" not in out and len(x) == 2 and ({"GG", "NG"} <= set(x) or {"YES", "NO"} <= set(x)):
-            out["gg"] = {"Var": x.get("GG") or x.get("YES"), "Yok": x.get("NG") or x.get("NO")}
+            bl = b.get("bl")
+            try:
+                bl = "" if bl in (None, "") else str(float(bl))
+            except (TypeError, ValueError):
+                bl = str(bl)                       # handikap "0:1"
+            x.setdefault(bl, {})[str(b.get("n")).strip().upper().replace(" ", "")] = od
     return out or None
+
+
+# Volkano pazar numaraları (Ipswich - Aston Villa dökümünden): maç sonu / ilk yarı / ikinci yarı
+VK_ID = {"": {"ms": "1", "cs": "10", "au": "18", "kg": "29", "tc": "26", "h": "14"},
+         "iy": {"ms": "60", "cs": "63", "au": "68", "kg": "75", "tc": "74", "h": "65"},
+         "2y": {"ms": "83", "cs": "85", "au": "90", "kg": "95", "tc": "94", "h": "87"}}
+VK_TAKIM_AU = {}                                  # {"ev": id, "dep": id} - takım Alt/Üst, döküm bekleniyor
+
+
+def _tr(s):
+    return str(s).lower().translate(str.maketrans("ıüöçşğİ", "iuocsgi")).replace(".", "").strip()
 
 
 def _vk_oran(pz, x):
     """Değer 90 seçeneği -> Volkano oranı (yoksa None)"""
     if not pz:
         return None
-    ad, n, sov = x["ad"], str(x["n"]), x.get("sov")
-    k = {"1": "1", "0": "X", "X": "X", "2": "2"}.get(n)
+    a, n, sov = _tr(x["ad"]), _tr(x["n"]), x.get("sov")
+    g = lambda pid, bl="": ((pz.get(pid) or {}).get(bl) or {})
     try:
-        if ad == "MS":
-            return (pz.get("1") or {}).get(k)
-        if ad == "IY MS":
-            return (pz.get("60") or {}).get(k)
-        if ad == "Alt/Ust":
-            return ((pz.get("18") or {}).get(str(float(sov))) or {}).get("over" if "st" in n.lower() else "under")
-        if ad == "Cifte sans":
-            return (pz.get("dc") or {}).get({"1-0": "1X", "0-1": "1X", "1-2": "12", "2-1": "12", "0-2": "X2", "2-0": "X2"}.get(n.replace(" ve ", "-")))
-        if ad == "KG":
-            return (pz.get("gg") or {}).get(n)
-    except (TypeError, ValueError):
+        if a.replace(" ", "") in ("iy/ms", "iyms2"):             # İY/MS
+            return g("47").get(n.upper().replace(" ", "").replace("0", "X"))
+        y = ""
+        for on, k in (("iy ", "iy"), ("ilk yari ", "iy"), ("2y ", "2y"), ("2 yari ", "2y"), ("ikinci yari ", "2y")):
+            if a.startswith(on):
+                y, a = k, a[len(on):].strip()
+        P = VK_ID[y]
+        k1 = {"1": "1", "0": "X", "x": "X", "2": "2"}.get(n)
+        if a == "ms":
+            return g(P["ms"]).get(k1)
+        if a in ("alt/ust", "a/u", "alt ust"):
+            return g(P["au"], str(float(sov))).get("OVER" if "ust" in n else "UNDER")
+        if a.startswith("cifte"):
+            return g(P["cs"]).get({"1-0": "1X", "0-1": "1X", "1-2": "12", "2-1": "12", "0-2": "X2", "2-0": "X2"}.get(n.replace(" ve ", "-")))
+        if a == "kg":
+            return g(P["kg"]).get({"var": "YES", "yok": "NO"}.get(n))
+        if a in ("tek/cift", "tek cift"):
+            return g(P["tc"]).get({"tek": "ODD", "cift": "EVEN"}.get(n))
+        if a.startswith("handikap"):
+            h = float(sov)
+            bl = f"0:{int(-h)}" if h < 0 else f"{int(h)}:0"
+            return g(P["h"], bl).get(k1)
+        if a in ("ev a/u", "dep a/u") and y == "":
+            pid = VK_TAKIM_AU.get(a.split()[0])
+            return g(pid, str(float(sov))).get("OVER" if "ust" in n else "UNDER") if pid else None
+    except (TypeError, ValueError, KeyError):
         return None
     return None
 
