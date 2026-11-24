@@ -39,6 +39,9 @@ def log(*a):
     print(datetime.now().strftime("%d.%m %H:%M:%S"), *a, flush=True)
 
 
+_FP = {}
+
+
 def _http(url, veri=None, tok=None, params=None):
     if params:
         url += ("&" if "?" in url else "?") + "&".join(f"{k}={v}" for k, v in params.items())
@@ -47,6 +50,9 @@ def _http(url, veri=None, tok=None, params=None):
         h["Content-Type"] = "application/json"
     if tok:
         h["Authorization"] = f"Bearer {tok}"
+        h["x-auth-refresh"] = "manual"
+    if _FP.get("fp"):
+        h["Fingerprint"] = _FP["fp"]
     r = U.Request(url, data=None if veri is None else json.dumps(veri).encode(), headers=h, method="POST" if veri is not None else "GET")
     try:
         with U.urlopen(r, timeout=25) as y:
@@ -78,7 +84,12 @@ def _tok_oku():
         d = json.load(open(TOKEN))
     except Exception as e:
         raise SystemExit(f"token dosyası okunamadı ({TOKEN}): {e}")
-    return json.loads(d) if isinstance(d, str) else d
+    d = json.loads(d) if isinstance(d, str) else d
+    for k in ("accessToken", "refreshToken", "fingerprint"):
+        if isinstance(d.get(k), str):
+            d[k] = re.sub(r"\s+", "", d[k])     # yapıştırırken araya giren boşluk/satır sonu
+    _FP["fp"] = d.get("fingerprint")
+    return d
 
 
 def _jwt_bitis(t):
@@ -97,9 +108,8 @@ def token():
     if (_jwt_bitis(at) or 0) - time.time() > 300:
         return at, d
     rt = d.get("refreshToken")
-    base = env("auth.api") or env("user.api.player")
-    for yol, veri in (("api/public/refresh", {"refreshToken": rt}), ("api/public/Refresh/IssueRefreshToken", {})):
-        st, y = _http(base + yol, veri, tok=rt if yol.endswith("IssueRefreshToken") else at, params={"t": env("tenant.id")})
+    for yol in ("api/public/refresh",):                  # site: auth.api + api/public/refresh {refreshToken}, Authorization yok
+        st, y = _http(env("auth.api") + yol, {"refreshToken": rt})
         if st == 200 and isinstance(y, dict) and (y.get("token") or y.get("accessToken")):
             d["accessToken"] = y.get("token") or y.get("accessToken")
             d["refreshToken"] = y.get("refreshToken") or rt
@@ -138,7 +148,7 @@ def kontrol():
         st, y = _http(env("user.api.player") + yol, {}, tok=at, params={"t": env("tenant.id")})
         if isinstance(y, dict):
             print(yol, st, "alanlar:", sorted(y)[:40])
-            print("   bakiye:", {k: v for k, v in y.items() if re.search("balance|amount|money|currency|spendable", k, re.I)})
+            print("   bakiye/para:", {k: v for k, v in y.items() if re.search("balance|amount|money|currency|spendable|wallet", k, re.I)})
         else:
             print(yol, st, str(y)[:200])
 
@@ -203,7 +213,7 @@ def kupon_kur(x):
     govde = {
         "ActionCreatedDatetime": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "ActionId": str(uuid.uuid4()),
-        "AcceptPriceChanges": "OnlyHigher",
+        "AcceptPriceChanges": True,                   # sitede açık/kapalı düğme; oran saniyeler önce okundu
         "ClientFingerprint": None,
         "Systems": None,
         "Amount": tutar,
