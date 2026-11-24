@@ -1,6 +1,6 @@
 """DEĞER 90 — iddaa maç önü değer 0.90-0.95 seçenekleri (iddaa-bot otomatik taraması). Sadece okur, bahis yok.
 Kaynak: /root/iddaa-bot/deger_tablo.json (iddaa-bot/deger_tablo.py saatlik yazar: deger_kayit.jsonl'den her maç+seçenek
-bir kez; KURAL: maça 5-8 saat kala listede + 0.5-2 saat kala hâlâ listede -> OYNA). ROI: her seçeneğe 50 TL tekli, 1 saat kala (teyit) oranıyla."""
+bir kez; KURAL: maça 3-8 saat kala listede + 0.5-2 saat kala hâlâ listede -> OYNA). ROI: her seçeneğe 50 TL tekli, 1 saat kala (teyit) oranıyla."""
 import json
 import os
 import time

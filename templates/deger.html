@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Değer 90{% endblock %}
 {% block page_tag %}💎 DEĞER 90 · iddaa maç önü{% endblock %}
-{% block subtitle %}iddaa-bot'un saatlik otomatik taramasında <b>değeri 0.90–0.95</b> çıkan maç önü seçenekleri (maç sonu marketleri + İY MS). <b>KURAL:</b> seçenek maça <b>5–8 saat kala</b> listeye girdiyse ve <b>1 saat kala</b> (0.5–2 sa) taramada <b>hâlâ listedeyse → OYNA</b>. Karne sadece bu seçenekleri, 1 saat kala oranıyla sayar. ROI = her seçeneğe <b>50 TL tekli</b> bahis. Değer = iddaa oranı × keskin büro (Pinnacle/SBOBET/Crown) modelinin olasılığı.{% endblock %}
+{% block subtitle %}iddaa-bot'un saatlik otomatik taramasında <b>değeri 0.90–0.95</b> çıkan maç önü seçenekleri (maç sonu marketleri + İY MS). <b>KURAL:</b> seçenek maça <b>3–8 saat kala</b> listeye girdiyse ve <b>1 saat kala</b> (0.5–2 sa) taramada <b>hâlâ listedeyse → OYNA</b>. Karne sadece bu seçenekleri, 1 saat kala oranıyla sayar. ROI = her seçeneğe <b>50 TL tekli</b> bahis. Değer = iddaa oranı × keskin büro (Pinnacle/SBOBET/Crown) modelinin olasılığı.{% endblock %}
 {% block extra_style %}
 <style>
   .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
@@ -39,7 +39,7 @@
 {% for x in d.gelecek %}{% if x.iid != ns.m %}{% if ns.m is not none %}</div>{% endif %}{% set ns.m = x.iid %}
 <div class="kc"><div class="hd1"><span class="saat">{{ x.gun[8:10] }}.{{ x.gun[5:7] }} {{ x.saat }}</span><span class="tk">{{ x.mac }}</span></div>{% endif %}
 {{ secenek(x) }}{% if loop.last %}</div>{% endif %}
-{% else %}<div class="section-sub">Şu an kurala giren başlamamış maç yok (tarama her saat :47'de; 5–8 sa kala listeye giren seçenek burada görünür, 1 sa kala teyit edilince ▶ OYNA olur).</div>{% endfor %}
+{% else %}<div class="section-sub">Şu an kurala giren başlamamış maç yok (tarama her saat :47'de; 3–8 sa kala listeye giren seçenek burada görünür, 1 sa kala teyit edilince ▶ OYNA olur).</div>{% endfor %}
 
 <h2 class="section">📅 GÜN GÜN (başlamış / biten)</h2>
 <div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/deger?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
