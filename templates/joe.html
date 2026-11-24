@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Joe{% endblock %}
 {% block page_tag %}🤵 JOE · bot sanal kasası{% endblock %}
-{% block subtitle %}iddaa canlı botunun her kupon sinyali Joe'nun sanal kasasına girer (bot gerçekte oynayabilmiş olsun ya da olmasın). Kasa <b>{{ d.kasa0|int }} TL</b>'den başladı ({{ d.basla }}). Tutar = <b>yarım Kelly</b> × kasa, <b>en az 50 TL</b>, üst sınır yok. Kelly'deki ihtimal botun keskin büro (Pinnacle/SBOBET/Crown) adil oranından. Sonuç iddaa'nın kendi sonuç kaydından.{% endblock %}
+{% block subtitle %}iddaa canlı botunun her kupon sinyali Joe'nun sanal kasasına girer (bot gerçekte oynayabilmiş olsun ya da olmasın). Bot kasası <b>{{ d.kasa0|int }} TL</b>'den başladı ({{ d.basla }}). Tutar = <b>yarım Kelly</b> × kasa, <b>en az 50 TL</b>, üst sınır yok. Kelly'deki ihtimal botun keskin büro (Pinnacle/SBOBET/Crown) adil oranından. Sonuç iddaa'nın kendi sonuç kaydından.{% endblock %}
 {% block extra_style %}
 <style>
   .ks{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:0 16px 14px; }
@@ -10,14 +10,13 @@
   .p{ color:#3ccf7a; } .n{ color:#ff5a4f; }
   .kc{ margin:0 16px 9px; padding:9px 12px; border-radius:12px; background:var(--navy); border:1px solid var(--navy-line); font-size:13px; }
   .kc.ok{ box-shadow:inset 0 0 0 1px rgba(60,207,122,.6); } .kc.no{ box-shadow:inset 0 0 0 1px rgba(255,90,79,.45); }
+  .chip{ display:inline-block; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; } .chip.on{ border-color:#e0a030; color:#e0a030; }
   .r1{ display:flex; justify-content:space-between; gap:8px; font-weight:800; }
   .r2{ display:flex; justify-content:space-between; gap:8px; color:var(--chalk-faint); font-size:11.5px; margin-top:3px; }
 </style>
 <meta http-equiv="refresh" content="120">
 {% endblock %}
-{% block content %}
-{% if d.hata %}<div class="section-sub">⚠ {{ d.hata }}</div>{% endif %}
-<div class="ks">
+{% macro kasa(d) %}<div class="ks">
   <div><small>kasa (boşta)</small><b>{{ d.kasa|int }} TL</b></div>
   <div><small>açık kuponlarda</small><b>{{ (d.bekleyen or 0)|int }} TL</b></div>
   <div><small>toplam</small><b class="{{ 'p' if d.toplam >= d.kasa0 else 'n' }}">{{ d.toplam|int }} TL</b></div>
@@ -25,6 +24,12 @@
   <div><small>tuttu</small><b>{{ d.w or 0 }}{% if d.biten %} <span style="font-size:12px">%{{ (100 * d.w / d.biten)|round|int }}</span>{% endif %}</b></div>
   <div><small>net · ROI</small><b class="{{ 'p' if (d.net or 0) >= 0 else 'n' }}">{{ '%+d'|format(d.net or 0) }}{% if d.roi is not none %} <span style="font-size:12px">{{ '%+.1f'|format(d.roi) }}%</span>{% endif %}</b></div>
 </div>
+{% endmacro %}
+{% block content %}
+{% if d.hata %}<div class="section-sub">⚠ {{ d.hata }}</div>{% endif %}
+<div style="margin:0 16px 10px"><a class="chip on" href="#bot">🤖 Bot kasası</a> <a class="chip" href="#deger">💎 Değer kupon</a></div>
+<h2 class="section" id="bot">🤖 BOT KASASI</h2>
+{{ kasa(d) }}
 <h2 class="section">🧾 KUPONLAR</h2>
 {% for x in d.K %}
 <div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">
@@ -33,4 +38,15 @@
   <div class="r2"><span>{{ x.saat }} · {{ x.dk|int }}' {{ x.skor }} · değer x{{ x.deger }} · yarım Kelly %{{ x.kelly }}{{ ' (min 50)' if x.kelly <= 0 }}</span><span>kasa {{ x.kasa_sonra|int }}</span></div>
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok. Bot bir sinyal verdiğinde burada görünür.</div>{% endfor %}
+
+<h2 class="section" id="deger">💎 DEĞER KUPON</h2>
+<div class="section-sub">Değer 90 sekmesinde <b>▶ OYNA</b> olan her seçenek (3–8 sa kala listede + 1 sa kala hâlâ listede), <b>1 sa kala (son) oranıyla tekli</b>. Kasa <b>{{ d.deger.kasa0|int }} TL</b>'den başladı ({{ d.deger.basla }}). Yarım Kelly × kasa, en az 50 TL, üst sınır yok. Kelly'deki ihtimal keskin büro modelinden.</div>
+{{ kasa(d.deger) }}
+{% for x in d.deger.K %}
+<div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">
+  <div class="r1"><span>{{ x.mac }}</span><span>{% if x.net is not none %}<span class="{{ 'p' if x.net > 0 else 'n' }}">{{ '%+d'|format(x.net) }} TL</span>{% elif not x.tutar %}<span class="n">kasa yetmedi</span>{% else %}⏳{% endif %}</span></div>
+  <div class="r1" style="font-weight:600"><span>{{ x.bahis }} @{{ x.o }} · {{ x.tutar|int }} TL</span><span>{% if x.son %}{{ x.son }} {{ '✓' if x.kaz else '✗' }}{% endif %}</span></div>
+  <div class="r2"><span>{{ x.saat }}{% if x.lig %} · {{ x.lig }}{% endif %} · değer x{{ '%.2f'|format(x.r or 0) }} · yarım Kelly %{{ x.kelly }}{{ ' (min 50)' if x.kelly <= 0 }}</span><span>kasa {{ x.kasa_sonra|int }}</span></div>
+</div>
+{% else %}<div class="section-sub">Henüz ▶ OYNA seçeneği yok.</div>{% endfor %}
 {% endblock %}
