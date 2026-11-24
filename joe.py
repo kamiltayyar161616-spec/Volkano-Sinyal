@@ -167,7 +167,7 @@ def _vk_pazarlar(ev, dep, ko_ts):
 VK_ID = {"": {"ms": "1", "cs": "10", "au": "18", "kg": "29", "tc": "26", "h": "14"},
          "iy": {"ms": "60", "cs": "63", "au": "68", "kg": "75", "tc": "74", "h": "65"},
          "2y": {"ms": "83", "cs": "85", "au": "90", "kg": "95", "tc": "94", "h": "87"}}
-# takım Alt/Üst: Üst M9 (ev H1+/H2+/H3+), M10 (dep A1+..); Alt 0.5 = takım 0 gol (23 ev, 24 dep)
+# takım Alt/Üst: Üst M9 (ev H1+/H2+/H3+), M10 (dep A1+..); Alt 0.5 = takım 0 gol (23 ev, 24 dep); Alt 1.5 = 0-1 aralığı (combo11 ev, combo13 dep)
 
 
 def _tr(s):
@@ -208,8 +208,11 @@ def _vk_oran(pz, x):
             if "ust" in n:                         # Üst c = takım (c+0.5)+ gol: M9 H1+.. / M10 A1+..
                 k = f"{'H' if ev else 'A'}{int(c + 0.5)}+"
                 return g("M9" if ev else "M10").get(k) or g("combo10" if ev else "combo12").get(k)
-            t = g("23" if ev else "24")             # Alt: takımın tam gol sayısı pazarı
-            return t.get("0") if c == 0.5 else t.get("0-1") if c == 1.5 else None
+            if c == 0.5:                           # Alt 0.5 = takım 0 gol (tam gol pazarı 23 ev / 24 dep)
+                return g("23" if ev else "24").get("0")
+            if c == 1.5:                           # Alt 1.5 = takım golü 0-1 aralığı (combo11 ev / combo13 dep)
+                return g("combo11" if ev else "combo13").get("0-1")
+            return None
     except (TypeError, ValueError, KeyError):
         return None
     return None
