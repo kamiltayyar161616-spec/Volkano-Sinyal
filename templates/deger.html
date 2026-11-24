@@ -26,12 +26,12 @@
 {% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
 {% macro tablo(baslik, L) %}<table class="tt"><tr><th>{{ baslik }}</th><th>bahis</th><th>tuttu</th><th>%</th><th>ROI</th><th>50 TL net</th><th>ort oran</th></tr>
 {% for o in L %}<tr><td><b>{{ o.ad }}</b></td><td>{{ o.n }}</td><td>{{ o.w }}</td><td>%{{ o.pct }}</td><td>{{ roi(o.roi) }}</td><td><span class="{{ 'p' if o.tl > 0 else 'n' }}">{{ '%+d'|format(o.tl) }} TL</span></td><td>{{ o.ort }}</td></tr>{% endfor %}</table>{% endmacro %}
-{% macro secenek(x) %}<div class="sl {{ 'ok' if x.kazandi else 'no' if x.kazandi == false else 'oy' if x.durum == 'oyna' else '' }}"><span><b>{{ x.sec }}</b>{{ ' ✓' if x.kazandi else ' ✗' if x.kazandi == false else '' }} {% if x.durum == 'oyna' and x.kazandi is none %}<span class="tg oy">▶ OYNA</span>{% elif x.durum == 'bekle' %}<span class="tg bk">⏳ 1 sa kala teyit bekleniyor</span>{% endif %}<br><span class="m">listeye girdi {{ x.ilk_s }} ({{ x.kala }} sa kala) @{{ x.ilk_odd }}{% if x.teyit_s %} · teyit {{ x.teyit_s }} ({{ x.tkala }} sa kala){% endif %}</span></span><span style="text-align:right">@<b>{{ x.odd }}</b><br><span class="m">x{{ '%.2f'|format(x.r) }} · %{{ (100 * x.p)|round|int }}</span></span></div>{% endmacro %}
+{% macro secenek(x) %}<div class="sl {{ 'ok' if x.kazandi else 'no' if x.kazandi == false else 'oy' if x.durum == 'oyna' else '' }}"><span><b>{{ x.sec }}</b>{{ ' ✓' if x.kazandi else ' ✗' if x.kazandi == false else '' }} {% if x.durum == 'oyna' and x.kazandi is none %}<span class="tg oy">▶ OYNA</span>{% elif x.durum == 'bekle' %}<span class="tg bk">⏳ 1 sa kala teyit bekleniyor</span>{% endif %}<br><span class="m">listeye girdi {{ x.ilk_s }} ({{ x.kala }} sa kala) @{{ x.ilk_odd }}{% if x.teyit_s %} · teyit {{ x.teyit_s }} ({{ x.tkala }} sa kala){% endif %}{% if x.durum == 'dustu' %} · <b style="color:#ff8a80">1 sa kala {% if x.son_r is not none %}x{{ '%.2f'|format(x.son_r) }} {{ '↑' if x.son_r >= 0.95 else '↓' }} @{{ x.son_odd }}{% else %}listede yok (değer &lt;0.80 / &gt;1.20){% endif %}</b>{% elif x.son_r is not none and (x.son_r < 0.90 or x.son_r >= 0.95) %} · son tarama x{{ '%.2f'|format(x.son_r) }}{% endif %}</span></span><span style="text-align:right">@<b>{{ x.odd }}</b><br><span class="m">x{{ '%.2f'|format(x.r) }} · %{{ (100 * x.p)|round|int }}</span></span></div>{% endmacro %}
 {% block content %}
 <div class="section-sub">Son güncelleme: {{ d.at }}{% if d.hata %} · ⚠ {{ d.hata }}{% endif %}</div>
 
 <h2 class="section">📈 KARNE (tüm zamanlar · 50 TL tekli)</h2>
-{% if d.genel %}{{ tablo('', d.genel) }}{{ tablo('oran', d.oran) }}{{ tablo('market', d.market) }}{{ tablo('gün', d.gunluk) }}
+{% if d.genel %}{{ tablo('', d.genel) }}{{ tablo('oran', d.oran) }}{{ tablo('market', d.market) }}{% if d.dustu %}{{ tablo('📉 1 sa kala DÜŞENLER (oynanmadı)', d.dustu) }}<div class="section-sub">Listeye girip 1 saat kala aralıktan çıkan seçenekler — oynanmaz, sadece "oynasaydık ne olurdu" diye 1 sa kala oranıyla sayılır.</div>{% endif %}{{ tablo('gün', d.gunluk) }}
 {% else %}<div class="section-sub">Henüz sonuçlanan seçenek yok.</div>{% endif %}
 
 <h2 class="section">⏳ BAŞLAMAMIŞ MAÇLAR ({{ d.gelecek|length }} seçenek)</h2>
@@ -49,4 +49,9 @@
 <div class="kc"><div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.mac }}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>{% endif %}
 {{ secenek(x) }}{% if loop.last %}</div>{% endif %}
 {% else %}<div class="section-sub">Bu gün için başlamış maç yok.</div>{% endfor %}
+{% if d.LD %}<h2 class="section">📉 1 SA KALA DÜŞENLER ({{ d.LD|length }})</h2>
+{% set ns3 = namespace(m=None) %}
+{% for x in d.LD %}{% if x.iid != ns3.m %}{% if ns3.m is not none %}</div>{% endif %}{% set ns3.m = x.iid %}
+<div class="kc"><div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.mac }}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>{% endif %}
+{{ secenek(x) }}{% if loop.last %}</div>{% endif %}{% endfor %}{% endif %}
 {% endblock %}

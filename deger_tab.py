@@ -18,8 +18,8 @@ def _sec(x):
     return s.replace("Cifte sans", "Çifte şans").replace("Alt/Ust", "Alt/Üst").replace("IY MS", "İY MS")
 
 
-def _ozet(ad, L):
-    L = [x for x in L if x["kazandi"] is not None and x.get("durum", "oyna") == "oyna"]
+def _ozet(ad, L, durum="oyna"):
+    L = [x for x in L if x["kazandi"] is not None and x.get("durum", "oyna") == durum]
     if not L:
         return None
     w = sum(x["kazandi"] for x in L)
@@ -32,7 +32,7 @@ def get_page_data(gun=None):
     try:
         J = json.load(open(DOSYA))
     except Exception as e:
-        return {"hata": f"{DOSYA} okunamadı: {str(e)[:120]}", "L": [], "gunler": [], "gun": gun, "genel": [], "oran": [], "market": [], "gunluk": [], "gelecek": []}
+        return {"hata": f"{DOSYA} okunamadı: {str(e)[:120]}", "L": [], "LD": [], "dustu": [], "gunler": [], "gun": gun, "genel": [], "oran": [], "market": [], "gunluk": [], "gelecek": []}
     simdi = time.time()
     L = J.get("L", [])
     for x in L:
@@ -53,9 +53,15 @@ def get_page_data(gun=None):
                         _ozet("oran 3.00 – 5.00", [x for x in L if 3 <= x["odd"] < 5]), _ozet("oran ≥ 5.00", [x for x in L if x["odd"] >= 5])) if o]
     market = [o for o in (_ozet(m, [x for x in L if x["ad"] == m]) for m in sorted({x["ad"] for x in L})) if o]
     market.sort(key=lambda o: -o["n"])
+    D = [x for x in L if x.get("durum") == "dustu"]
+    kova = (("1 sa kala < 0.85", lambda r: r is not None and r < 0.85), ("1 sa kala 0.85 – 0.90", lambda r: r is not None and 0.85 <= r < 0.90),
+            ("1 sa kala ≥ 0.95 (yükseldi)", lambda r: r is not None and r >= 0.95), ("1 sa kala bilinmiyor (<0.80 / >1.20)", lambda r: r is None))
+    dustu = [o for o in (_ozet(ad, [x for x in D if f(x.get("son_r"))], "dustu") for ad, f in kova) if o]
     gunluk = [o for o in (_ozet(g[8:10] + "." + g[5:7], [x for x in L if x["gun"] == g]) for g in gunler) if o]
     for o in market:
         o["ad"] = o["ad"].replace("Cifte sans", "Çifte şans").replace("Alt/Ust", "Alt/Üst").replace("IY MS", "İY MS")
     return {"at": datetime.fromtimestamp(J.get("at", 0), TR).strftime("%d.%m %H:%M"), "kural": J.get("kural", ""),
-            "gunler": gunler, "gun": gun, "gelecek": gelecek, "L": [x for x in L if x["gun"] == gun and x["basladi"]],
+            "gunler": gunler, "gun": gun, "gelecek": gelecek, "dustu": dustu,
+            "L": [x for x in L if x["gun"] == gun and x["basladi"] and x.get("durum") != "dustu"],
+            "LD": [x for x in L if x["gun"] == gun and x.get("durum") == "dustu"],
             "genel": genel, "oran": oran, "market": market, "gunluk": gunluk, "gun_oz": _ozet("gün", [x for x in L if x["gun"] == gun])}
