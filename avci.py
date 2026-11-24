@@ -184,14 +184,44 @@ def yakin():
     return yeni
 
 
-def sonuclandir():
+_m7id = {}                       # mid -> 7M maç id (sonuç yedeği)
+
+
+def _sonuc_7m(mid, ev, dep, ko):
+    """NowGoal skoru yoksa 7M goaldata'dan maç sonu skoru (maç + 130 dk sonra). (ev, dep) ya da None"""
+    import kelly_tab as K
+    import m7_arsiv as A
+    i = _m7id.get(mid)
+    if not i:
+        b = K.m7_bul(ev, dep, _dt(ko))
+        if not b:
+            return None
+        i = _m7id[mid] = b[1]
+    st, body = A.get(f"https://data.7mdt.com/goaldata/en/{i}.js")
+    gl = A.goller_oku(body) if st == 200 else None
+    gs = [g for _, g in (gl or []) if g and g[0].isdigit()]
+    skor = A.skor_al(gs[-1] if gs else None, json.dumps(gl) if gl is not None else None, str(ko)[:16])
+    return tuple(int(v) for v in skor.split("-")) if skor else None
+
+
+def sonuclandir(sure=60):
     c = db()
-    A = c.execute("SELECT mid, taraf FROM sinyal WHERE sonuc IS NULL AND ko < ?",
-                  ((datetime.now(timezone.utc) - timedelta(minutes=110)).isoformat(),)).fetchall()
+    now = datetime.now(timezone.utc)
+    A = c.execute("SELECT mid, taraf, ev, dep, ko FROM sinyal WHERE sonuc IS NULL AND ko < ?",
+                  ((now - timedelta(minutes=110)).isoformat(),)).fetchall()
     if A:
         n = sqlite3.connect(f"file:{ng.DB_FILE}?mode=ro", uri=True, timeout=20)
-        for mid, taraf in A:
+        t0 = time.time()
+        for mid, taraf, ev, dep, ko in A:
             r = n.execute("SELECT status, ft_h, ft_a FROM ng_match WHERE mid=?", (mid,)).fetchone()
+            if not (r and r[0] in ("finished", "void")) and _dt(ko) < now - timedelta(minutes=130) and time.time() - t0 < sure:
+                try:                         # NowGoal engelli/eksik: 7M'den
+                    s7 = _sonuc_7m(mid, ev, dep, ko)
+                    time.sleep(0.5)
+                except Exception:
+                    s7 = None
+                if s7:
+                    r = ("finished", s7[0], s7[1])
             if r and r[0] == "finished" and r[1] is not None:
                 s = "1" if r[1] > r[2] else "2" if r[2] > r[1] else "X"
                 c.execute("UPDATE sinyal SET sonuc=? WHERE mid=? AND taraf=?", (f"{r[1]}-{r[2]}|{'tuttu' if s == taraf else 'yattı'}", mid, taraf))
