@@ -204,6 +204,29 @@ def _sonuc_7m(mid, ev, dep, ko):
     return tuple(int(v) for v in skor.split("-")) if skor else None
 
 
+def _sonuc_iddaa(ev, dep, ko):
+    """iddaa sonuç sayfası kaydından (iddaa_skor.db, bitmiş maç): aynı başlama (±20 dk) + takım adı benzerliği -> (ev, dep) ya da None"""
+    import iddaa_skor as I
+    import kelly_tab as K
+    t = _dt(ko)
+    gun = [(t.astimezone(I.TR) + timedelta(days=d)).date().isoformat() for d in (-1, 0, 1)]
+    c = sqlite3.connect(f"file:{I.DB}?mode=ro", uri=True, timeout=20)
+    R = c.execute(f"SELECT ev_ad, dep_ad, baslama, ev, dep FROM s WHERE phase=2 AND gun IN (?,?,?)", gun).fetchall()
+    c.close()
+    best = None
+    for a, b, bas, h, g in R:
+        try:
+            bt = datetime.fromtimestamp(int(bas) / 1000, timezone.utc) if str(bas).isdigit() else _dt(bas)
+        except Exception:
+            continue
+        if abs((bt - t).total_seconds()) > 1200:
+            continue
+        s1, s2 = K._benz(ev, a) + K._benz(a, ev), K._benz(dep, b) + K._benz(b, dep)
+        if s1 > 0 and s2 > 0 and (not best or s1 + s2 > best[0]):
+            best = (s1 + s2, h, g)
+    return (best[1], best[2]) if best else None
+
+
 def sonuclandir(sure=60):
     c = db()
     now = datetime.now(timezone.utc)
@@ -215,11 +238,16 @@ def sonuclandir(sure=60):
         for mid, taraf, ev, dep, ko in A:
             r = n.execute("SELECT status, ft_h, ft_a FROM ng_match WHERE mid=?", (mid,)).fetchone()
             if not (r and r[0] in ("finished", "void")) and _dt(ko) < now - timedelta(minutes=130) and time.time() - t0 < sure:
-                try:                         # NowGoal engelli/eksik: 7M'den
+                try:                         # NowGoal engelli/eksik: önce 7M, olmazsa iddaa
                     s7 = _sonuc_7m(mid, ev, dep, ko)
                     time.sleep(0.5)
                 except Exception:
                     s7 = None
+                if not s7:                   # 7M'de yoksa iddaa sonuç sayfası
+                    try:
+                        s7 = _sonuc_iddaa(ev, dep, ko)
+                    except Exception:
+                        s7 = None
                 if s7:
                     r = ("finished", s7[0], s7[1])
             if r and r[0] == "finished" and r[1] is not None:
