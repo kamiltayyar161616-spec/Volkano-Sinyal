@@ -227,6 +227,11 @@ def hesap():
     rows = c.execute("SELECT i, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son, x_ilk, x_3s, x_son FROM k").fetchall()
     c.close()
     R = _sonuclar([r[0] for r in rows])
+    return hesap_genel([r + (R.get(r[0]),) for r in rows])
+
+
+def hesap_genel(rows):
+    """rows: (id, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son, x_ilk, x_3s, x_son, sonuc_tuple) — Maç Skoru ve Maç Skoru 1xBet ortak hesap"""
     yeni = lambda: [0, 0, 0.0, 0.0]          # seçim, tuttu, beklenen, kâr (son oranla)
     KV = {g: yeni() for g in PARA_KOVA}
     KV3 = {g: yeni() for g in PARA_KOVA}
@@ -244,12 +249,11 @@ def hesap():
         x[2] += p1.get(k, 0)
         x[3] += (o1[k] - 1) if k == sonuc else -1
 
-    for i, ko, ev, dep, ai, oi, a3, o3, a5, o5, xi, x3, x5 in rows:
+    for i, ko, ev, dep, ai, oi, a3, o3, a5, o5, xi, x3, x5, r in rows:
         oi, o3, o5, xi, x3, x5 = (json.loads(x) if x else None for x in (oi, o3, o5, xi, x3, x5))
         xr = (x5 if o5 else None) or x3 or xi              # karşılaştırmada iddaa'nın en son kaydına en yakın 1xBet kaydı
         px = _novig(xr) if xr else {}
         cur = o5 or o3 or oi
-        r = R.get(i)
         sonuc = f"{r[0]}-{r[1]}" if r else None
         p_ilk = _para(oi, o5 or o3) if (_dt(ko) - _dt(ai)).total_seconds() >= 3600 else None
         p_3s = _para(o3, o5)
@@ -318,6 +322,10 @@ def rapor(yaz=print):
 
 
 def get_page_data(gun=None):
+    return sayfa(hesap, _last, gun)
+
+
+def sayfa(hesap, _last, gun=None):
     try:
         H = hesap()
     except Exception as e:

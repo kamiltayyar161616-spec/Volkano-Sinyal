@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Skor Ortak (iddaa + 1xBet){% endblock %}
+{% block page_tag %}🤝 SKOR ORTAK · iddaa + 1xBet{% endblock %}
+{% block subtitle %}Aynı maçta iddaa ve 1xBet doğru skor oranlarında para hareketi (ilk → son 5 dk; yoksa 3 sa kala). Her site için <b>en çok para giren 3</b> ve <b>para çıkan 3</b> skor; <b>ortak</b> = ikisinde de ilk 3'te. Karne: her grup kaç kez tuttu, iddaa ve 1xBet oranıyla ROI (her skora 1 birim). Sadece iki sitede de kaydı olan maçlar.{% endblock %}
+{% block extra_style %}
+<style>
+  .tt{ width:calc(100% - 32px); margin:0 16px 14px; border-collapse:collapse; font-size:12.5px; }
+  .tt th{ color:var(--chalk-faint); font-weight:600; padding:5px 3px; text-align:right; } .tt th:first-child,.tt td:first-child{ text-align:left; }
+  .tt td{ padding:6px 3px; border-top:1px solid var(--navy-line); text-align:right; }
+  .p{ color:#3ccf7a; font-weight:700; } .n{ color:#ff5a4f; font-weight:700; }
+  .kc{ margin:0 16px 12px; padding:10px 12px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); }
+  .hd1{ display:flex; align-items:flex-start; gap:8px; }
+  .hd1 .saat{ font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:13px; color:#e0a030; padding:2px 7px; border-radius:7px; background:rgba(224,160,48,.12); flex:none; }
+  .hd1 .tk{ flex:1; min-width:0; font-weight:800; font-size:15px; line-height:1.25; }
+  .hd1 .sk{ flex:none; text-align:right; font-weight:800; font-size:15px; color:#3ccf7a; } .hd1 .sk small{ display:block; font-size:10.5px; color:var(--chalk-faint); font-weight:600; }
+  .pl{ font-size:10.5px; padding:2px 7px; border-radius:10px; background:rgba(255,255,255,.05); color:var(--chalk-faint); }
+  .ik{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .ik .bx{ background:var(--navy-deep); border-radius:10px; padding:7px 8px; }
+  .ik .bt{ font-size:11px; color:#e0a030; font-weight:800; margin-bottom:4px; }
+  .pt{ font-size:10.5px; color:var(--chalk-faint); margin:4px 0 2px; }
+  .c{ display:flex; justify-content:space-between; font-size:12px; padding:2px 4px; border-radius:6px; font-family:'Space Grotesk',sans-serif; }
+  .c b{ font-weight:800; } .c.gir b{ color:#3ccf7a; } .c.cik b{ color:#ff8a80; } .c i{ font-style:normal; color:var(--chalk-faint); font-size:10.5px; }
+  .c.ort{ box-shadow:inset 0 0 0 1px rgba(224,160,48,.7); } .c.ok{ background:rgba(40,160,90,.30); }
+  .chip{ display:inline-block; margin:0 6px 8px 0; padding:5px 10px; border-radius:16px; border:1px solid var(--navy-line); color:var(--chalk); text-decoration:none; font-size:12.5px; }
+  .chip.on{ border-color:#e0a030; color:#e0a030; }
+</style>
+<meta http-equiv="refresh" content="300">
+{% endblock %}
+{% macro roi(v) %}{% if v is none %}-{% else %}<span class="{{ 'p' if v > 0 else 'n' }}">{{ '%+.1f'|format(v) }}%</span>{% endif %}{% endmacro %}
+{% macro kutu(L, tur, ort) %}{% for p in L %}<div class="c {{ tur }} {{ 'ort' if p.sec in ort }} {{ 'ok' if p.tuttu }}"><span><b>{{ p.sec }}</b>{{ ' ✓' if p.tuttu }} {{ '%+d'|format(p.d) }}%</span><i>{{ p.ilk }}→{{ p.son }}</i></div>{% endfor %}{% endmacro %}
+{% block content %}
+{% if d.hata %}<div class="section-sub">⚠ {{ d.hata }}</div>{% endif %}
+<h2 class="section">📈 KARNE ({{ d.ozet.biten or 0 }} biten maç · {{ d.ozet.kayit or 0 }} karşılaştırılan)</h2>
+{% if d.karne %}<table class="tt"><tr><th>grup</th><th>skor</th><th>tuttu</th><th>beklenen</th><th>ROI iddaa</th><th>ROI 1xBet</th></tr>
+{% for x in d.karne %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.ri) }}</td><td>{{ roi(x.rx) }}</td></tr>{% endfor %}</table>
+<div class="section-sub">Beklenen = iddaa (son kayıt) marjsız ihtimal toplamı. "Tuttu" beklenenden belirgin fazlaysa o grup bilgi taşıyor.</div>
+{% else %}<div class="section-sub">Henüz iki sitede de kaydı olan biten maç yok (1xBet skor kaydı 24.11 öğleden sonra başladı).</div>{% endif %}
+
+<h2 class="section">📅 GÜN GÜN</h2>
+<div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/skor-ortak?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
+{% for x in d.L %}
+<div class="kc">
+  <div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.ev }} – {{ x.dep }}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>
+  <div style="margin-top:5px"><span class="pl">ilk → {{ x.an }}</span>{% if x.og %} <span class="pl" style="color:#3ccf7a">🤝 ortak giren: {{ x.og|join(', ') }}</span>{% endif %}{% if x.oc %} <span class="pl" style="color:#ff8a80">🤝 ortak çıkan: {{ x.oc|join(', ') }}</span>{% endif %}</div>
+  <div class="ik">
+    <div class="bx"><div class="bt">iddaa</div><div class="pt">💸 para giren 3</div>{{ kutu(x.ig, 'gir', x.og) }}<div class="pt">🔻 para çıkan 3</div>{{ kutu(x.ic, 'cik', x.oc) }}</div>
+    <div class="bx"><div class="bt">1xBet</div><div class="pt">💸 para giren 3</div>{{ kutu(x.xg, 'gir', x.og) }}<div class="pt">🔻 para çıkan 3</div>{{ kutu(x.xc, 'cik', x.oc) }}</div>
+  </div>
+</div>
+{% else %}<div class="section-sub">Bu gün için iki sitede de kaydı olan maç yok.</div>{% endfor %}
+{% endblock %}

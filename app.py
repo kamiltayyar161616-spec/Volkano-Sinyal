@@ -51,6 +51,8 @@ import iyms_kars
 import iddaa_skor
 import iyms_vk
 import skor_tab
+import skor_x
+import skor_ortak
 import deger_tab
 import iyms_av
 import xbet
@@ -575,6 +577,16 @@ def deger_page():
     return render_template("deger.html", d=deger_tab.get_page_data(request.args.get("gun")), active_page="deger")
 
 
+@app.route("/skor-1x")
+def skor_x_page():
+    return render_template("skor_x.html", d=skor_x.get_page_data(request.args.get("gun")), active_page="skor1x")
+
+
+@app.route("/skor-ortak")
+def skor_ortak_page():
+    return render_template("skor_ortak.html", d=skor_ortak.get_page_data(request.args.get("gun")), active_page="skorortak")
+
+
 @app.route("/skor")
 def skor_page():
     return render_template("skor.html", d=skor_tab.get_page_data(request.args.get("gun")), active_page="skor")
@@ -722,6 +734,7 @@ if __name__ == "__main__":
     iddaa_skor.start_background()
     iyms_vk.start_background()
     skor_tab.start_background()
+    skor_x.start_background()
     iyms_av.start_background()
     xbet.start_background()
     kupon_ajan.start_background()
