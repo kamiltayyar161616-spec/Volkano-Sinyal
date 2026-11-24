@@ -52,12 +52,13 @@
 {% else %}<div class="section-sub">Henüz ▶ OYNA seçeneği yok.</div>{% endfor %}
 
 <h2 class="section" id="vk">🌋 VOLKANO KUPON</h2>
-<div class="section-sub">Değer 90'da <b>▶ OYNA</b> olan seçenek, 1 sa kala teyit anında Volkano'da eşleştirilir ve <b>o anki Volkano oranıyla tekli</b> oynanır. Kasa <b>{{ '%.0f'|format(d.vk.kasa0) }} €</b> ({{ d.vk.basla }}'dan itibaren), en az 0.50 €, yarım Kelly, üst sınır yok. Volkano kazancından %12 vergi düşülür (etkin oran = oran × 0.88). Volkano'da karşılığı olan pazarlar: MS, İY MS, Alt/Üst, Çifte şans, KG.</div>
+<div class="section-sub">Değer 90'da <b>▶ OYNA</b> olan seçenek, 1 sa kala teyit anında Volkano'da eşleştirilir ve <b>o anki Volkano oranıyla tekli</b> oynanır. Kasa <b>{{ '%.0f'|format(d.vk.kasa0) }} €</b> ({{ d.vk.basla }}'dan itibaren), en az 0.50 €, yarım Kelly, üst sınır yok. Oran Volkano'nun kendi oranıdır; kupon tutarsa kazançtan (tutar × oran) %12 vergi düşülür. Volkano'da karşılığı olan pazarlar: MS, İY MS, Alt/Üst, Çifte şans, KG.</div>
 {{ kasa(d.vk, '€') }}
 {% for x in d.vk.K %}
 <div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">
   <div class="r1"><span>{{ x.mac }}</span><span>{% if x.net is not none %}<span class="{{ 'p' if x.net > 0 else 'n' }}">{{ '%+.2f'|format(x.net) }} €</span>{% elif not x.tutar %}<span class="n">kasa yetmedi</span>{% else %}⏳{% endif %}</span></div>
-  <div class="r1" style="font-weight:600"><span>{{ x.bahis }} @{{ x.vo }} <span style="color:var(--chalk-faint);font-weight:500">(vergili {{ x.o }})</span> · {{ '%.2f'|format(x.tutar) }} €</span><span>{% if x.son %}{{ x.son }} {{ '✓' if x.kaz else '✗' }}{% endif %}</span></div>
+  <div class="r1" style="font-weight:600"><span>{{ x.bahis }} @{{ x.o }} · {{ '%.2f'|format(x.tutar) }} €</span><span>{% if x.son %}{{ x.son }} {{ '✓' if x.kaz else '✗' }}{% endif %}</span></div>
+  {% if x.kazanc %}<div class="r2"><span>kazanç {{ '%.2f'|format(x.kazanc) }} € − vergi %12 {{ '%.2f'|format(x.vergi) }} € = ele geçen {{ '%.2f'|format(x.kazanc - x.vergi) }} €</span></div>{% endif %}
   <div class="r2"><span>{{ x.saat }}{% if x.lig %} · {{ x.lig }}{% endif %} · iddaa {{ x.io }} · Volkano değer x{{ '%.2f'|format(x.r) }} · yarım Kelly %{{ x.kelly }}{{ ' (min 0.50)' if x.kelly <= 0 }}</span><span>kasa {{ '%.2f'|format(x.kasa_sonra) }}</span></div>
 </div>
 {% else %}<div class="section-sub">Henüz Volkano kuponu yok.</div>{% endfor %}
