@@ -37,7 +37,7 @@
 <h2 class="section">⏳ BAŞLAMAMIŞ MAÇLAR ({{ d.gelecek|length }} seçenek)</h2>
 {% set ns = namespace(m=None) %}
 {% for x in d.gelecek %}{% if x.iid != ns.m %}{% if ns.m is not none %}</div>{% endif %}{% set ns.m = x.iid %}
-<div class="kc"><div class="hd1"><span class="saat">{{ x.gun[8:10] }}.{{ x.gun[5:7] }} {{ x.saat }}</span><span class="tk">{{ x.mac }}</span></div>{% endif %}
+<div class="kc"><div class="hd1"><span class="saat">{{ x.gun[8:10] }}.{{ x.gun[5:7] }} {{ x.saat }}</span><span class="tk">{{ x.mac }}{% if x.lig %}<small style="display:block;font-size:11px;color:var(--chalk-faint);font-weight:600">🏆 {{ x.lig }}</small>{% endif %}</span></div>{% endif %}
 {{ secenek(x) }}{% if loop.last %}</div>{% endif %}
 {% else %}<div class="section-sub">Şu an kurala giren başlamamış maç yok (tarama her saat :47'de; 3–8 sa kala listeye giren seçenek burada görünür, 1 sa kala teyit edilince ▶ OYNA olur).</div>{% endfor %}
 
@@ -46,12 +46,12 @@
 {% if d.gun_oz %}{{ tablo(d.gun[8:10] ~ '.' ~ d.gun[5:7], [d.gun_oz]) }}{% endif %}
 {% set ns2 = namespace(m=None) %}
 {% for x in d.L %}{% if x.iid != ns2.m %}{% if ns2.m is not none %}</div>{% endif %}{% set ns2.m = x.iid %}
-<div class="kc"><div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.mac }}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>{% endif %}
+<div class="kc"><div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.mac }}{% if x.lig %}<small style="display:block;font-size:11px;color:var(--chalk-faint);font-weight:600">🏆 {{ x.lig }}</small>{% endif %}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>{% endif %}
 {{ secenek(x) }}{% if loop.last %}</div>{% endif %}
 {% else %}<div class="section-sub">Bu gün için başlamış maç yok.</div>{% endfor %}
 {% if d.LD %}<h2 class="section">📉 1 SA KALA DÜŞENLER ({{ d.LD|length }})</h2>
 {% set ns3 = namespace(m=None) %}
 {% for x in d.LD %}{% if x.iid != ns3.m %}{% if ns3.m is not none %}</div>{% endif %}{% set ns3.m = x.iid %}
-<div class="kc"><div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.mac }}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>{% endif %}
+<div class="kc"><div class="hd1"><span class="saat">{{ x.saat }}</span><span class="tk">{{ x.mac }}{% if x.lig %}<small style="display:block;font-size:11px;color:var(--chalk-faint);font-weight:600">🏆 {{ x.lig }}</small>{% endif %}</span>{% if x.skor %}<span class="sk">{{ x.skor }}{% if x.iy %}<small>İY {{ x.iy }}</small>{% endif %}</span>{% endif %}</div>{% endif %}
 {{ secenek(x) }}{% if loop.last %}</div>{% endif %}{% endfor %}{% endif %}
 {% endblock %}
