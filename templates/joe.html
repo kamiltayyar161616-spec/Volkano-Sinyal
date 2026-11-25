@@ -36,6 +36,14 @@
 <div class="tab" id="t-bot">
 <h2 class="section">🤖 BOT KASASI</h2>
 {{ kasa(d) }}
+{% if d.bant %}<h2 class="section">📶 DEĞER BANDINA GÖRE (botun tüm kuponları, 50 TL düz)</h2>
+<div class="section-sub">Bot 0.92 ve üstünde oynuyor. Kâr hangi banttan geliyor? Joe öncesi kuponlar dahil, sonucu belli olanlar.</div>
+<table style="width:calc(100% - 32px);margin:0 16px 14px;border-collapse:collapse;font-size:13px">
+<tr style="color:var(--chalk-faint)"><th style="text-align:left;padding:4px">değer</th><th style="text-align:right">kupon</th><th style="text-align:right">tuttu</th><th style="text-align:right">ROI</th><th style="text-align:right">net</th></tr>
+{% for b in d.bant %}<tr style="border-top:1px solid var(--navy-line)"><td style="padding:6px 4px;font-weight:700">{{ b.ad }}</td><td style="text-align:right">{{ b.biten }}{% if b.n > b.biten %} <span style="color:var(--chalk-faint)">(+{{ b.n - b.biten }})</span>{% endif %}</td>
+<td style="text-align:right">{{ b.w }}{% if b.biten %} <span style="color:var(--chalk-faint)">%{{ (100 * b.w / b.biten)|round|int }}</span>{% endif %}</td>
+<td style="text-align:right" class="{{ 'p' if (b.roi or 0) >= 0 else 'n' }}">{{ ('%+.1f'|format(b.roi)) ~ '%' if b.roi is not none else '—' }}</td><td style="text-align:right" class="{{ 'p' if b.net >= 0 else 'n' }}">{{ '%+d'|format(b.net) }} TL</td></tr>{% endfor %}
+</table>{% endif %}
 <h2 class="section">🧾 KUPONLAR</h2>
 {% for x in d.K %}
 <div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">

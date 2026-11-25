@@ -54,6 +54,7 @@ import skor_tab
 import skor_x
 import skor_ortak
 import joe
+import saglik
 import deger_tab
 import iyms_av
 import xbet
@@ -576,6 +577,11 @@ def iyms_xv_page():
 @app.route("/deger")
 def deger_page():
     return render_template("deger.html", d=deger_tab.get_page_data(request.args.get("gun")), active_page="deger")
+
+
+@app.route("/saglik")
+def saglik_page():
+    return render_template("saglik.html", d=saglik.get_page_data(), active_page="saglik")
 
 
 @app.route("/joe")

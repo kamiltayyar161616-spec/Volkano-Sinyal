@@ -14,7 +14,8 @@ BASLA_DEGER = datetime(2026, 11, 24, 20, 45, tzinfo=timezone.utc).timestamp()   
 TR = timezone(timedelta(hours=3))
 
 
-def _kuponlar():
+def _kuponlar(basla=None):
+    basla = BASLA if basla is None else basla
     L, gor = [], set()
     try:
         for l in open(DOSYA):
@@ -22,7 +23,7 @@ def _kuponlar():
                 x = json.loads(l)
             except ValueError:
                 continue
-            if x.get("t", 0) < BASLA or x.get("key") in gor or not x.get("oran") or not x.get("iid"):
+            if x.get("t", 0) < basla or x.get("key") in gor or not x.get("oran") or not x.get("iid"):
                 continue
             gor.add(x["key"])
             L.append(x)
@@ -31,13 +32,10 @@ def _kuponlar():
     return sorted(L, key=lambda x: x["t"])
 
 
-def hesap():
-    try:
-        import iddaa_skor
-        sonuc = iddaa_skor.sonuc
-    except Exception:
-        sonuc = lambda i: None
-    K = _kuponlar()
+BANTLAR = ((0.0, 0.97, "0.92–0.97"), (0.97, 1.05, "0.97–1.05"), (1.05, 99, "≥ 1.05"))
+
+
+def _sonuclandir(K, sonuc):
     for x in K:
         x["bahis"] = x["key"].split("|")[-1]
         x["o"] = float(x.get("kupon_oran") or x["oran"]) if x.get("durum") == "olustu" else float(x["oran"])
@@ -52,10 +50,37 @@ def hesap():
     for x in K:
         x["p"] = 1 / float(x["adil"]) if x.get("adil") else 1 / x["o"]
         x["kaz"] = x.get("kaz") if x["son"] is not None else None
+    return K
+
+
+def bant_karne(sonuc):
+    """botun TÜM kupon kayıtları (m7_kupon, Joe öncesi dahil) değer bandına göre: düz 50 TL tekli ROI"""
+    K = _sonuclandir(_kuponlar(0), sonuc)
+    R = []
+    for a, b, ad in BANTLAR:
+        B = [x for x in K if a <= float(x.get("deger") or 0) < b]
+        Bt = [x for x in B if x["son"] is not None]
+        net = sum((x["o"] - 1) if x["kaz"] else -1 for x in Bt)
+        R.append({"ad": ad, "n": len(B), "biten": len(Bt), "w": sum(bool(x["kaz"]) for x in Bt),
+                  "roi": round(100 * net / len(Bt), 1) if Bt else None, "net": round(50 * net)})
+    return R
+
+
+def hesap():
+    try:
+        import iddaa_skor
+        sonuc = iddaa_skor.sonuc
+    except Exception:
+        sonuc = lambda i: None
+    K = _sonuclandir(_kuponlar(), sonuc)
     H = _kasa(K)
     for x in K:
         x["saat"] = datetime.fromtimestamp(x["t"], TR).strftime("%d.%m %H:%M")
     H.update(K=list(reversed(K)), basla=datetime.fromtimestamp(BASLA, TR).strftime("%d.%m.%Y %H:%M"), deger=deger_hesap(), vk=vk_hesap())
+    try:
+        H["bant"] = bant_karne(sonuc)
+    except Exception:
+        H["bant"] = []
     return H
 
 

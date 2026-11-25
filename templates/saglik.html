@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}SAHA — Sağlık{% endblock %}
+{% block page_tag %}🩺 SAĞLIK · sessiz bozulma kontrolü{% endblock %}
+{% block subtitle %}Servisler çalışıyor mu, kod değiştiği halde yeniden başlatılmamış servis var mı, veri dosyaları ve SAHA arka plan döngüleri ne zaman son güncellendi. <b>Kırmızı</b> = durmuş / hata / yeni kod yüklenmemiş / çok bayat, <b>sarı</b> = beklenenden geç. Saatler Türkiye saati. Sayfa 2 dk'da bir yenilenir.{% endblock %}
+{% block extra_style %}
+<style>
+  .oz{ display:flex; gap:8px; margin:0 16px 14px; }
+  .oz div{ flex:1; background:var(--navy); border:1px solid var(--navy-line); border-radius:12px; padding:9px 10px; text-align:center; }
+  .oz b{ display:block; font-size:22px; font-family:'Space Grotesk',sans-serif; } .oz small{ color:var(--chalk-faint); font-size:11px; }
+  .sr{ margin:0 16px 7px; padding:8px 11px; border-radius:11px; background:var(--navy); border:1px solid var(--navy-line); font-size:13px; }
+  .sr .a{ display:flex; justify-content:space-between; gap:8px; font-weight:700; } .sr .b{ color:var(--chalk-faint); font-size:11.5px; margin-top:2px; word-break:break-word; }
+  .sr.kirmizi{ box-shadow:inset 3px 0 0 #ff5a4f; background:rgba(255,90,79,.08); } .sr.sari{ box-shadow:inset 3px 0 0 #e0a030; } .sr.ok{ box-shadow:inset 3px 0 0 #3ccf7a; }
+  .k{ color:#ff5a4f; } .s{ color:#e0a030; } .y{ color:#3ccf7a; }
+</style>
+<meta http-equiv="refresh" content="120">
+{% endblock %}
+{% macro nokta(r) %}<span class="{{ 'k' if r == 'kirmizi' else 's' if r == 'sari' else 'y' if r == 'ok' else '' }}">{{ '●' if r != 'z' else '○' }}</span>{% endmacro %}
+{% block content %}
+<div class="oz">
+  <div><b class="{{ 'k' if d.ozet.kirmizi else 'y' }}">{{ d.ozet.kirmizi }}</b><small>kırmızı</small></div>
+  <div><b class="{{ 's' if d.ozet.sari else 'y' }}">{{ d.ozet.sari }}</b><small>sarı</small></div>
+  <div><b style="font-size:15px;padding-top:5px">{{ d.ozet.saat }}</b><small>kontrol</small></div>
+</div>
+
+<h2 class="section">⚙️ SERVİSLER</h2>
+<div class="sr {{ d.saha.renk }}"><div class="a"><span>{{ nokta(d.saha.renk) }} SAHA (PM2)</span><span>{{ d.saha.sure }}</span></div>
+  <div class="b">başladı {{ d.saha.bas }} · son commit {{ d.saha.commit }}{% if d.saha.eski_kod %} · <b class="k">yeni kod henüz yüklenmemiş</b>{% endif %}</div></div>
+{% for x in d.servis %}
+<div class="sr {{ x.renk }}"><div class="a"><span>{{ nokta(x.renk) }} {{ x.ad }}</span><span>{{ x.sure if x.aktif else x.durum }}</span></div>
+  <div class="b">{{ x.acik }}{% if x.dosya %} · {{ x.dosya }}{% endif %} · başladı {{ x.bas }}{% if x.eski_kod %} · <b class="k">{{ x.dosya }} {{ x.degisti }}'de değişti, servis yeniden başlatılmamış → yeni kod çalışmıyor</b>{% endif %}</div></div>
+{% else %}<div class="section-sub">Servis bulunamadı.</div>{% endfor %}
+
+<h2 class="section">🔑 VOLKANO TOKEN</h2>
+<div class="sr {{ d.vk.renk }}"><div class="a"><span>{{ nokta(d.vk.renk) }} yenileme anahtarı</span><span>{% if d.vk.gun is defined %}{{ d.vk.gun }} gün kaldı{% elif not d.vk.var %}dosya yok{% else %}okunamadı{% endif %}</span></div>
+  <div class="b">{% if d.vk.bitis %}bitiş {{ d.vk.bitis }} — bitmeden telefondan yeniden alınmalı{% elif d.vk.hata %}{{ d.vk.hata }}{% else %}/root/volkano-bot/x-auth.json{% endif %}</div></div>
+
+<h2 class="section">📁 VERİ DOSYALARI</h2>
+{% for x in d.dosya %}
+<div class="sr {{ x.renk }}"><div class="a"><span>{{ nokta(x.renk) }} {{ x.ad }}</span><span>{{ x.yas }}</span></div>
+  <div class="b">{{ x.f }}{% if x.lim %} · beklenen en geç {{ x.lim }} dk{% endif %}</div></div>
+{% endfor %}
+
+<h2 class="section">🔄 SAHA ARKA PLAN DÖNGÜLERİ</h2>
+{% for x in d.dongu %}
+<div class="sr {{ x.renk }}"><div class="a"><span>{{ nokta(x.renk) }} {{ x.ad }}</span><span>{{ x.yas }}</span></div>
+  {% if x.hata %}<div class="b k">hata: {{ x.hata }}</div>{% elif x.log %}<div class="b">{{ x.log }}</div>{% endif %}</div>
+{% else %}<div class="section-sub">Döngü bilgisi yok.</div>{% endfor %}
+{% endblock %}
