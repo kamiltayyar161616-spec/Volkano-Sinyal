@@ -23,29 +23,35 @@ def ref_tablo():
     return sorted((float(k), v["0.5"], v["n"]) for k, v in T.items())
 
 
+_FIT = {}
+
+
+def _uydur(T):
+    """bantlar gürültülü -> İY gol beklentisi = a + b × maç gol beklentisi (maç sayısıyla ağırlıklı doğru)"""
+    X = [(x, -math.log(1 - p), n) for x, p, n in T if 0 < p < 1]
+    W = sum(n for _, _, n in X)
+    mx = sum(x * n for x, _, n in X) / W
+    my = sum(y * n for _, y, n in X) / W
+    b = sum(n * (x - mx) * (y - my) for x, y, n in X) / sum(n * (x - mx) ** 2 for x, _, n in X)
+    _FIT.update(a=my - b * mx, b=b)
+
+
 def pay(lt, T):
-    """gol beklentisi -> ilk yarı gol payı (bantlar arası doğrusal)"""
+    """gol beklentisi -> ilk yarı gol payı"""
     if not lt:
         return D.HT_F
-    xs = [t[0] for t in T]
-    if lt <= xs[0]:
-        p = T[0][1]
-    elif lt >= xs[-1]:
-        p = T[-1][1]
-    else:
-        i = max(j for j in range(len(xs)) if xs[j] <= lt)
-        a, b = T[i], T[i + 1]
-        p = a[1] + (b[1] - a[1]) * (lt - a[0]) / (b[0] - a[0])
-    return min(0.55, max(0.30, -math.log(1 - p) / lt))
+    if not _FIT:
+        _uydur(T)
+    return min(0.50, max(0.33, (_FIT["a"] + _FIT["b"] * lt) / lt))
 
 
 def main():
     T = ref_tablo()
-    print("7M referansı (gol beklentisi -> İY payı):", ", ".join(f"{x:.2f}→%{100 * pay(x, T):.1f}" for x, _, _ in T[::2]))
+    print("7M bantları (ham İY payı):", ", ".join(f"{x:.2f}→%{100 * -math.log(1 - p) / x:.1f}(n{n})" for x, p, n in T))
+    print("düzeltilmiş (ağırlıklı doğru):", ", ".join(f"{x:.1f}→%{100 * pay(x, T):.1f}" for x in (1.8, 2.2, 2.6, 3.0, 3.4, 3.8)))
     K = H._kupon()
     if K and not ("p12" in K[0] and "lt" in K[0]):
-        print("ht_kupon alanları:", sorted(K[0]))      # şema farklıysa göster
-        ad = {x: next((c for c in K[0] if c.lower().startswith(x)), None) for x in ("p12", "lt")}
+        ad = {"p12": "p1x2" if "p1x2" in K[0] else None, "lt": "lt" if "lt" in K[0] else None}
         for r in K:
             r["p12"], r["lt"] = r.get(ad["p12"]), r.get(ad["lt"])
     R = [r for r in K if r.get("skor") and r.get("p12") and r.get("lt")]
