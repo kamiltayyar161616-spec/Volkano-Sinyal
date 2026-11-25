@@ -87,6 +87,10 @@ def main():
                         gruplar = ["TÜM MAÇLAR"]
                         if alt_orta(se) and alt_orta(sd):
                             gruplar.append(f"H1 · iki takım da alt-orta (düşme hattı üstü 4 sıra)")
+                        if N / 2 < se <= dus and N / 2 < sd <= dus:
+                            gruplar += ["H1g · geniş: iki takım da alt yarıda, düşme hattında değil", f"H1g · sezon {s}"]
+                        if se <= N / 2 and sd <= N / 2:
+                            gruplar.append("K · karşılaştırma: iki takım da üst yarıda")
                         guclu, zayif = min(se, sd), max(se, sd)
                         if guclu <= 3 and zayif >= 12:
                             gruplar.append("H2 · ilk 3 - 12. ve sonrası")
@@ -108,12 +112,13 @@ def main():
                 P_[ev][2] += 1
                 P_[dep][2] += 1
     print(f"İY/MS PUAN TABLOSU TESTİ — {toplam} maç (4 sezon, 6 lig, iki takım da ≥ 8 maç oynamış)\n")
-    for g in ("TÜM MAÇLAR", "H1 · iki takım da alt-orta (düşme hattı üstü 4 sıra)", "H2 · ilk 3 - 12. ve sonrası", "H2 · lider - 12. ve sonrası"):
+    for g in ("TÜM MAÇLAR", "H1 · iki takım da alt-orta (düşme hattı üstü 4 sıra)", "H1g · geniş: iki takım da alt yarıda, düşme hattında değil",
+              *[f"H1g · sezon {x}" for x in SEZON], "K · karşılaştırma: iki takım da üst yarıda", "H2 · ilk 3 - 12. ve sonrası", "H2 · lider - 12. ve sonrası"):
         if g not in G:
             continue
         n, c, e = G[g]
         print(f"■ {g} — {n} maç")
-        bak = ["X/X"] if g.startswith("H1") else (["1/2", "2/1", "DÖNÜŞ (1/2+2/1)"] if g.startswith("H2") else S9)
+        bak = ["X/X", "X/1", "X/2"] if g.startswith(("H1", "K ·")) else (["1/2", "2/1", "DÖNÜŞ (1/2+2/1)"] if g.startswith("H2") else S9)
         for k in bak:
             if k.startswith("DÖNÜŞ"):
                 w, ex = c["1/2"] + c["2/1"], e["1/2"] + e["2/1"]
