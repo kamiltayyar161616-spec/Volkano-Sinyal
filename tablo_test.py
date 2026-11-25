@@ -125,7 +125,7 @@ def main():
     print("  z ≥ 2.5: hipotez veride doğrulanıyor · |z| < 2: oranların bildiğinden farkı yok.")
 
 
-if __name__ == "__main__" and __import__("sys").argv[1:2] != ["defter"]:
+if __name__ == "__main__" and __import__("sys").argv[1:2] not in (["defter"], ["oran"]):
     main()
 
 
@@ -180,3 +180,61 @@ def defter_test():
 
 if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] == "defter":
     defter_test()
+
+
+def oran_test():
+    """1/X (1/0), 2/X (2/0), X/X (0/0): hangi oran/gol bandında defter modelinin beklediğinden sık çıkıyor"""
+    import sys
+    sys.path.insert(0, "/root/defter")
+    import defter as D
+    M = []
+    for l in TS.LIGLER:
+        for s in SEZON:
+            for r in TS.indir(s, l):
+                try:
+                    fh, fa, hh, ha = int(r["FTHG"]), int(r["FTAG"]), int(r["HTHG"]), int(r["HTAG"])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                h, d, a = TS._f(r, "PSCH", "PSH", "AvgCH", "AvgH"), TS._f(r, "PSCD", "PSD", "AvgCD", "AvgD"), TS._f(r, "PSCA", "PSA", "AvgCA", "AvgA")
+                L = lam(r)
+                if not (h and d and a and L):
+                    continue
+                t = 1 / h + 1 / d + 1 / a
+                sg = lambda x: "1" if x > 0 else "X" if x == 0 else "2"
+                lt = L[0] + L[1]
+                M.append((h, d, a, lt, D.ht_olas(1 / h / t, 1 / a / t, lt), f"{sg(hh - ha)}/{sg(fh - fa)}"))
+    print(f"\n1/X · 2/X · X/X — {len(M)} maç, beklenen = defter modeli (şimdiki ayar)")
+
+    def tablo(baslik, sonuc, anahtar, bantlar):
+        print(f"\n{baslik}")
+        print(f"  {'bant':14s} {'maç':>5s} {'gerçek':>6s} {'bekl':>7s} {'oran%':>6s} {'fark':>6s} {'z':>5s} {'adil→':>6s}")
+        for ad, f in bantlar:
+            S = [m for m in M if f(anahtar(m))]
+            if len(S) < 50:
+                continue
+            g = sum(1 for m in S if m[5] == sonuc)
+            e = sum(m[4].get(sonuc, 0) for m in S)
+            v = sum(m[4].get(sonuc, 0) * (1 - m[4].get(sonuc, 0)) for m in S)
+            z = (g - e) / math.sqrt(v) if v else 0
+            print(f"  {ad:14s} {len(S):5d} {g:6d} {e:7.1f} {100 * g / len(S):6.1f} {g / e if e else 0:6.2f} {z:+5.1f} {len(S) / g if g else 0:6.1f}")
+
+    OB = [("<1.40", lambda x: x < 1.40), ("1.40-1.70", lambda x: 1.40 <= x < 1.70), ("1.70-2.00", lambda x: 1.70 <= x < 2.00),
+          ("2.00-2.50", lambda x: 2.00 <= x < 2.50), ("2.50-3.50", lambda x: 2.50 <= x < 3.50), ("3.50-5.00", lambda x: 3.50 <= x < 5.00),
+          (">=5.00", lambda x: x >= 5.00)]
+    GB = [("<2.3 gol", lambda x: x < 2.3), ("2.3-2.6", lambda x: 2.3 <= x < 2.6), ("2.6-2.9", lambda x: 2.6 <= x < 2.9),
+          ("2.9-3.2", lambda x: 2.9 <= x < 3.2), (">=3.2", lambda x: x >= 3.2)]
+    DB = [("X<3.20", lambda x: x < 3.2), ("X 3.20-3.50", lambda x: 3.2 <= x < 3.5), ("X 3.50-4.00", lambda x: 3.5 <= x < 4.0),
+          ("X 4.00-5.00", lambda x: 4.0 <= x < 5.0), ("X>=5.00", lambda x: x >= 5.0)]
+    tablo("1/X (1/0) — EV SAHİBİ ORANINA göre", "1/X", lambda m: m[0], OB)
+    tablo("1/X (1/0) — BEKLENEN GOLE göre", "1/X", lambda m: m[3], GB)
+    tablo("2/X (2/0) — DEPLASMAN ORANINA göre", "2/X", lambda m: m[2], OB)
+    tablo("2/X (2/0) — BEKLENEN GOLE göre", "2/X", lambda m: m[3], GB)
+    tablo("1/X + 2/X — BERABERLİK ORANINA göre", "1/X", lambda m: m[1], DB)
+    tablo("2/X — BERABERLİK ORANINA göre", "2/X", lambda m: m[1], DB)
+    tablo("X/X (0/0) — BEKLENEN GOLE göre", "X/X", lambda m: m[3], GB)
+    tablo("X/X (0/0) — BERABERLİK ORANINA göre", "X/X", lambda m: m[1], DB)
+    print("\n  fark = gerçek/beklenen (1.20 = %20 daha sık) · adil→ = 1/sıklık; Volkano/iddaa İY/MS oranı bunun üstündeyse değer")
+
+
+if __name__ == "__main__" and __import__("sys").argv[1:2] == ["oran"]:
+    oran_test()
