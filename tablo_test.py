@@ -125,5 +125,58 @@ def main():
     print("  z ≥ 2.5: hipotez veride doğrulanıyor · |z| < 2: oranların bildiğinden farkı yok.")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and __import__("sys").argv[1:2] != ["defter"]:
     main()
+
+
+def defter_test():
+    """defter.py'nin KENDİ HT/FT modeli (ht_olas) 5000+ maçta: bu gecenin değişiklikleri (2/1 ×1.0, X/F ×1.25) ile / olmadan"""
+    import sys
+    sys.path.insert(0, "/root/defter")
+    import defter as D
+    asil_k, asil_xf = dict(D.HT_K), getattr(D, "HT_XF", 1.0)
+    V = {"ESKİ (2/1 ×1.36, X/F yok)": (dict(asil_k, **{"2/1": 1.36}), 1.0), "ŞİMDİ (2/1 ×1.0, X/F ×1.25)": (asil_k, 1.25),
+         "2/1 ×1.0, X/F yok": (asil_k, 1.0)}
+    M = []
+    for l in TS.LIGLER:
+        for s in SEZON:
+            for r in TS.indir(s, l):
+                try:
+                    fh, fa, hh, ha = int(r["FTHG"]), int(r["FTAG"]), int(r["HTHG"]), int(r["HTAG"])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                h, d, a = TS._f(r, "PSCH", "PSH", "AvgCH", "AvgH"), TS._f(r, "PSCD", "PSD", "AvgCD", "AvgD"), TS._f(r, "PSCA", "PSA", "AvgCA", "AvgA")
+                L = lam(r)
+                if not (h and d and a and L):
+                    continue
+                t = 1 / h + 1 / d + 1 / a
+                sg = lambda x: "1" if x > 0 else "X" if x == 0 else "2"
+                M.append((1 / h / t, 1 / a / t, L[0] + L[1], f"{sg(hh - ha)}/{sg(fh - fa)}"))
+    print(f"\ndefter.py HT/FT MODELİ — {len(M)} maç (6 lig, 4 sezon, Pinnacle kapanış)")
+    S = {}
+    try:
+        for ad, (k, xf) in V.items():
+            D.HT_K = k
+            if hasattr(D, "HT_XF"):
+                D.HT_XF = xf
+            c, e, ll = defaultdict(int), defaultdict(float), 0.0
+            for p1, p2, lt, g in M:
+                P_ = D.ht_olas(p1, p2, lt)
+                c[g] += 1
+                for kk, v in P_.items():
+                    e[kk] += v
+                ll += math.log(max(P_.get(g, 1e-9), 1e-9))
+            S[ad] = (c, e, ll)
+    finally:
+        D.HT_K = asil_k
+        if hasattr(D, "HT_XF"):
+            D.HT_XF = asil_xf
+    c = next(iter(S.values()))[0]
+    print(f"  {'sonuç':6s} {'gerçek':>7s} | " + " | ".join(f"{a:>28s}" for a in S))
+    for k in S9:
+        print(f"  {k:6s} {c[k]:7d} | " + " | ".join(f"{S[a][1][k]:28.1f}" for a in S))
+    print("  log-olabilirlik: " + " · ".join(f"{a}: {S[a][2]:.1f}" for a in S) + "  (büyük = daha doğru)")
+
+
+if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] == "defter":
+    defter_test()
