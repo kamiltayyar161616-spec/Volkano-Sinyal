@@ -109,7 +109,7 @@ def hesap():
 
 
 def get_page_data(gun=None):
-    return ST.sayfa(hesap, _last, gun)
+    return ST.sayfa(hesap, _last, gun, site="1x")
 
 
 def _loop():

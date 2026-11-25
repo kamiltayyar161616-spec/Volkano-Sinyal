@@ -62,6 +62,16 @@
 {% for x in d.mkova %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>
 <div class="section-sub">Model = Pinnacle'ın (yoksa SBOBET) maç önü Alt/Üst + handikap oranından Poisson skor ihtimali (9.829 maçta kalibre). Beklenen = model ihtimali toplamı. Kayıt 25.11 akşamından itibaren.</div>{% endif %}
 
+{% if d.sistem %}<h2 class="section">🎰 SANAL SİSTEM KUPON (10 maç · 1-2-3-4-5 · 637 kolon × 1 birim)</h2>
+<div class="section-sub">Otomatik: 3 saat kala kaydı ve modeli olan, başlamamış maçlardan her maçtan bir skor. <b>değer</b> = oran × model ihtimali en yüksek skor (≥ 1.05) · <b>olası</b> = modelin en olası skoru. 10 ayak birikince kendiliğinden kaydedilir. Gerçek bahis yok.{% if d.sistem.hata %} ⚠ {{ d.sistem.hata }}{% endif %}</div>
+{% if d.sistem.ozet %}<table class="tt"><tr><th>seçim</th><th>kupon</th><th>biten</th><th>ort. tutan</th><th>kârlı</th><th>ROI</th></tr>
+{% for x in d.sistem.ozet %}<tr><td><b>{{ x.tur }}</b></td><td>{{ x.n }}</td><td>{{ x.biten }}</td><td>{{ x.ort_tutan if x.ort_tutan is not none else '-' }}</td><td>{{ x.karli }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>{% endif %}
+{% for k in d.sistem.K[:12] %}<details class="kc"><summary><b>{{ k.saat }} · {{ k.tur }}</b> · tutan {{ k.tutan }}/10 · {% if k.bitti %}<span class="{{ 'p' if k.kar > 0 else 'n' }}">{{ '%+.1f'|format(k.kar) }} br</span>{% else %}dönüş şimdilik {{ k.donus }} br ⏳{% endif %} <span class="z">· model ROI {{ k.on.ev }}% · kâr ihtimali %{{ k.on.p_kar }}</span></summary>
+<table class="st"><tr><th>maç</th><th>skor</th><th>oran</th><th>model</th><th>sonuç</th></tr>
+{% for l in k.legs %}<tr class="{{ 'ok' if l.tuttu else '' }}"><td class="s">{{ l.saat[6:] }} {{ l.mac }}</td><td><b>{{ l.sec }}</b></td><td>{{ l.oran }}</td><td>%{{ '%.1f'|format(100 * l.p) }} · x{{ '%.2f'|format(l.md) }}</td><td>{% if l.skor %}{{ l.skor }} {{ '✓' if l.tuttu else '✗' }}{% else %}<span class="z">{{ l.durum }}</span>{% endif %}</td></tr>{% endfor %}</table></details>
+{% else %}<div class="section-sub">Henüz kupon yok — 10 uygun ayak birikince ilk kupon oluşur.</div>{% endfor %}
+{% endif %}
+
 <h2 class="section">📅 GÜN GÜN</h2>
 <div style="margin:0 16px">{% for g in d.gunler %}<a class="chip {{ 'on' if g == d.gun else '' }}" href="/skor-1x?gun={{ g }}">{{ g[8:10] }}.{{ g[5:7] }}</a>{% endfor %}</div>
 

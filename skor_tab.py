@@ -364,7 +364,7 @@ def get_page_data(gun=None):
     return sayfa(hesap, _last, gun)
 
 
-def sayfa(hesap, _last, gun=None):
+def sayfa(hesap, _last, gun=None, site="iddaa"):
     try:
         H = hesap()
     except Exception as e:
@@ -377,6 +377,11 @@ def sayfa(hesap, _last, gun=None):
     if gun not in gunler:
         gun = bugun if bugun in gunler or not gunler else gunler[0]
     H.update(last=_last, gunler=gunler, gun=gun, L=sorted([x for x in H["maclar"] if x["gun"] == gun], key=lambda x: x["ko"]))
+    try:
+        import skor_sistem
+        H["sistem"] = skor_sistem.sayfa_verisi(site)
+    except Exception as e:
+        H["sistem"] = {"ozet": [], "K": [], "hata": str(e)[:150]}
     return H
 
 
@@ -396,6 +401,12 @@ def _loop():
                 _last["son"] = s
         except Exception as e:
             _last["hata"] = "an: " + str(e)[:150]
+        try:
+            import skor_sistem
+            if skor_sistem.oto_kaydet():
+                _last["son"] = (_last.get("son") or "") + " · yeni sanal sistem kupon"
+        except Exception as e:
+            _last["hata"] = "sistem: " + str(e)[:150]
         time.sleep(60)
 
 
