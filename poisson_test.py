@@ -3,6 +3,7 @@
 Çalıştır: cd /root/Volkano-Sinyal && python3 poisson_test.py [maç sayısı=20000] [büro=Pinnacle Sports]"""
 import json
 import math
+import re
 import sqlite3
 import sys
 from collections import defaultdict
@@ -21,9 +22,19 @@ def pois(l):
     return p
 
 
+def _wl(dagilim):
+    """[(olasılık, fark)] -> Asya bahsi kazanma payı W/(W+L) (yarım kazanç/iade dahil) = adil oranın 1/o'su"""
+    w = l = 0.0
+    for p, d in dagilim:
+        a = A.asya(d)
+        w += p * max(0.0, 2 * a - 1)
+        l += p * max(0.0, 1 - 2 * a)
+    return w / (w + l) if w + l else 0.5
+
+
 def p_ust(lt, L):
     p = pois(lt)
-    return 1 - sum(p[k] for k in range(int(math.floor(L)) + 1))
+    return _wl([(p[k], k - L) for k in range(G)])
 
 
 def coz(f, hedef, a, b, art=True):
@@ -49,43 +60,35 @@ def tablo(lh, la, rho=0.0):
 
 
 def kapsa(T, hh):
-    """ev handikap hh (ev skoruna eklenir) -> ev kazanır olasılığı (iade hariç, normalize)"""
-    w = l = 0.0
-    for i in range(G):
-        for j in range(G):
-            d = i - j + hh
-            if d > 1e-9:
-                w += T[i][j]
-            elif d < -1e-9:
-                l += T[i][j]
-    return w / (w + l) if w + l else 0.5
+    """ev handikap hh (ev skoruna eklenir, çeyrek çizgi dahil) -> ev tarafının adil payı"""
+    return _wl([(T[i][j], i - j + hh) for i in range(G) for j in range(G)])
 
 
 def main():
     c = sqlite3.connect(f"file:{A.DB}?mode=ro", uri=True)
     R = c.execute("SELECT ou, ah, skor, goller, ko FROM mac ORDER BY id DESC").fetchall()
     c.close()
-    ham = []
+    ham, tahmini = [], 0
     for ou, ah, sk, gl, ko in R:
-        skor = A.skor_al(sk, gl, A._ko_tahmin(ko, ou))
-        if not skor:
+        if not (sk and re.match(r"^\d+-\d+$", sk)):       # sadece kayıtlı skor; "gol listesi boş -> 0-0" varsayımı atılır
+            tahmini += A.skor_al(sk, gl, A._ko_tahmin(ko, ou)) == "0-0"
             continue
+        skor = sk
         O, H = json.loads(ou or "{}").get(BURO), json.loads(ah or "{}").get(BURO)
         if not O or not H or not O.get("kap") or not H.get("kap"):
             continue
         _, L, u, a = O["kap"]
         _, h, o1, o2 = H["kap"]
-        if abs(L % 1 - 0.5) > 1e-6 or min(u, a, o1, o2) <= 1:
-            continue
-        if not (abs(h) < 1e-6 or abs(abs(h) % 1 - 0.5) < 1e-6):      # sadece 0 ve yarım çizgiler (iadesiz/temiz)
+        if L < 0.5 or min(u, a, o1, o2) <= 1 or abs(h) > 4:
             continue
         ev, dep = (int(x) for x in skor.split("-"))
         ham.append((L, u, a, h, o1, o2, ev, dep))
         if len(ham) >= N:
             break
     # 7M handikap işareti: büyük çizgide ev kazanma oranına göre otomatik
-    poz = [x for x in ham if x[3] >= 1]
-    isaret = -1 if poz and sum(x[6] > x[7] for x in poz) / len(poz) > 0.5 else 1      # -1: pozitif çizgi = ev veriyor
+    ora = lambda S: sum(x[6] > x[7] for x in S) / max(1, len(S))
+    isaret = -1 if ora([x for x in ham if x[3] > 0.1]) > ora([x for x in ham if x[3] < -0.1]) else 1   # -1: pozitif çizgi = ev veriyor
+    print(f"atılan tahmini 0-0 (gol listesi boş, skor yok): {tahmini}")
     print(f"{BURO} | kullanılabilir maç {len(ham)} | handikap işareti: {'pozitif = ev veriyor' if isaret < 0 else 'pozitif = ev alıyor'}")
     M = []
     for L, u, a, h, o1, o2, ev, dep in ham:
