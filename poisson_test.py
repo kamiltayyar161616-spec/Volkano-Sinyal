@@ -10,8 +10,7 @@ from collections import defaultdict
 
 import m7_arsiv as A
 
-N = int(sys.argv[1]) if len(sys.argv) > 1 else 20000
-BURO = sys.argv[2] if len(sys.argv) > 2 else "Pinnacle Sports"
+N, BURO = 20000, "Pinnacle Sports"
 G = 11
 
 
@@ -156,4 +155,6 @@ def main():
 
 
 if __name__ == "__main__":
+    N = int(sys.argv[1]) if len(sys.argv) > 1 else N
+    BURO = sys.argv[2] if len(sys.argv) > 2 else BURO
     main()

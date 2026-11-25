@@ -23,6 +23,11 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS k (xid INTEGER PRIMARY KEY, mid INTEGER, ko TEXT, ev TEXT, dep TEXT,
                  at_ilk TEXT, o_ilk TEXT, at_3s TEXT, o_3s TEXT, at_son TEXT, o_son TEXT)""")
     c.execute("CREATE TABLE IF NOT EXISTS yok (xid INTEGER PRIMARY KEY, at REAL)")
+    for kol in ("m_3s", "m_son"):                # 25.11: model (Pinnacle-Poisson) skor ihtimali
+        try:
+            c.execute(f"ALTER TABLE k ADD COLUMN {kol} TEXT")
+        except sqlite3.OperationalError:
+            pass
     return c
 
 
@@ -71,12 +76,13 @@ def an_kaydet():
     c = db()
     n = []
     for kol, (a, b) in (("son", SON5), ("3s", UC)):
-        L = [xid for xid, ko in c.execute(f"SELECT xid, ko FROM k WHERE o_{kol} IS NULL")
+        L = [(xid, ko, ev, dep) for xid, ko, ev, dep in c.execute(f"SELECT xid, ko, ev, dep FROM k WHERE o_{kol} IS NULL")
              if now + timedelta(minutes=a) <= ST._dt(ko) <= now + timedelta(minutes=b)]
-        for xid in L:
+        for xid, ko, ev, dep in L:
             o = ST._xskor(xid)
             if o:
-                c.execute(f"UPDATE k SET at_{kol}=?, o_{kol}=? WHERE xid=?", (now.isoformat(), json.dumps(o), xid))
+                mo = ST._model(ev, dep, ko)
+                c.execute(f"UPDATE k SET at_{kol}=?, o_{kol}=?, m_{kol}=? WHERE xid=?", (now.isoformat(), json.dumps(o), json.dumps(mo) if mo else None, xid))
                 n.append(kol)
             time.sleep(0.3)
     c.commit()
@@ -95,10 +101,11 @@ def _sonuclar(mids):
 
 def hesap():
     c = db()
-    rows = c.execute("SELECT xid, mid, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son FROM k").fetchall()
+    rows = c.execute("SELECT xid, mid, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son, m_son, m_3s FROM k").fetchall()
     c.close()
     R = _sonuclar([r[1] for r in rows])
-    return ST.hesap_genel([(x, ko, ev, dep, ai, oi, a3, o3, a5, o5, None, None, None, R.get(m)) for x, m, ko, ev, dep, ai, oi, a3, o3, a5, o5 in rows])
+    return ST.hesap_genel([(x, ko, ev, dep, ai, oi, a3, o3, a5, o5, None, None, None, R.get(m), ms or m3)
+                           for x, m, ko, ev, dep, ai, oi, a3, o3, a5, o5, ms, m3 in rows])
 
 
 def get_page_data(gun=None):

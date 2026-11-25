@@ -46,7 +46,7 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS k (i INTEGER PRIMARY KEY, ko TEXT, ev TEXT, dep TEXT,
                  at_ilk TEXT, o_ilk TEXT, at_3s TEXT, o_3s TEXT, at_son TEXT, o_son TEXT)""")
     c.execute("CREATE TABLE IF NOT EXISTS yok (i INTEGER PRIMARY KEY, at REAL)")
-    for kol in ("x_ilk", "x_3s", "x_son"):        # 24.11: 1xBet doğru skor oranları (aynı anlarda)
+    for kol in ("x_ilk", "x_3s", "x_son", "m_3s", "m_son"):   # 24.11: 1xBet doğru skor oranları; 25.11: model (Pinnacle-Poisson) skor ihtimali
         try:
             c.execute(f"ALTER TABLE k ADD COLUMN {kol} TEXT")
         except sqlite3.OperationalError:
@@ -174,7 +174,9 @@ def an_kaydet():
                 o = None
             if o:
                 xo = _xskor(_xid(ev, dep, _dt(ko).timestamp()))
-                c.execute(f"UPDATE k SET at_{kol}=?, o_{kol}=?, x_{kol}=? WHERE i=?", (now.isoformat(), json.dumps(o), json.dumps(xo) if xo else None, i))
+                mo = _model(ev, dep, ko)
+                c.execute(f"UPDATE k SET at_{kol}=?, o_{kol}=?, x_{kol}=?, m_{kol}=? WHERE i=?",
+                          (now.isoformat(), json.dumps(o), json.dumps(xo) if xo else None, json.dumps(mo) if mo else None, i))
                 n.append(kol)
             time.sleep(0.3)
     c.commit()
@@ -183,8 +185,25 @@ def an_kaydet():
 
 
 def _novig(o):
+    """marjsız ihtimal — power yöntemi (25.11; eşit dağıtma 1xBet'in uzun listesinde ana skorları küçültüyordu)"""
+    try:
+        import skor_model
+        p = skor_model.power(o)
+        if p:
+            return p
+    except Exception:
+        pass
     t = sum(1 / v for v in o.values())
     return {k: 1 / v / t for k, v in o.items()}
+
+
+def _model(ev, dep, ko):
+    """Pinnacle-Poisson skor ihtimali (ev/dep adı + başlama) ya da None"""
+    try:
+        import skor_model
+        return skor_model.skorlar(ev, dep, _dt(ko))
+    except Exception:
+        return None
 
 
 def _para(o0, o1):
@@ -199,6 +218,13 @@ PARA_KOVA = ("para girdi ≥%15", "para girdi %5-15", "sabit (±%5)", "para çı
 
 
 DEGER_KOVA = ("değer ≥ 1.20", "değer 1.00 – 1.20", "değer 0.85 – 1.00", "değer < 0.85")
+
+
+MODEL_KOVA = ("model değer ≥ 1.20", "model değer 1.05 – 1.20", "model değer 0.95 – 1.05", "model değer 0.80 – 0.95", "model değer < 0.80")
+
+
+def _mkova(v):
+    return MODEL_KOVA[0] if v >= 1.2 else MODEL_KOVA[1] if v >= 1.05 else MODEL_KOVA[2] if v >= 0.95 else MODEL_KOVA[3] if v >= 0.8 else MODEL_KOVA[4]
 
 
 def _dkova(v):
@@ -224,21 +250,23 @@ def _sonuclar(ids):
 
 def hesap():
     c = db()
-    rows = c.execute("SELECT i, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son, x_ilk, x_3s, x_son FROM k").fetchall()
+    rows = c.execute("SELECT i, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son, x_ilk, x_3s, x_son, m_son, m_3s FROM k").fetchall()
     c.close()
     R = _sonuclar([r[0] for r in rows])
-    return hesap_genel([r + (R.get(r[0]),) for r in rows])
+    return hesap_genel([r[:13] + (R.get(r[0]), r[13] or r[14]) for r in rows])
 
 
 def hesap_genel(rows):
-    """rows: (id, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son, x_ilk, x_3s, x_son, sonuc_tuple) — Maç Skoru ve Maç Skoru 1xBet ortak hesap"""
+    """rows: (id, ko, ev, dep, at_ilk, o_ilk, at_3s, o_3s, at_son, o_son, x_ilk, x_3s, x_son, sonuc_tuple[, model_json]) — Maç Skoru ve Maç Skoru 1xBet ortak hesap"""
     yeni = lambda: [0, 0, 0.0, 0.0]          # seçim, tuttu, beklenen, kâr (son oranla)
     KV = {g: yeni() for g in PARA_KOVA}
     KV3 = {g: yeni() for g in PARA_KOVA}
     SEC = {g: yeni() for g in ("favori skor (son 5 dk en düşük oran)", "en çok para giren (ilk → son 5)", "en çok para çıkan (ilk → son 5)",
                                "en çok para giren (3 sa → son 5)", "en çok para çıkan (3 sa → son 5)")}
     ISB = {k: [0, 0.0] for k in (1, 3, 5, 8)}
-    DK = {g: yeni() for g in DEGER_KOVA}        # iddaa son 5 dk oranı × 1xBet (son 5 dk) marjsız ihtimali   # ilk k skor içinde: tuttu, beklenen
+    DK = {g: yeni() for g in DEGER_KOVA}
+    MK = {g: yeni() for g in MODEL_KOVA}        # son 5 dk oranı × model (Pinnacle-Poisson) ihtimali
+    n_model = 0        # iddaa son 5 dk oranı × 1xBet (son 5 dk) marjsız ihtimali   # ilk k skor içinde: tuttu, beklenen
     n_biten = 0
     diger = 0
     maclar = []
@@ -249,8 +277,10 @@ def hesap_genel(rows):
         x[2] += p1.get(k, 0)
         x[3] += (o1[k] - 1) if k == sonuc else -1
 
-    for i, ko, ev, dep, ai, oi, a3, o3, a5, o5, xi, x3, x5, r in rows:
+    for i, ko, ev, dep, ai, oi, a3, o3, a5, o5, xi, x3, x5, r, *ek in rows:
         oi, o3, o5, xi, x3, x5 = (json.loads(x) if x else None for x in (oi, o3, o5, xi, x3, x5))
+        md = json.loads(ek[0]) if ek and ek[0] else None
+        pm = (md or {}).get("p") or {}
         xr = (x5 if o5 else None) or x3 or xi              # karşılaştırmada iddaa'nın en son kaydına en yakın 1xBet kaydı
         px = _novig(xr) if xr else {}
         cur = o5 or o3 or oi
@@ -264,7 +294,8 @@ def hesap_genel(rows):
             satir.append({"sec": k, "ilk": (oi or {}).get(k), "u3": (o3 or {}).get(k), "son": (o5 or {}).get(k), "p": round(100 * pc[k], 1),
                           "d": round(100 * p_ilk[k]) if p_ilk and k in p_ilk else None,
                           "d3": round(100 * p_3s[k]) if p_3s and k in p_3s else None, "tuttu": k == sonuc,
-                          "x": (xr or {}).get(k), "dg": round(cur[k] * px[k], 2) if k in px else None})
+                          "x": (xr or {}).get(k), "dg": round(cur[k] * px[k], 2) if k in px else None,
+                          "m": round(100 * pm[k], 1) if k in pm else None, "md": round(cur[k] * pm[k], 2) if k in pm else None})
         ref = o5 or o3
         maclar.append({"i": i, "ko": ko, "ev": ev, "dep": dep, "skor": sonuc, "iy": f"{r[2]}-{r[3]}" if r and r[2] is not None else None,
                        "var3": bool(o3), "var5": bool(o5), "marj": round(100 * (sum(1 / v for v in cur.values()) - 1)),
@@ -274,7 +305,9 @@ def hesap_genel(rows):
                                 for k in sorted(p_ilk, key=lambda k: -p_ilk[k])[:3]] if p_ilk else None,
                        "cikan": [{"sec": k, "d": round(100 * p_ilk[k]), "ilk": oi[k], "son": ref[k], "tuttu": k == sonuc}
                                  for k in sorted(p_ilk, key=lambda k: p_ilk[k])[:3]] if p_ilk else None,
-                       "S": satir, "xvar": bool(xr), "deger": sorted([z for z in satir if z["dg"] and z["dg"] >= 1.0], key=lambda z: -z["dg"])[:4]})
+                       "S": satir, "xvar": bool(xr), "deger": sorted([z for z in satir if z["dg"] and z["dg"] >= 1.0], key=lambda z: -z["dg"])[:4],
+                       "model": {"lh": md["lh"], "la": md["la"], "buro": md.get("buro")} if md else None,
+                       "mdeger": sorted([z for z in satir if z["md"] and z["md"] >= 1.05], key=lambda z: -z["md"])[:4]})
         if not sonuc or not o5:
             continue
         n_biten += 1
@@ -285,6 +318,11 @@ def hesap_genel(rows):
             ISB[kk][0] += sonuc in s5[:kk]
             ISB[kk][1] += sum(p1[x] for x in s5[:kk])
         ekle(SEC["favori skor (son 5 dk en düşük oran)"], s5[0], sonuc, p1, o5)
+        if pm:
+            n_model += 1
+            for k in o5:
+                if k in pm:
+                    ekle(MK[_mkova(o5[k] * pm[k])], k, sonuc, {k: pm[k]}, o5)
         if x5 or x3:
             pxs = _novig(x5 or x3)
             for k in o5:
@@ -303,7 +341,8 @@ def hesap_genel(rows):
     st = lambda ad, x: {"ad": ad, "n": x[0], "w": x[1], "e": round(x[2], 1), "roi": round(100 * x[3] / x[0], 1) if x[0] else None,
                         "kar": round(x[3], 2)}
     maclar.sort(key=lambda x: x["ko"], reverse=True)
-    return {"ozet": {"kayit": len(rows), "biten": n_biten, "diger": diger,
+    return {"mkova": [st(g, v) for g, v in MK.items() if v[0]], "n_model": n_model,
+            "ozet": {"kayit": len(rows), "biten": n_biten, "diger": diger,
                      "isabet": [{"k": k, "w": v[0], "e": round(v[1], 1), "pct": round(100 * v[0] / n_biten, 1) if n_biten else None} for k, v in ISB.items()]},
             "secim": [st(g, v) for g, v in SEC.items() if v[0]], "kova": [st(g, v) for g, v in KV.items() if v[0]],
             "kova3": [st(g, v) for g, v in KV3.items() if v[0]], "dkova": [st(g, v) for g, v in DK.items() if v[0]], "maclar": maclar}
@@ -329,7 +368,7 @@ def sayfa(hesap, _last, gun=None):
     try:
         H = hesap()
     except Exception as e:
-        return {"last": _last, "hata": str(e)[:200], "ozet": {}, "secim": [], "kova": [], "kova3": [], "dkova": [], "maclar": [], "gunler": [], "gun": gun, "L": []}
+        return {"last": _last, "hata": str(e)[:200], "ozet": {}, "secim": [], "kova": [], "kova3": [], "dkova": [], "mkova": [], "n_model": 0, "maclar": [], "gunler": [], "gun": gun, "L": []}
     for x in H["maclar"]:
         t = _dt(x["ko"]).astimezone(TR)
         x["gun"], x["saat"] = t.date().isoformat(), t.strftime("%H:%M")
