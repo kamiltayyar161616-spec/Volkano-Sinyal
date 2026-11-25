@@ -64,14 +64,35 @@
 {% for x in d.mkova %}<tr><td><b>{{ x.ad }}</b></td><td>{{ x.n }}</td><td>{{ x.w }}</td><td>{{ x.e }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>
 <div class="section-sub">Model = Pinnacle'ın (yoksa SBOBET) maç önü Alt/Üst + handikap oranından Poisson skor ihtimali (9.829 maçta kalibre). Beklenen = model ihtimali toplamı. Kayıt 25.11 akşamından itibaren.</div>{% endif %}
 
-{% if d.sistem %}<h2 class="section">🎰 SANAL SİSTEM KUPON (5–10 maç · sistem 1-2-3-4-5 · kolon başı 1 birim)</h2>
-<div class="section-sub">Otomatik: 3 saat kala kaydı ve modeli olan, başlamamış maçlardan her maçtan bir skor. <b>değer</b> = oran × model ihtimali en yüksek skor (≥ 1.05) · <b>olası</b> = modelin en olası skoru. 10 ayak birikince kendiliğinden kaydedilir; 10 dolmazsa en az 5 ayakla, ilk maça 25 dk kala kapanır (5 maçta 31, 10 maçta 637 kolon). Gerçek bahis yok.{% if d.sistem.hata %} ⚠ {{ d.sistem.hata }}{% endif %}</div>
+{% if d.sistem %}<style>
+  .sy{ margin:0 16px 10px; border-radius:14px; background:var(--navy); border:1px solid var(--navy-line); overflow:hidden; }
+  .sy summary{ list-style:none; padding:10px 12px; cursor:pointer; } .sy summary::-webkit-details-marker{ display:none; }
+  .sy .u1{ display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:800; font-size:14px; }
+  .sy .u2{ display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+  .sy .tg{ font-size:11px; padding:2px 7px; border-radius:8px; background:rgba(255,255,255,.06); color:var(--chalk-faint); white-space:nowrap; }
+  .sy .tg.ok{ color:#3ccf7a; background:rgba(60,207,122,.12); } .sy .tg.no{ color:#ff5a4f; background:rgba(255,90,79,.12); } .sy .tg.sr{ color:#e0a030; background:rgba(224,160,48,.12); }
+  .sy .ay{ display:grid; grid-template-columns:44px 1fr auto; gap:2px 8px; align-items:center; padding:7px 12px; border-top:1px solid var(--navy-line); font-size:12.5px; }
+  .sy .ay .sa{ color:#e0a030; font-weight:700; font-family:'Space Grotesk',sans-serif; }
+  .sy .ay .mc{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; min-width:0; }
+  .sy .ay .sk{ font-weight:800; text-align:right; white-space:nowrap; }
+  .sy .ay .al{ grid-column:2 / 4; display:flex; justify-content:space-between; color:var(--chalk-faint); font-size:11px; }
+  .sy .ay.ok{ background:rgba(40,160,90,.18); } .sy .ay.no{ opacity:.65; }
+</style>
+<h2 class="section">🎰 SANAL SİSTEM KUPON</h2>
+<div class="section-sub">5–10 maç · sistem 1-2-3-4-5 · kolon başı 1 birim · gerçek bahis yok. <b>değer</b> = oran × model ihtimali en yüksek skor (≥ 1.05) · <b>olası</b> = modelin en olası skoru. 10 ayak dolunca ya da (en az 5 ayakla) ilk maça 25 dk kala kendiliğinden kurulur.{% if d.sistem.hata %} ⚠ {{ d.sistem.hata }}{% endif %}</div>
 {% if d.sistem.ozet %}<table class="tt"><tr><th>seçim</th><th>kupon</th><th>biten</th><th>ort. tutan</th><th>kârlı</th><th>ROI</th></tr>
 {% for x in d.sistem.ozet %}<tr><td><b>{{ x.tur }}</b></td><td>{{ x.n }}</td><td>{{ x.biten }}</td><td>{{ x.ort_tutan if x.ort_tutan is not none else '-' }}</td><td>{{ x.karli }}</td><td>{{ roi(x.roi) }}</td></tr>{% endfor %}</table>{% endif %}
-{% for k in d.sistem.K[:12] %}<details class="kc"><summary><b>{{ k.saat }} · {{ k.tur }}</b> · tutan {{ k.tutan }}/{{ k.legs|length }} · {{ k.on.kombi }} kolon · {% if k.bitti %}<span class="{{ 'p' if k.kar > 0 else 'n' }}">{{ '%+.1f'|format(k.kar) }} br</span>{% else %}dönüş şimdilik {{ k.donus }} br ⏳{% endif %} <span class="z">· model ROI {{ k.on.ev }}% · kâr ihtimali %{{ k.on.p_kar }}</span></summary>
-<table class="st"><tr><th>maç</th><th>skor</th><th>oran</th><th>model</th><th>sonuç</th></tr>
-{% for l in k.legs %}<tr class="{{ 'ok' if l.tuttu else '' }}"><td class="s">{{ l.saat[6:] }} {{ l.mac }}</td><td><b>{{ l.sec }}</b></td><td>{{ l.oran }}</td><td>%{{ '%.1f'|format(100 * l.p) }} · x{{ '%.2f'|format(l.md) }}</td><td>{% if l.skor %}{{ l.skor }} {{ '✓' if l.tuttu else '✗' }}{% else %}<span class="z">{{ l.durum }}</span>{% endif %}</td></tr>{% endfor %}</table></details>
-{% else %}<div class="section-sub">Henüz kupon yok — 10 uygun ayak birikince ilk kupon oluşur.</div>{% endfor %}
+{% for k in d.sistem.K[:12] %}<details class="sy"{{ ' open' if loop.first and not k.bitti }}><summary>
+  <div class="u1"><span>{{ k.saat }} · {{ 'değer' if k.tur == 'deger' else 'olası' }}</span>
+    <span>{% if k.bitti %}<span class="{{ 'p' if k.kar > 0 else 'n' }}">{{ '%+.1f'|format(k.kar) }} br</span>{% else %}⏳ {{ k.donus }} br{% endif %}</span></div>
+  <div class="u2"><span class="tg {{ 'ok' if k.tutan else '' }}">tutan {{ k.tutan }}/{{ k.legs|length }}</span><span class="tg">{{ k.on.kombi }} kolon</span>
+    <span class="tg {{ 'ok' if k.on.ev > 0 else 'no' }}">model ROI {{ '%+.1f'|format(k.on.ev) }}%</span><span class="tg sr">kâr ihtimali %{{ k.on.p_kar }}</span></div>
+</summary>
+{% for l in k.legs %}<div class="ay {{ 'ok' if l.tuttu else 'no' if l.tuttu is sameas false else '' }}">
+  <span class="sa">{{ l.saat[6:] }}</span><span class="mc">{{ l.mac }}</span><span class="sk">{{ l.sec }} <span style="color:var(--chalk-faint);font-weight:600">@{{ l.oran }}</span></span>
+  <span class="al"><span>model %{{ '%.1f'|format(100 * l.p) }} · değer x{{ '%.2f'|format(l.md) }}</span><span>{% if l.skor %}{{ l.skor }} {{ '✓' if l.tuttu else '✗' }}{% else %}{{ l.durum }}{% endif %}</span></span>
+</div>{% endfor %}
+</details>{% else %}<div class="section-sub">Henüz kupon yok — uygun ayaklar birikince ilk kupon oluşur.</div>{% endfor %}
 {% endif %}
 
 <h2 class="section">📅 GÜN GÜN</h2>
