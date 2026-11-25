@@ -86,5 +86,50 @@ def main():
     print("  'tuttu' ile hangi modelin beklentisi daha yakınsa o model daha doğru.")
 
 
+def htk_test():
+    """HT_K çarpanları: mevcut / 2/1 çarpanı 1.0 / hepsi 1.0 — aynı kilitli seçimlerde beklenti ve log-olabilirlik"""
+    K = H._kupon()
+    R = [r for r in K if r.get("skor") and r.get("p1x2") and r.get("lt")]
+    asil = dict(D.HT_K)
+    V = {"mevcut (2/1 ×1.36)": asil, "sadece 2/1 = 1.0": dict(asil, **{"2/1": 1.0}), "hepsi 1.0 (çarpansız)": {k: 1.0 for k in asil}}
+    G = {v: defaultdict(lambda: [0, 0, 0.0]) for v in V}
+    LL = {v: 0.0 for v in V}
+    try:
+        for ad, tab in V.items():
+            D.HT_K = tab
+            for r in R:
+                p12 = json.loads(r["p1x2"]) if isinstance(r["p1x2"], str) else r["p1x2"]
+                P = D.ht_olas(p12[0], p12[2], float(r["lt"]))
+                k, kz = r["sonuc"], bool(r["tuttu"])
+                for g in (k, "TOPLAM"):
+                    x = G[ad][g]
+                    x[0] += 1
+                    x[1] += kz
+                    x[2] += P[k]
+                LL[ad] += math.log(P[k] if kz else 1 - P[k])
+    finally:
+        D.HT_K = asil
+    print(f"HT_K testi — {len(R)} kilitli seçim (sonuçlu)")
+    print(f"  {'seçim':7s} {'n':>4s} {'tuttu':>5s} | " + " | ".join(f"{a:>22s}" for a in V))
+    for g in sorted(G[next(iter(V))], key=lambda g: (g == "TOPLAM", g)):
+        n, w, _ = G[next(iter(V))][g]
+        print(f"  {g:7s} {n:4d} {w:5d} | " + " | ".join(f"{G[a][g][2]:22.1f}" for a in V))
+    print("  log-olabilirlik: " + " · ".join(f"{a} {LL[a]:.1f}" for a in V) + "  (büyük = gerçeğe yakın)")
+    # 2/1 için veriye en uygun çarpan
+    en = None
+    for c in [x / 100 for x in range(50, 161, 5)]:
+        D.HT_K = dict(asil, **{"2/1": c})
+        e = sum(D.ht_olas(*(lambda p: (p[0], p[2]))(json.loads(r["p1x2"]) if isinstance(r["p1x2"], str) else r["p1x2"]), float(r["lt"]))["2/1"]
+                for r in R if r["sonuc"] == "2/1")
+        w = sum(1 for r in R if r["sonuc"] == "2/1" and r["tuttu"])
+        if en is None or abs(e - w) < en[1]:
+            en = (c, abs(e - w), e, w)
+    D.HT_K = asil
+    print(f"  2/1 için gerçeğe en yakın çarpan ≈ {en[0]:.2f} (beklenen {en[2]:.1f} / tuttu {en[3]}) — 8 isabetlik örnek, kaba tahmin")
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:2] == ["htk"]:
+        htk_test()
+    else:
+        main()
