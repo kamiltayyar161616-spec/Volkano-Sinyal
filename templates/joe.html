@@ -33,6 +33,7 @@
   <a class="chip" data-t="deger" href="#deger">💎 Değer · {{ d.deger.toplam|int }} TL</a>
   <a class="chip" data-t="vk" href="#vk">🌋 Volkano · {{ '%.2f'|format(d.vk.toplam or 0) }} €</a>
   {% if d.xf %}<a class="chip" data-t="xf" href="#xf">🔀 X/F · {{ d.xf.toplam|int }} TL</a>{% endif %}
+  {% if d.xx %}<a class="chip" data-t="xx" href="#xx">⏸ 0/0 · {{ d.xx.toplam|int }} TL</a>{% endif %}
 </div>
 <div class="tab" id="t-bot">
 <h2 class="section">🤖 BOT KASASI</h2>
@@ -95,6 +96,20 @@
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok — maçın son 5 dk iddaa oranı alınınca kupon oynanır.</div>{% endfor %}
 {% if d.xf.bekle %}<div class="section-sub">⏳ Sırada (son 5 dk oranı bekleniyor): {% for x in d.xf.bekle[:15] %}{{ x.saat[6:] }} {{ x.mac }} · {{ x.bahis }} @{{ x.o }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+</div>{% endif %}
+{% if d.xx %}<div class="tab" id="t-xx">
+<h2 class="section">⏸ 0/0 KUPON</h2>
+<div class="section-sub">Puan tablosunda <b>iki takım da alt yarıda ama düşme hattında değilse</b> İY/MS <b>X/X</b> (0/0) <b>tekli</b>, iddaa son 5 dk oranıyla. Kasa <b>{{ d.xx.kasa0|int }} TL</b> ({{ d.xx.basla }}'dan itibaren), yarım Kelly (ihtimal = oranların X/X'i ×1.20), en az 50 TL. Testte (4 sezon, 571 maç) X/X beklenenden sık çıktı (115 / 92.8); iki takım üst yarıdaysa fark yok. Tablo football-data (19 lig), karar maçtan önce kilitlenir. Sanal, gerçek bahis yok.{% if d.xx.hata %} ⚠ {{ d.xx.hata }}{% endif %}</div>
+{{ kasa(d.xx) }}
+{% if d.xx.biten %}<div class="section-sub">Tuttu {{ d.xx.w }} · oranların beklediği {{ d.xx.bek_tut }} · aynı kuponlar Volkano oranıyla düz 1 birim: ROI {{ '%+.1f'|format(d.xx.vk_roi) if d.xx.vk_roi is not none else '-' }}%</div>{% endif %}
+{% for x in d.xx.K %}
+<div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">
+  <div class="r1"><span>{{ x.mac }}</span><span>{% if x.net is not none %}<span class="{{ 'p' if x.net > 0 else 'n' }}">{{ '%+d'|format(x.net) }} TL</span>{% elif not x.tutar %}<span class="n">kasa yetmedi</span>{% else %}⏳{% endif %}</span></div>
+  <div class="r1" style="font-weight:600"><span>{{ x.bahis }} @{{ x.o }} · {{ x.tutar|int }} TL</span><span>{% if x.son %}{{ x.son }} {{ '✓' if x.kaz else '✗' }}{% endif %}</span></div>
+  <div class="r2"><span>{{ x.saat }}{% if x.lig %} · {{ x.lig }}{% endif %} · {{ x.fav }} · Volkano {{ x.vo }} · oranların ihtimali %{{ '%.1f'|format(100 * x.pb) }}</span><span>kasa {{ x.kasa_sonra|int }}</span></div>
+</div>
+{% else %}<div class="section-sub">Henüz kupon yok — maçın son 5 dk iddaa oranı alınınca kupon oynanır.</div>{% endfor %}
+{% if d.xx.bekle %}<div class="section-sub">⏳ Sırada (son 5 dk oranı bekleniyor): {% for x in d.xx.bekle[:15] %}{{ x.saat[6:] }} {{ x.mac }} · {{ x.bahis }} @{{ x.o }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
 </div>{% endif %}
 <script>
 (function(){

@@ -86,6 +86,11 @@ def hesap():
     except Exception as e:
         H["xf"] = {"K": [], "bekle": [], "kasa": XF_KASA0, "bekleyen": 0, "toplam": XF_KASA0, "kasa0": XF_KASA0, "n": 0, "biten": 0, "w": 0,
                    "net": 0, "roi": None, "basla": "", "hata": str(e)[:150]}
+    try:
+        H["xx"] = xx_hesap()
+    except Exception as e:
+        H["xx"] = {"K": [], "bekle": [], "kasa": XX_KASA0, "bekleyen": 0, "toplam": XX_KASA0, "kasa0": XX_KASA0, "n": 0, "biten": 0, "w": 0,
+                   "net": 0, "roi": None, "basla": "", "hata": str(e)[:150]}
     return H
 
 
@@ -382,6 +387,75 @@ def xf_hesap():
     H["bek_tut"] = round(sum(x["p"] for x in B), 1)
     H.update(K=list(reversed(K)), bekle=sorted(bekle, key=lambda x: x["t"]), basla=datetime.fromtimestamp(BASLA_XF, TR).strftime("%d.%m.%Y %H:%M"))
     _xf_cache.update(t=_t.time(), v=H)
+    return H
+
+
+# ---- 0/0 KUPON (26.11 kullanıcı): iki takım da puan tablosunun alt yarısında ama düşme hattında değil → İY/MS X/X tekli.
+# 4 sezon 6 lig: 571 maçta X/X 115 / beklenen 92.8 (z +2.5); iki takım üst yarıdaysa fark yok. Sıklık ×1.20 alınır (Kelly için).
+# Puan tablosu kararı maçtan önce ilk görüldüğünde dosyaya kilitlenir (sonradan değişen tablo geçmişi bozmasın).
+XX_KASA0, XX_MIN, XX_C = 2000.0, 50.0, 1.20
+BASLA_XX = datetime(2026, 11, 26, 9, 0, tzinfo=timezone.utc).timestamp()       # 26.11 12:00 TR maçlarından başlar
+XX_DOSYA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "xx_sira.json")
+_xx_cache = {"t": 0, "v": None}
+
+
+def xx_hesap():
+    import json as _j
+    import time as _t
+    if _xx_cache["v"] and _t.time() - _xx_cache["t"] < 120:
+        return _xx_cache["v"]
+    import iyms_kars as IK
+    import puan_tablosu as PT
+    try:
+        KY = _j.load(open(XX_DOSYA))
+    except Exception:
+        KY = {}
+    yeni = False
+    K, bekle = [], []
+    for m in IK.hesap()["maclar"]:
+        try:
+            ko = IK._dt(m["ko"]).timestamp()
+        except Exception:
+            continue
+        if ko < BASLA_XX:
+            continue
+        a = str(m.get("mid") or f"{m['ev']}|{m['dep']}|{int(ko)}")
+        if a not in KY:
+            if ko <= _t.time():
+                continue                                  # maç başladı, tablo kararı yoktu → alınmaz
+            s = PT.sira(m["ev"], m["dep"])
+            KY[a] = {"h1g": PT.h1g(s), "s": s}
+            yeni = True
+        r = KY[a]
+        if not r["h1g"]:
+            continue
+        S = {z["sec"]: z for z in m["S"]}
+        if any(k not in S for k in S9):
+            continue
+        io, vo = {k: S[k]["idd"] for k in S9}, {k: S[k]["vk"] for k in S9}
+        pi, pv = _nv(io), _nv(vo)
+        pb = (pi["X/X"] + pv["X/X"]) / 2
+        s = r["s"]
+        z = {"mac": f"{m['ev']} - {m['dep']}", "lig": m.get("lig"), "bahis": "İY/MS X/X", "saat": datetime.fromtimestamp(ko, TR).strftime("%d.%m %H:%M"),
+             "o": io["X/X"], "vo": vo["X/X"], "p": min(0.6, pb * XX_C), "pb": pb,
+             "fav": f"{s['lig']} · {s['se']}. - {s['sd']}. ({s['N']} takım, düşme {s['dus'] + 1}+; tablo: {s['fe']} - {s['fd']})",
+             "t": ko - 300, "bitis": ko + 115 * 60,
+             "son": (m.get("skor") + f" ({m['sonuc']})") if m.get("sonuc") else None, "kaz": (m["sonuc"] == "X/X") if m.get("sonuc") else None}
+        (K if m.get("son5") else bekle).append(z)
+    if yeni:
+        try:
+            os.makedirs(os.path.dirname(XX_DOSYA), exist_ok=True)
+            _j.dump(KY, open(XX_DOSYA + ".tmp", "w"), ensure_ascii=False)
+            os.replace(XX_DOSYA + ".tmp", XX_DOSYA)
+        except Exception:
+            pass
+    K.sort(key=lambda x: x["t"])
+    H = _kasa(K, XX_KASA0, XX_MIN, 0)
+    B = [x for x in K if x["son"] is not None]
+    H["vk_roi"] = round(100 * sum((0.88 * (x["vo"] - 1)) if x["kaz"] else -1 for x in B) / len(B), 1) if B else None
+    H["bek_tut"] = round(sum(x["pb"] for x in B), 1)
+    H.update(K=list(reversed(K)), bekle=sorted(bekle, key=lambda x: x["t"]), basla=datetime.fromtimestamp(BASLA_XX, TR).strftime("%d.%m.%Y %H:%M"))
+    _xx_cache.update(t=_t.time(), v=H)
     return H
 
 
