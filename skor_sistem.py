@@ -1,9 +1,9 @@
-"""MAÇ SKORU SANAL SİSTEM KUPONU — 10 maç, sistem 1-2-3-4-5 (637 kolon, kolon başı 1 birim). Gerçek bahis yok.
+"""MAÇ SKORU SANAL SİSTEM KUPONU — 5-10 maç, sistem 1-2-3-4-5 (10 maçta 637, 5 maçta 31 kolon; kolon başı 1 birim). Gerçek bahis yok.
 Ayaklar: 3 saat kala kaydı + model (Pinnacle-Poisson) olan, henüz başlamamış maçlar; her maçtan bir skor, maç yalnız bir kupona.
 İki site (iddaa: skor.db, 1xBet: skor_x.db) × iki seçim:
   değer : maçın oran × model ihtimali en yüksek skoru, değer ≥ 1.05
   olası : modelin en olası skoru (değer şartı yok) — karşılaştırma
-10 uygun ayak birikince kupon kendiliğinden kaydedilir (data/skor/sistem.json). Sonuç: iddaa sonuç kaydı / NowGoal-7M."""
+10 uygun ayak birikince kupon kendiliğinden kaydedilir; dolmazsa en az 5 ayakla, ilk maça 25 dk kala (data/skor/sistem.json). Sonuç: iddaa sonuç kaydı / NowGoal-7M."""
 import json
 import os
 import sqlite3
@@ -14,7 +14,8 @@ import skor_tab as ST
 
 DOSYA = os.path.join(ST.KLASOR, "sistem.json")
 BOYUT = (1, 2, 3, 4, 5)
-AYAK = 10
+AYAK, AYAK_MIN = 10, 5
+KAPAT_DK = 25          # 10 ayak dolmadıysa: en az 5 ayak varken ilk maçın başlamasına 25 dk kala kupon kapanır
 MIN_DEGER = 1.05
 _kilit = threading.Lock()
 TR = ST.TR
@@ -101,8 +102,12 @@ def oto_kaydet():
                     C = sorted([x for x in C if x["md"] >= MIN_DEGER], key=lambda x: -x["md"])
                 else:
                     C = sorted(C, key=lambda x: -x["p"])
-                if len(C) < AYAK:
+                if len(C) < AYAK_MIN:
                     continue
+                if len(C) < AYAK:                  # 10 dolmadı: ilk maç yaklaşınca 5-9 ayakla kapat
+                    ilk = min(ST._dt(x["ko"]) for x in C)
+                    if ilk > datetime.now(timezone.utc) + timedelta(minutes=KAPAT_DK):
+                        continue
                 legs = sorted(C[:AYAK], key=lambda x: x["ko"])
                 L.insert(0, {"at": datetime.now(timezone.utc).isoformat()[:19], "site": site, "tur": tur, "legs": legs, "on": hesap_on(legs)})
                 n += 1
