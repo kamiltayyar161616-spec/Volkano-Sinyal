@@ -81,6 +81,11 @@ def hesap():
         H["bant"] = bant_karne(sonuc)
     except Exception:
         H["bant"] = []
+    try:
+        H["xf"] = xf_hesap()
+    except Exception as e:
+        H["xf"] = {"K": [], "bekle": [], "kasa": XF_KASA0, "bekleyen": 0, "toplam": XF_KASA0, "kasa0": XF_KASA0, "n": 0, "biten": 0, "w": 0,
+                   "net": 0, "roi": None, "basla": "", "hata": str(e)[:150]}
     return H
 
 
@@ -325,6 +330,59 @@ def start_background():
     if not _started:
         _started = True
         __import__("threading").Thread(target=_loop, daemon=True, name="joe_vk").start()
+
+
+# ---- X/F KUPON (25.11 kullanıcı): belirgin favorili maçta (MS farkı ≥ %15) İY/MS "X/favori" tekli, iddaa son 5 dk oranıyla.
+# 413 maçlık testte X/F beklenenden sık (98 / 71.6, z≈3.4, ROI iddaa ≈ +%7, Volkano ≈ +%4) — sanal takip, gerçek bahis yok.
+XF_KASA0, XF_MIN = 2000.0, 50.0
+BASLA_XF = datetime(2026, 11, 25, 20, 0, tzinfo=timezone.utc).timestamp()      # 25.11 23:00 TR maçlarından başlar
+XF_FARK = 0.15
+_xf_cache = {"t": 0, "v": None}
+S9 = ("1/1", "1/X", "1/2", "X/1", "X/X", "X/2", "2/1", "2/X", "2/2")
+
+
+def _nv(o):
+    t = sum(1 / o[k] for k in S9)
+    return {k: 1 / o[k] / t for k in S9}
+
+
+def xf_hesap():
+    import time as _t
+    if _xf_cache["v"] and _t.time() - _xf_cache["t"] < 120:
+        return _xf_cache["v"]
+    import iyms_kars as IK
+    K, bekle = [], []
+    for m in IK.hesap()["maclar"]:
+        try:
+            ko = IK._dt(m["ko"]).timestamp()
+        except Exception:
+            continue
+        if ko < BASLA_XF:
+            continue
+        S = {z["sec"]: z for z in m["S"]}
+        if any(k not in S for k in S9):
+            continue
+        io, vo = {k: S[k]["idd"] for k in S9}, {k: S[k]["vk"] for k in S9}
+        pi, pv = _nv(io), _nv(vo)
+        p = {k: (pi[k] + pv[k]) / 2 for k in S9}
+        ms1, ms2 = sum(p[k] for k in S9 if k.endswith("/1")), sum(p[k] for k in S9 if k.endswith("/2"))
+        if abs(ms1 - ms2) < XF_FARK:
+            continue
+        fv = "1" if ms1 > ms2 else "2"
+        k = f"X/{fv}"
+        z = {"mac": f"{m['ev']} - {m['dep']}", "lig": m.get("lig"), "bahis": f"İY/MS {k}", "saat": datetime.fromtimestamp(ko, TR).strftime("%d.%m %H:%M"),
+             "o": io[k], "vo": vo[k], "p": p[k], "fav": f"{'ev' if fv == '1' else 'dep'} favori %{round(100 * max(ms1, ms2))}",
+             "r": round(io[k] * p[k], 2), "t": ko - 300, "bitis": ko + 115 * 60,
+             "son": (m.get("skor") + f" ({m['sonuc']})") if m.get("sonuc") else None, "kaz": (m["sonuc"] == k) if m.get("sonuc") else None}
+        (K if m.get("son5") else bekle).append(z)       # karar: son 5 dk oranı alınınca
+    K.sort(key=lambda x: x["t"])
+    H = _kasa(K, XF_KASA0, XF_MIN, 0)
+    B = [x for x in K if x["son"] is not None]
+    H["vk_roi"] = round(100 * sum((0.88 * (x["vo"] - 1)) if x["kaz"] else -1 for x in B) / len(B), 1) if B else None
+    H["bek_tut"] = round(sum(x["p"] for x in B), 1)
+    H.update(K=list(reversed(K)), bekle=sorted(bekle, key=lambda x: x["t"]), basla=datetime.fromtimestamp(BASLA_XF, TR).strftime("%d.%m.%Y %H:%M"))
+    _xf_cache.update(t=_t.time(), v=H)
+    return H
 
 
 def get_page_data():
