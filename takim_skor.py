@@ -119,8 +119,20 @@ def main():
                         H.append((z, tk, x["lig"], yer, sk, c, e, n))
     for z, tk, lig, yer, sk, c, e, n in sorted(H, reverse=True)[:40]:
         print(f"  {tk:22s} {lig[:18]:18s} {'evde' if yer == 'ev' else 'dep.':5s} {sk:5s} ×{c:2d} / {n} maç · beklenen {e:4.1f} · z {z:.1f}")
-    toplam = sum(1 for tk, x in T.items() for yer in ("ev", "dep") for sk, c in x[yer][0].items() if x[yer][1].get(sk, 0) > 0.5 and c >= 5)
-    print(f"\n  not: {toplam} takım-skor çifti test edildi; sadece şansla bile z ≥ 2.5 yaklaşık %0.6'sında ({toplam * 0.006:.0f} çift) çıkar.")
+    def kuyruk(e, c):                                    # Poisson(e) için P(X >= c)
+        return max(0.0, 1 - sum(math.exp(-e) * e ** k / math.factorial(k) for k in range(c)))
+    beklenen_sans, cift = 0.0, 0
+    for tk, x in T.items():
+        for yer in ("ev", "dep"):
+            for sk, e in x[yer][1].items():
+                if e <= 0.5:
+                    continue
+                cift += 1
+                esik = max(5, math.ceil(e + 2.5 * math.sqrt(e)))      # listeye girmek için gereken en az tekrar
+                beklenen_sans += kuyruk(e, esik)
+    print(f"\n  bulunan huy: {len(H)} · test edilen takım-skor çifti: {cift} · SADECE ŞANSLA beklenen: {beklenen_sans:.0f}")
+    print("  " + ("✅ şanstan belirgin fazla: listede gerçek huylar olabilir" if len(H) > 1.5 * beklenen_sans + 3 * math.sqrt(max(beklenen_sans, 1))
+                  else "⚠ şans seviyesinde: bu listedeki 'huyların' çoğu tesadüf, tek başına bahis gerekçesi değil"))
 
 
 if __name__ == "__main__":
