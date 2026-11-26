@@ -245,7 +245,7 @@ def _vk_ou(c, mid, ko, ev, dep, lig, now):
     if not S:
         return 0
     tc, L, u, a = S[-1]
-    if L % 1 != 0.5 or min(u, a) <= 1:
+    if L < 0.5 or min(u, a) <= 1:
         return 0
     R = [x for x in S if x[0] >= now - timedelta(minutes=REF_DK)] or S[-1:]
     hedef = []
@@ -266,13 +266,19 @@ def _vk_ou(c, mid, ko, ev, dep, lig, now):
     pz = _vk_pz(mid, ev, dep, ko)
     if not pz:
         return 0
-    pu = (1 / u) / (1 / u + 1 / a)
-    vk = ((pz.get("18") or {}).get(str(float(L))) or {})
+    import poisson_test as P
+    pu = (1 / u) / (1 / u + 1 / a)                    # Pinnacle çizgisinde marjsız Üst payı (Asya: iade/yarım dahil)
+    lt = P.coz(lambda x: P.p_ust(x, L), pu, 0.2, 7.0)  # sadece çeyrek/tam çizgiyi Volkano'nun buçuklu çizgisine çevirmek için
+    H = [L] if L % 1 == 0.5 else [L - 0.5, L + 0.5] if L % 1 == 0 else [L - 0.25, L + 0.25]
     y = 0
-    for yon, rf, cr, d, ac in hedef:
-        o = vk.get("OVER" if yon == "Üst" else "UNDER")
-        if o:
-            y += _vk_yakala(c, mid, ko, ev, dep, lig, f"{yon} {L:g}", o, 1 / (pu if yon == "Üst" else 1 - pu), rf, cr, d, ac, now)
+    for T in H:
+        vk = ((pz.get("18") or {}).get(str(float(T))) or {})
+        po = pu if T == L else P.p_ust(lt, T)
+        for yon, rf, cr, d, ac in hedef:
+            o = vk.get("OVER" if yon == "Üst" else "UNDER")
+            if o and 0.02 < po < 0.98:
+                y += _vk_yakala(c, mid, ko, ev, dep, lig, f"{yon} {T:g}", o, 1 / (po if yon == "Üst" else 1 - po), rf, cr, d,
+                                ac + ("" if T == L else f" · Pinnacle {L:g} çizgisi {T:g}'e çevrildi"), now)
     return y
 
 
