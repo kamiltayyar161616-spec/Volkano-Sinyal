@@ -6,7 +6,7 @@ Kademe 2 (her dakika): izlenen maçlar; Pinnacle düşüşü %25+ VE 1xBet o tar
             → YAKALA sinyali (maç+taraf başına bir kez; daha iyi fark gelirse güncellenir).
 Sonuç NowGoal skoru; karne: isabet + 1xBet oranıyla ROI (1 birim).
 Sanal kasa 5000 TL: her YAKALA sinyalinde o anki 1xBet oranıyla tek maç kupon, yarım Kelly (p = Pinnacle adil), 100-500 TL.
-Pinnacle–Volkano (26.11): aynı düşüş kuralı, Volkano oranı %12 vergi sonrası adilden %10+ yüksekse; sanal 20 €, yarım Kelly, en az 1 €.
+Pinnacle–Volkano (26.11): aynı düşüş kuralı, Volkano oranı adilden %10+ yüksekse (vergi sadece kazançtan); sanal 20 €, yarım Kelly, en az 1 €.
   python3 avci.py        (özet)"""
 import json
 import os
@@ -29,7 +29,7 @@ FARK = 0.10
 REF_DK = 120
 KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her YAKALA sinyaline tek maçlık kupon
 TARAF = ("1", "X", "2")
-# Pinnacle–Volkano (26.11 kullanıcı): aynı Pinnacle düşüş kuralı, Volkano oranı (vergi sonrası) adilden %10+ yüksekse YAKALA.
+# Pinnacle–Volkano (26.11 kullanıcı): aynı Pinnacle düşüş kuralı, Volkano oranı adilden %10+ yüksekse YAKALA (vergi sadece kazançtan düşülür).
 VK_KASA0, VK_MIN, VK_VERGI = 20.0, 1.0, 0.12       # € · en az 1 € · üst sınır yok (yarım Kelly) · Volkano net kârdan %12
 _vkc = {}                        # mid -> (t, {"1","X","2"} Volkano oranı ya da None)
 _last = {"at": None, "log": "", "hata": None, "izle": 0}
@@ -113,12 +113,11 @@ def _vk_net(o):
 
 
 def _vk_bahis_ac(c, mid, taraf, oran, p, now):
-    """Volkano oranıyla tek maç: yarım Kelly (vergi sonrası orana göre) × serbest kasa, en az 1 €, üst sınır yok"""
+    """Volkano oranıyla tek maç: yarım Kelly × serbest kasa, en az 1 €, üst sınır yok"""
     if c.execute("SELECT 1 FROM vk_bahis WHERE mid=? AND taraf=?", (mid, taraf)).fetchone():
         return
     ks = vk_kasa(c)
-    oe = _vk_net(oran)
-    f = max(0.0, (p * oe - 1) / (oe - 1)) * KELLY_PAY
+    f = max(0.0, (p * oran - 1) / (oran - 1)) * KELLY_PAY
     tutar = max(VK_MIN, round(ks["serbest"] * f, 1))
     if ks["serbest"] < tutar:
         return
@@ -148,7 +147,7 @@ def _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now):
     if not vk or not vk.get(TARAF[i]):
         return 0
     o = vk[TARAF[i]]
-    fark = _vk_net(o) / adil - 1                      # vergi sonrası Volkano oranı vs Pinnacle adil
+    fark = o / adil - 1                               # Volkano oranı vs Pinnacle adil (1xBet ile aynı kural; vergi sadece kazançtan)
     if fark < FARK:
         return 0
     r = c.execute("SELECT fark FROM vk_sinyal WHERE mid=? AND taraf=?", (mid, TARAF[i])).fetchone()
