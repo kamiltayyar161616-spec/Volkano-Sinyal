@@ -29,6 +29,11 @@ def db():
                  vk REAL, deger REAL, PRIMARY KEY (iid, cz, t))""")
     c.execute("""CREATE TABLE IF NOT EXISTS kupon (iid INTEGER, cz REAL, t INTEGER, mac TEXT, dk REAL, skor TEXT, adil REAL, vk REAL,
                  deger REAL, PRIMARY KEY (iid, cz))""")
+    for tb in ("gozlem", "kupon"):
+        try:
+            c.execute(f"ALTER TABLE {tb} ADD COLUMN lig TEXT")
+        except sqlite3.OperationalError:
+            pass
     return c
 
 
@@ -48,6 +53,28 @@ def _vk(iid, mac, ko):
         v = None
     _pz[iid] = (time.time(), v)
     return v
+
+
+_ligad = {}                      # iid -> lig adı (iddaa programından)
+
+
+def _lig(x, pz=None):
+    """lig adı: bot kaydı ('lig'), yoksa iddaa programı (iyms_kars / iddaa_skor değil — iddaa olay verisi)"""
+    if x.get("lig"):
+        return x["lig"]
+    if x["iid"] in _ligad:
+        return _ligad[x["iid"]]
+    ad = None
+    try:
+        import iyms_kars as IK
+        for m in IK.hesap()["maclar"]:
+            if str(m.get("iid") or m.get("id")) == str(x["iid"]):
+                ad = m.get("lig")
+                break
+    except Exception:
+        ad = None
+    _ligad[x["iid"]] = ad
+    return ad
 
 
 def tur():
@@ -83,12 +110,12 @@ def tur():
             continue
         d = round(o / x["adil"], 3)
         if not r or now - r >= GOZLEM_SN:
-            c.execute("INSERT OR IGNORE INTO gozlem VALUES (?,?,?,?,?,?,?,?,?,?)", (int(now), iid, x["mac"], x["dk"], f"{x['g1']}-{x['g2']}", cz,
-                                                                                   x["adil"], x["io"], o, d))
+            c.execute("INSERT OR IGNORE INTO gozlem (t, iid, mac, dk, skor, cz, adil, io, vk, deger, lig) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                      (int(now), iid, x["mac"], x["dk"], f"{x['g1']}-{x['g2']}", cz, x["adil"], x["io"], o, d, _lig(x, pz)))
             n_g += 1
         if d >= CANLI_ESIK and not kup:
-            c.execute("INSERT OR IGNORE INTO kupon VALUES (?,?,?,?,?,?,?,?,?)", (iid, cz, int(now), x["mac"], x["dk"], f"{x['g1']}-{x['g2']}",
-                                                                                x["adil"], o, d))
+            c.execute("INSERT OR IGNORE INTO kupon (iid, cz, t, mac, dk, skor, adil, vk, deger, lig) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (iid, cz, int(now), x["mac"], x["dk"], f"{x['g1']}-{x['g2']}", x["adil"], o, d, _lig(x, pz)))
             n_k += 1
     c.commit()
     c.close()
@@ -119,7 +146,10 @@ def get_page_data():
     K, G = [], []
     if os.path.exists(DB):
         c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
-        K = c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger FROM kupon ORDER BY t").fetchall()
+        try:
+            K = c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger, lig FROM kupon ORDER BY t").fetchall()
+        except sqlite3.OperationalError:
+            K = [r + (None,) for r in c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger FROM kupon ORDER BY t").fetchall()]
         G = c.execute("SELECT iid, cz, vk, deger FROM gozlem").fetchall()
         c.close()
     S = {}
@@ -133,10 +163,10 @@ def get_page_data():
         return S[iid]
 
     canli = []
-    for iid, cz, t, mac, dk, skor, adil, vk, d in K:
+    for iid, cz, t, mac, dk, skor, adil, vk, d, lig in K:
         r = sonuc(iid)
         canli.append({"t": t, "bitis": t + max(10, 100 - dk) * 60, "o": vk, "p": min(0.97, 1 / adil), "mac": mac, "bahis": f"Üst {cz:g} (canlı {dk:.0f}' {skor})",
-                      "tur": "canlı", "deger": d, "son": f"{r[0]}-{r[1]}" if r else None, "kaz": (r[0] + r[1] > cz) if r else None,
+                      "tur": "canlı", "deger": d, "lig": lig, "son": f"{r[0]}-{r[1]}" if r else None, "kaz": (r[0] + r[1] > cz) if r else None,
                       "saat": datetime.fromtimestamp(t, TR).strftime("%d.%m %H:%M")})
     gk = []                                                  # gözlem karnesi: her (maç, çizgi) ilk gözlemi, sonucu belli olanlar
     ilk = {}
@@ -158,7 +188,7 @@ def get_page_data():
             continue
         d = round(v["o"] * float(x["p"]), 3)
         deger.append({"t": v["at"], "bitis": x["baslama"] + 115 * 60, "o": v["o"], "p": float(x["p"]), "mac": x["mac"],
-                      "bahis": f"{x['ad']} {x['n']}" + (f" {x['sov']}" if x.get("sov") not in (None, "", "None") else ""), "tur": "değer",
+                      "bahis": f"{x['ad']} {x['n']}" + (f" {x['sov']}" if x.get("sov") not in (None, "", "None") else ""), "tur": "değer", "lig": x.get("lig"),
                       "deger": d, "son": x.get("skor") if x.get("kazandi") is not None else None, "kaz": x.get("kazandi"),
                       "saat": datetime.fromtimestamp(x["baslama"], TR).strftime("%d.%m %H:%M")})
     T = sorted(canli + deger, key=lambda x: x["t"])

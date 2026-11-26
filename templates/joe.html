@@ -98,7 +98,7 @@
 <div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">
   <div class="r1"><span>{{ '📡' if x.tur == 'canlı' else '💎' }} {{ x.mac }}</span><span>{% if x.net is not none %}<span class="{{ 'p' if x.net > 0 else 'n' }}">{{ '%+.2f'|format(x.net) }} €</span>{% elif not x.tutar %}<span class="n">kasa yetmedi</span>{% else %}⏳{% endif %}</span></div>
   <div class="r1" style="font-weight:600"><span>{{ x.bahis }} @{{ x.o }} · {{ '%.2f'|format(x.tutar) }} €</span><span>{% if x.son %}{{ x.son }} {{ '✓' if x.kaz else '✗' }}{% endif %}</span></div>
-  <div class="r2"><span>{{ x.saat }} · Volkano değer x{{ '%.2f'|format(x.deger) }} · yarım Kelly %{{ x.kelly }}</span><span>kasa {{ '%.2f'|format(x.kasa_sonra) }}</span></div>
+  <div class="r2"><span>{{ x.saat }}{% if x.lig %} · {{ x.lig }}{% endif %} · Volkano değer x{{ '%.2f'|format(x.deger) }} · yarım Kelly %{{ x.kelly }}</span><span>kasa {{ '%.2f'|format(x.kasa_sonra) }}</span></div>
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok.</div>{% endfor %}
 </div>{% endif %}
