@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 DOSYA = "/root/iddaa-bot/m7_kupon.jsonl"
+SINYAL_DOSYA = "/root/iddaa-bot/m7_sinyal.jsonl"      # 26.11: botun TÜM OYNA sinyalleri (bakiye yok / gönderilemedi dahil)
 BASLA = datetime(2026, 11, 24, 12, 45, tzinfo=timezone.utc).timestamp()      # Joe'nun açıldığı an (24.11 15:45 TR)
 KASA0, MIN_TUTAR = 2000.0, 50.0
 BASLA_DEGER = datetime(2026, 11, 24, 20, 45, tzinfo=timezone.utc).timestamp()   # Değer kupon kasasının açıldığı an (24.11 23:45 TR)
@@ -28,8 +29,14 @@ def _kuponlar(basla=None, hepsi=False):
     """hepsi=True: 2.00 kuralı uygulanmaz (bant karnesi botun tüm sinyallerini ölçer)"""
     basla = BASLA if basla is None else basla
     L, gor = [], set()
-    try:
-        for l in open(DOSYA):
+    satirlar = []
+    for f in (DOSYA, SINYAL_DOSYA):                     # gerçek kupon kaydı önce: aynı sinyalin "olustu" kaydı öncelikli
+        try:
+            satirlar += open(f).readlines()
+        except FileNotFoundError:
+            pass
+    if True:
+        for l in satirlar:
             try:
                 x = json.loads(l)
             except ValueError:
@@ -38,8 +45,6 @@ def _kuponlar(basla=None, hepsi=False):
                 continue
             gor.add(x["key"])
             L.append(x)
-    except FileNotFoundError:
-        pass
     return sorted(L, key=lambda x: x["t"])
 
 
