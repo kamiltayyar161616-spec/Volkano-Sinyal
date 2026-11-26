@@ -423,7 +423,11 @@ def xx_hesap():
         if a not in KY:
             if ko <= _t.time():
                 continue                                  # maç başladı, tablo kararı yoktu → alınmaz
-            s = PT.sira(m["ev"], m["dep"])
+            s = PT.ng_sira(m["mid"]) if isinstance(m.get("mid"), int) and m["mid"] > 0 else None     # önce NowGoal (tüm ligler)
+            if s is None:
+                s = PT.sira(m["ev"], m["dep"])            # yedek: football-data (19 lig)
+            if s is None and ko - _t.time() > 1800:
+                continue                                  # sıra henüz yok: maça 30 dk kalana kadar tekrar dene, kilitleme
             KY[a] = {"h1g": PT.h1g(s), "s": s}
             yeni = True
         r = KY[a]
@@ -438,7 +442,7 @@ def xx_hesap():
         s = r["s"]
         z = {"mac": f"{m['ev']} - {m['dep']}", "lig": m.get("lig"), "bahis": "İY/MS X/X", "saat": datetime.fromtimestamp(ko, TR).strftime("%d.%m %H:%M"),
              "o": io["X/X"], "vo": vo["X/X"], "p": min(0.6, pb * XX_C), "pb": pb,
-             "fav": f"{s['lig']} · {s['se']}. - {s['sd']}. ({s['N']} takım, düşme {s['dus'] + 1}+; tablo: {s['fe']} - {s['fd']})",
+             "fav": f"{s['lig']} · {s['se']}. - {s['sd']}. ({s['N']} takım, düşme {s['dus'] + 1}+; {s.get('kaynak', 'football-data')}: {s['fe']} - {s['fd']})",
              "t": ko - 300, "bitis": ko + 115 * 60,
              "son": (m.get("skor") + f" ({m['sonuc']})") if m.get("sonuc") else None, "kaz": (m["sonuc"] == "X/X") if m.get("sonuc") else None}
         (K if m.get("son5") else bekle).append(z)

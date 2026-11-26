@@ -170,7 +170,8 @@ def _conn():
                      ("odds_json", "TEXT"), ("odds_at", "TEXT"), ("odds_final", "INTEGER"),
                      ("odds_first", "TEXT"), ("ht_h", "INTEGER"), ("ht_a", "INTEGER"),
                      ("lid", "INTEGER"), ("ou_ilk", "REAL"), ("ou_son", "REAL"), ("ah_ilk", "REAL"), ("ah_son", "REAL"),
-                     ("ou_kapanis", "REAL"), ("ah_kapanis", "REAL")):
+                     ("ou_kapanis", "REAL"), ("ah_kapanis", "REAL"),
+                     ("rk_h", "INTEGER"), ("rk_a", "INTEGER"), ("rk_n", "INTEGER"), ("oy_h", "INTEGER"), ("oy_a", "INTEGER")):
         if col not in have:
             c.execute(f"ALTER TABLE ng_match ADD COLUMN {col} {typ}")
     return c
@@ -1000,6 +1001,38 @@ def _lg_records(obj, out):
             _lg_records(v, out)
 
 
+def _rk(v):
+    """lig json'undaki sıra alanı ('14', 14, '[14]', '') → int ya da None"""
+    m = re.search(r"\d+", str(v if v is not None else ""))
+    x = int(m.group()) if m else None
+    return x if x and x <= 40 else None
+
+
+def _siralar(recs):
+    """tüm lig kayıtlarından: takım sayısı (görülen en yüksek sıra) + takım başına oynanmış maç (biten)"""
+    N, oy = 0, {}
+    for r in recs.values():
+        for x in (r[8], r[9]):
+            N = max(N, _rk(x) or 0)
+        if r[2] == -1:
+            for t in (r[4], r[5]):
+                oy[t] = oy.get(t, 0) + 1
+    return N, oy
+
+
+def _sira_kaydet(c, recs, sb):
+    """maç öncesi kayıtlarda iki takımın sırası (26.11, Joe 0/0 sekmesi) — maç başlayınca son maç-öncesi değer kalır"""
+    N, oy = sb
+    if not N:
+        return
+    for mid, r in recs.items():
+        if r[2] != 0:
+            continue
+        h, a = _rk(r[8]), _rk(r[9])
+        if h and a:
+            c.execute("UPDATE ng_match SET rk_h=?, rk_a=?, rk_n=?, oy_h=?, oy_a=? WHERE mid=?", (h, a, N, oy.get(r[4], 0), oy.get(r[5], 0), mid))
+
+
 def _cizgi_kaydet(c, recs, now):
     """Mac oncesi kayitlarda cizgi degistiyse ng_line'a yaz; ng_match'te ilk/son, bitmislerde kapanis."""
     son = {r[0]: r[1:] for r in c.execute("""SELECT l.mid, l.ah, l.ah_h, l.ou, l.ou_h FROM ng_line l JOIN
@@ -1078,6 +1111,10 @@ def sweep_leagues(log):
                 _lg_matches(js, found)
                 _lg_records(js, recs)
                 time.sleep(BEKLE)
+            try:
+                sb = _siralar(recs)
+            except Exception:
+                sb = (0, {})
             recs = {m: r for m, r in recs.items() if m in found and lo - timedelta(days=2) <= found[m] <= hi}
             add, upd = [], []
             for mid, ko in found.items():
@@ -1094,6 +1131,10 @@ def sweep_leagues(log):
                 c.executemany("INSERT OR IGNORE INTO ng_match (mid, kickoff_utc, first_seen, status) VALUES (?,?,?,?)", add)
                 c.executemany("UPDATE ng_match SET kickoff_utc=? WHERE mid=? AND status IN ('new','stats')", upd)
                 _cizgi_kaydet(c, recs, now)
+                try:
+                    _sira_kaydet(c, recs, sb)
+                except Exception:
+                    pass
                 c.commit()
                 c.close()
             n_new += len(add)

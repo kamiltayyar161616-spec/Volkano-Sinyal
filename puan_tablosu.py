@@ -89,4 +89,30 @@ def sira(ev, dep):
 
 def h1g(s):
     """iki takım da alt yarıda, düşme hattında değil, ikisi de ≥ 8 maç"""
-    return bool(s) and s["me"] >= 8 and s["md"] >= 8 and s["N"] / 2 < s["se"] <= s["dus"] and s["N"] / 2 < s["sd"] <= s["dus"]
+    return bool(s) and not s.get("kupa") and s["me"] >= 8 and s["md"] >= 8 and s["N"] / 2 < s["se"] <= s["dus"] and s["N"] / 2 < s["sd"] <= s["dus"]
+
+
+# ---- NowGoal sıraları (26.11): tüm ligler. nowgoal.py lig taramasında maç öncesi rk_h/rk_a/rk_n/oy_h/oy_a yazar.
+KUPA = ("cup", "kupa", "copa", "coppa", "pokal", "coupe", "taca", "beker", "trophy", "shield", "champions", "europa", "conference",
+        "acl", "afc", "caf", "concacaf", "libertadores", "sudamericana", "friendly", "playoff", "play-off", "super cup", "qualif", "nations")
+
+
+def ng_dus(N):
+    return 1 if N <= 10 else 2 if N <= 14 else 3 if N <= 21 else 4
+
+
+def ng_sira(mid):
+    import sqlite3
+    import nowgoal as ng
+    try:
+        c = sqlite3.connect(ng.DB_FILE, timeout=10)
+        r = c.execute("SELECT home, away, league_ng, rk_h, rk_a, rk_n, oy_h, oy_a FROM ng_match WHERE mid=?", (int(mid),)).fetchone()
+        c.close()
+    except Exception:
+        return None
+    if not r or not r[3] or not r[4] or not r[5]:
+        return None
+    ev, dep, lig, se, sd, N, me, md = r
+    if any(k in str(lig or "").lower() for k in KUPA) or N < 10 or se > N or sd > N:
+        return {"kupa": True, "lig": lig, "N": N, "se": se, "sd": sd, "me": me or 0, "md": md or 0, "dus": 0, "fe": ev, "fd": dep, "kaynak": "NowGoal"}
+    return {"lig": lig, "N": N, "dus": N - ng_dus(N), "se": se, "sd": sd, "me": me or 0, "md": md or 0, "fe": ev, "fd": dep, "kaynak": "NowGoal"}

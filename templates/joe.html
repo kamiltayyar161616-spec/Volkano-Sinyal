@@ -99,7 +99,7 @@
 </div>{% endif %}
 {% if d.xx %}<div class="tab" id="t-xx">
 <h2 class="section">⏸ 0/0 KUPON</h2>
-<div class="section-sub">Puan tablosunda <b>iki takım da alt yarıda ama düşme hattında değilse</b> İY/MS <b>X/X</b> (0/0) <b>tekli</b>, iddaa son 5 dk oranıyla. Kasa <b>{{ d.xx.kasa0|int }} TL</b> ({{ d.xx.basla }}'dan itibaren), yarım Kelly (ihtimal = oranların X/X'i ×1.20), en az 50 TL. Testte (4 sezon, 571 maç) X/X beklenenden sık çıktı (115 / 92.8); iki takım üst yarıdaysa fark yok. Tablo football-data (19 lig), karar maçtan önce kilitlenir. Sanal, gerçek bahis yok.{% if d.xx.hata %} ⚠ {{ d.xx.hata }}{% endif %}</div>
+<div class="section-sub">Puan tablosunda <b>iki takım da alt yarıda ama düşme hattında değilse</b> İY/MS <b>X/X</b> (0/0) <b>tekli</b>, iddaa son 5 dk oranıyla. Kasa <b>{{ d.xx.kasa0|int }} TL</b> ({{ d.xx.basla }}'dan itibaren), yarım Kelly (ihtimal = oranların X/X'i ×1.20), en az 50 TL. Testte (4 sezon, 571 maç) X/X beklenenden sık çıktı (115 / 92.8); iki takım üst yarıdaysa fark yok. Sıra NowGoal'dan (tüm ligler, kupalar hariç; yoksa football-data), karar maçtan önce kilitlenir. Sanal, gerçek bahis yok.{% if d.xx.hata %} ⚠ {{ d.xx.hata }}{% endif %}</div>
 {{ kasa(d.xx) }}
 {% if d.xx.biten %}<div class="section-sub">Tuttu {{ d.xx.w }} · oranların beklediği {{ d.xx.bek_tut }} · aynı kuponlar Volkano oranıyla düz 1 birim: ROI {{ '%+.1f'|format(d.xx.vk_roi) if d.xx.vk_roi is not none else '-' }}%</div>{% endif %}
 {% for x in d.xx.K %}
