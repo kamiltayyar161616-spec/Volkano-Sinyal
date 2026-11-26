@@ -12,9 +12,20 @@ BASLA = datetime(2026, 11, 24, 12, 45, tzinfo=timezone.utc).timestamp()      # J
 KASA0, MIN_TUTAR = 2000.0, 50.0
 BASLA_DEGER = datetime(2026, 11, 24, 20, 45, tzinfo=timezone.utc).timestamp()   # Değer kupon kasasının açıldığı an (24.11 23:45 TR)
 TR = timezone(timedelta(hours=3))
+# 26.11 kullanıcı: Bot, Değer ve Volkano kuponlarında sadece oran ≥ 2.00 (küçük oranlar kaybettiriyor). Önceki kuponlar olduğu gibi kalır.
+MIN_ORAN, BASLA_O2 = 2.0, datetime(2026, 11, 26, 10, 50, tzinfo=timezone.utc).timestamp()     # 26.11 13:50 TR
 
 
-def _kuponlar(basla=None):
+def _kucuk(t, o):
+    """bu kupon 2.00 kuralına takılıyor mu (kural başladıktan sonra ve oran < 2.00)"""
+    try:
+        return t >= BASLA_O2 and float(o) < MIN_ORAN
+    except (TypeError, ValueError):
+        return False
+
+
+def _kuponlar(basla=None, hepsi=False):
+    """hepsi=True: 2.00 kuralı uygulanmaz (bant karnesi botun tüm sinyallerini ölçer)"""
     basla = BASLA if basla is None else basla
     L, gor = [], set()
     try:
@@ -23,7 +34,7 @@ def _kuponlar(basla=None):
                 x = json.loads(l)
             except ValueError:
                 continue
-            if x.get("t", 0) < basla or x.get("key") in gor or not x.get("oran") or not x.get("iid"):
+            if x.get("t", 0) < basla or x.get("key") in gor or not x.get("oran") or not x.get("iid") or (not hepsi and _kucuk(x["t"], x["oran"])):
                 continue
             gor.add(x["key"])
             L.append(x)
@@ -55,7 +66,7 @@ def _sonuclandir(K, sonuc):
 
 def bant_karne(sonuc):
     """botun TÜM kupon kayıtları (m7_kupon, Joe öncesi dahil) değer bandına göre: düz 50 TL tekli ROI"""
-    K = _sonuclandir(_kuponlar(0), sonuc)
+    K = _sonuclandir(_kuponlar(0, hepsi=True), sonuc)
     R = []
     for a, b, ad in BANTLAR:
         B = [x for x in K if a <= float(x.get("deger") or 0) < b]
@@ -142,7 +153,7 @@ def deger_hesap():
         L = []
     K = []
     for x in L:
-        if x.get("durum") != "oyna" or not x.get("teyit") or x["teyit"] < BASLA_DEGER:
+        if x.get("durum") != "oyna" or not x.get("teyit") or x["teyit"] < BASLA_DEGER or _kucuk(x["teyit"], x.get("odd")):
             continue
         sec = f"{x['ad']} {x['n']}" + (f" {x['sov']}" if x.get("sov") not in (None, "", "None") else "")
         K.append({"t": x["teyit"], "bitis": x["baslama"] + 115 * 60, "o": float(x["odd"]), "p": float(x["p"]), "r": x.get("r"),
@@ -307,6 +318,8 @@ def vk_hesap():
         z = {"mac": x["mac"], "lig": x.get("lig"), "bahis": sec, "saat": datetime.fromtimestamp(x["baslama"], TR).strftime("%d.%m %H:%M"), "io": x["odd"]}
         if not v.get("o"):
             yok.append(dict(z, neden=v.get("neden")))
+            continue
+        if _kucuk(v["at"], v["o"]):
             continue
         K.append(dict(z, t=v["at"], bitis=x["baslama"] + 115 * 60, o=v["o"], p=float(x["p"]),
                       r=round(v["o"] * float(x["p"]), 2), son=x.get("skor") if x.get("kazandi") is not None else None, kaz=x.get("kazandi")))

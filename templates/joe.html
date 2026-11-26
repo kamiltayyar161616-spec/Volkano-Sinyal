@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}SAHA — Joe{% endblock %}
 {% block page_tag %}🤵 JOE · bot sanal kasası{% endblock %}
-{% block subtitle %}iddaa canlı botunun her kupon sinyali Joe'nun sanal kasasına girer (bot gerçekte oynayabilmiş olsun ya da olmasın). Bot kasası <b>{{ d.kasa0|int }} TL</b>'den başladı ({{ d.basla }}). Tutar = <b>yarım Kelly</b> × kasa, <b>en az 50 TL</b>, üst sınır yok. Kelly'deki ihtimal botun keskin büro (Pinnacle/SBOBET/Crown) adil oranından. Sonuç iddaa'nın kendi sonuç kaydından.{% endblock %}
+{% block subtitle %}iddaa canlı botunun her kupon sinyali Joe'nun sanal kasasına girer (bot gerçekte oynayabilmiş olsun ya da olmasın). Bot kasası <b>{{ d.kasa0|int }} TL</b>'den başladı ({{ d.basla }}). Tutar = <b>yarım Kelly</b> × kasa, <b>en az 50 TL</b>, üst sınır yok. Kelly'deki ihtimal botun keskin büro (Pinnacle/SBOBET/Crown) adil oranından. Sonuç iddaa'nın kendi sonuç kaydından. <b>26.11 13:50'den itibaren Bot, Değer ve Volkano kuponlarında sadece oran ≥ 2.00.</b>{% endblock %}
 {% block extra_style %}
 <style>
   .ks{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:0 16px 14px; }
