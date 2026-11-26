@@ -55,26 +55,52 @@ def _vk(iid, mac, ko):
     return v
 
 
-_ligad = {}                      # iid -> lig adı (iddaa programından)
+_ligad = {}                      # iid -> lig adı
+_comp = {"t": 0, "v": {}}        # iddaa ci -> lig adı (sportsbook/competitions)
+
+
+def _ci_ad(ci):
+    import iyms_kars as IK
+    if not _comp["v"] or time.time() - _comp["t"] > 6 * 3600:
+        try:
+            d = IK._get(IK.B + "/competitions")
+            L = d.get("data") if isinstance(d, dict) else d
+            _comp["v"] = {x["i"]: x.get("n") or x.get("sn") for x in (L or []) if isinstance(x, dict) and "i" in x}
+            _comp["t"] = time.time()
+        except Exception:
+            pass
+    return _comp["v"].get(ci)
 
 
 def _lig(x, pz=None):
-    """lig adı: bot kaydı ('lig'), yoksa iddaa programı (iyms_kars / iddaa_skor değil — iddaa olay verisi)"""
-    if x.get("lig"):
-        return x["lig"]
-    if x["iid"] in _ligad:
-        return _ligad[x["iid"]]
-    ad = None
-    try:
-        import iyms_kars as IK
-        for m in IK.hesap()["maclar"]:
-            if str(m.get("iid") or m.get("id")) == str(x["iid"]):
-                ad = m.get("lig")
-                break
-    except Exception:
-        ad = None
-    _ligad[x["iid"]] = ad
+    """lig adı: bot kaydındaki iddaa 'ci' → iddaa lig listesi; yoksa iddaa maç sayfasından ci"""
+    iid = x["iid"]
+    if iid in _ligad:
+        return _ligad[iid]
+    ci = x.get("ci")
+    if not ci:
+        try:
+            import iyms_kars as IK
+            d = IK._get(f"{IK.B}/event/{iid}")["data"]
+            d = (d.get("events") or [d])[0] if isinstance(d, dict) else d
+            ci = (d or {}).get("ci")
+        except Exception:
+            ci = None
+    ad = _ci_ad(ci) if ci else None
+    if ad:
+        _ligad[iid] = ad
     return ad
+
+
+def _lig_doldur(c):
+    """lig'i boş eski kayıtlar (en çok 10 maç/tur)"""
+    for (iid,) in c.execute("SELECT DISTINCT iid FROM kupon WHERE lig IS NULL UNION SELECT DISTINCT iid FROM gozlem WHERE lig IS NULL LIMIT 10").fetchall():
+        ad = _lig({"iid": iid})
+        if ad:
+            c.execute("UPDATE kupon SET lig=? WHERE iid=? AND lig IS NULL", (ad, iid))
+            c.execute("UPDATE gozlem SET lig=? WHERE iid=? AND lig IS NULL", (ad, iid))
+        else:
+            _ligad[iid] = None
 
 
 def tur():
@@ -117,6 +143,10 @@ def tur():
             c.execute("INSERT OR IGNORE INTO kupon (iid, cz, t, mac, dk, skor, adil, vk, deger, lig) VALUES (?,?,?,?,?,?,?,?,?,?)",
                       (iid, cz, int(now), x["mac"], x["dk"], f"{x['g1']}-{x['g2']}", x["adil"], o, d, _lig(x, pz)))
             n_k += 1
+    try:
+        _lig_doldur(c)
+    except Exception:
+        pass
     c.commit()
     c.close()
     return f"{datetime.now(TR):%H:%M} taze aday {len(son)} · yeni gözlem {n_g} · yeni kupon {n_k}"
