@@ -130,7 +130,7 @@ def main():
     print("  z ≥ 2.5: hipotez veride doğrulanıyor · |z| < 2: oranların bildiğinden farkı yok.")
 
 
-if __name__ == "__main__" and __import__("sys").argv[1:2] not in (["defter"], ["oran"]):
+if __name__ == "__main__" and __import__("sys").argv[1:2] not in (["defter"], ["oran"], ["video"]):
     main()
 
 
@@ -243,3 +243,55 @@ def oran_test():
 
 if __name__ == "__main__" and __import__("sys").argv[1:2] == ["oran"]:
     oran_test()
+
+
+def video_test():
+    """Videodaki '1/0 - 2/0 altın kurallar' 4 sezon 6 ligde (Pinnacle kapanış → Poisson ile oran karşılıkları):
+    K1 MS 1 ve 2 yakın · K2 handikap (0:1) X (ev tam 1 farkla) iddaa 3.60-3.85 · K3 İY X iddaa 2.10-2.30. K4 test edilemez."""
+    M = []
+    for l in TS.LIGLER:
+        for s in SEZON:
+            for r in TS.indir(s, l):
+                try:
+                    fh, fa, hh, ha = int(r["FTHG"]), int(r["FTAG"]), int(r["HTHG"]), int(r["HTAG"])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                h, d, a = TS._f(r, "PSCH", "PSH", "AvgCH", "AvgH"), TS._f(r, "PSCD", "PSD", "AvgCD", "AvgD"), TS._f(r, "PSCA", "PSA", "AvgCA", "AvgA")
+                L = lam(r)
+                if not (h and d and a and L):
+                    continue
+                t = 1 / h + 1 / d + 1 / a
+                p1, p2 = 1 / h / t, 1 / a / t
+                pr = iyms(*L)
+                iyx = pr["X/1"] + pr["X/X"] + pr["X/2"]
+                ph, pa = P.pois(L[0]), P.pois(L[1])
+                e1 = sum(ph[i + 1] * pa[i] for i in range(len(pa) - 1))           # ev tam 1 farkla
+                sg = lambda x: "1" if x > 0 else "X" if x == 0 else "2"
+                M.append((abs(p1 - p2), 1 / (iyx * 1.10), 1 / (e1 * 1.10), pr, f"{sg(hh - ha)}/{sg(fh - fa)}"))
+    print(f"\nVİDEO KURALLARI — {len(M)} maç (6 lig, 4 sezon). iddaa oranı ≈ adil oran / 1.10 marj varsayımıyla")
+    print("  'beklenen' = Poisson modeli (bu model 1/X ve 2/X'i genelde %15-20 AZ tahmin ediyor — TÜM satırıyla kıyasla)")
+
+    def satir(ad, X):
+        if not X:
+            print(f"  {ad:40s} maç yok")
+            return
+        g = sum(1 for x in X if x[4] in ("1/X", "2/X"))
+        e = sum(x[3]["1/X"] + x[3]["2/X"] for x in X)
+        print(f"  {ad:40s} {len(X):5d} maç · 1/0+2/0 {g:4d} (%{100 * g / len(X):4.1f}) · beklenen {e:6.1f} · gerçek/bekl {g / e:4.2f} · adil oran (tek seçenek) ≈{2 * len(X) / g if g else 0:5.1f}")
+
+    k1 = lambda x: x[0] <= 0.10
+    k2 = lambda x: 3.60 <= x[2] <= 3.85
+    k3 = lambda x: 2.10 <= x[1] <= 2.30
+    satir("TÜM maçlar", M)
+    satir("K1 oranlar yakın (fark ≤ %10)", [x for x in M if k1(x)])
+    satir("K2 handikap X 3.60-3.85", [x for x in M if k2(x)])
+    satir("K3 İY X 2.10-2.30", [x for x in M if k3(x)])
+    satir("K1 + K3", [x for x in M if k1(x) and k3(x)])
+    satir("K1 + K2", [x for x in M if k1(x) and k2(x)])
+    satir("K1 + K2 + K3 (video)", [x for x in M if k1(x) and k2(x) and k3(x)])
+    satir("K1 değil (belirgin favori)", [x for x in M if not k1(x)])
+    print("  adil oran (tek seçenek): 1/X ve 2/X'e ayrı ayrı oynanırsa her birinin başa baş oranı; iddaa İY/MS 1/X-2/X genelde 13-17 verir")
+
+
+if __name__ == "__main__" and __import__("sys").argv[1:2] == ["video"]:
+    video_test()
