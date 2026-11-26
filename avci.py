@@ -6,6 +6,7 @@ Kademe 2 (her dakika): izlenen maçlar; Pinnacle düşüşü %25+ VE 1xBet o tar
             → YAKALA sinyali (maç+taraf başına bir kez; daha iyi fark gelirse güncellenir).
 Sonuç NowGoal skoru; karne: isabet + 1xBet oranıyla ROI (1 birim).
 Sanal kasa 5000 TL: her YAKALA sinyalinde o anki 1xBet oranıyla tek maç kupon, yarım Kelly (p = Pinnacle adil), 100-500 TL.
+Pinnacle–Volkano (26.11): aynı düşüş kuralı, Volkano oranı %12 vergi sonrası adilden %10+ yüksekse; sanal 20 €, yarım Kelly, en az 1 €.
   python3 avci.py        (özet)"""
 import json
 import os
@@ -28,6 +29,9 @@ FARK = 0.10
 REF_DK = 120
 KASA0, MIN_BAHIS, MAX_BAHIS, KELLY_PAY = 5000.0, 100.0, 500.0, 0.5   # sanal kasa: her YAKALA sinyaline tek maçlık kupon
 TARAF = ("1", "X", "2")
+# Pinnacle–Volkano (26.11 kullanıcı): aynı Pinnacle düşüş kuralı, Volkano oranı (vergi sonrası) adilden %10+ yüksekse YAKALA.
+VK_KASA0, VK_MIN, VK_VERGI = 20.0, 1.0, 0.12       # € · en az 1 € · üst sınır yok (yarım Kelly) · Volkano net kârdan %12
+_vkc = {}                        # mid -> (t, {"1","X","2"} Volkano oranı ya da None)
 _last = {"at": None, "log": "", "hata": None, "izle": 0}
 _izle = {}                       # mid -> ko
 
@@ -46,6 +50,11 @@ def db():
                  pin_ref REAL, pin REAL, pin_adil REAL, xb REAL, fark REAL, dusus REAL, guncel TEXT, sonuc TEXT,
                  PRIMARY KEY (mid, taraf))""")
     c.execute("""CREATE TABLE IF NOT EXISTS bahis (mid INTEGER, taraf TEXT, at TEXT, oran REAL, p REAL, tutar REAL, durum TEXT, getiri REAL,
+                 PRIMARY KEY (mid, taraf))""")
+    c.execute("""CREATE TABLE IF NOT EXISTS vk_sinyal (mid INTEGER, taraf TEXT, at TEXT, ko TEXT, ev TEXT, dep TEXT, lig TEXT,
+                 pin_ref REAL, pin REAL, pin_adil REAL, vk REAL, vk_net REAL, fark REAL, dusus REAL, guncel TEXT, sonuc TEXT,
+                 PRIMARY KEY (mid, taraf))""")
+    c.execute("""CREATE TABLE IF NOT EXISTS vk_bahis (mid INTEGER, taraf TEXT, at TEXT, oran REAL, p REAL, tutar REAL, durum TEXT, getiri REAL,
                  PRIMARY KEY (mid, taraf))""")
     return c
 
@@ -77,6 +86,82 @@ def _bahis_ac(c, mid, taraf, oran, p, now):
     if ks["serbest"] < tutar:
         return
     c.execute("INSERT INTO bahis VALUES (?,?,?,?,?,?,?,?)", (mid, taraf, now.isoformat(), oran, round(p, 4), tutar, "açık", None))
+
+
+def vk_kasa(c=None):
+    kapat = c is None
+    if c is None:
+        if not os.path.exists(DB):
+            return {"bakiye": VK_KASA0, "serbest": VK_KASA0, "acik": 0.0, "n": 0, "biten": 0, "kazanan": 0, "kar": 0.0, "roi": None}
+        c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+    try:
+        R = c.execute("SELECT tutar, durum, getiri FROM vk_bahis").fetchall()
+    except sqlite3.OperationalError:
+        R = []
+    if kapat:
+        c.close()
+    acik = sum(t for t, d, g in R if d == "açık")
+    B = [(t, g or 0) for t, d, g in R if d != "açık"]
+    yat, get = sum(t for t, _ in B), sum(g for _, g in B)
+    return {"bakiye": round(VK_KASA0 - yat + get, 2), "serbest": round(VK_KASA0 - yat + get - acik, 2), "acik": round(acik, 2), "n": len(R),
+            "biten": len(B), "kazanan": sum(1 for t, g in B if g > t), "kar": round(get - yat, 2),
+            "roi": round(100 * (get - yat) / yat, 1) if yat else None}
+
+
+def _vk_net(o):
+    return 1 + (o - 1) * (1 - VK_VERGI)
+
+
+def _vk_bahis_ac(c, mid, taraf, oran, p, now):
+    """Volkano oranıyla tek maç: yarım Kelly (vergi sonrası orana göre) × serbest kasa, en az 1 €, üst sınır yok"""
+    if c.execute("SELECT 1 FROM vk_bahis WHERE mid=? AND taraf=?", (mid, taraf)).fetchone():
+        return
+    ks = vk_kasa(c)
+    oe = _vk_net(oran)
+    f = max(0.0, (p * oe - 1) / (oe - 1)) * KELLY_PAY
+    tutar = max(VK_MIN, round(ks["serbest"] * f, 1))
+    if ks["serbest"] < tutar:
+        return
+    c.execute("INSERT INTO vk_bahis VALUES (?,?,?,?,?,?,?,?)", (mid, taraf, now.isoformat(), oran, round(p, 4), tutar, "açık", None))
+
+
+def _vk_oranlar(mid, ev, dep, ko):
+    """Volkano MS 1/X/2 (60 sn önbellek); maç Volkano'da yoksa None"""
+    t, v = _vkc.get(mid, (0, None))
+    if time.time() - t < 60:
+        return v
+    v = None
+    try:
+        import joe
+        pz = joe._vk_pazarlar(ev, dep, _dt(ko).timestamp())
+        ms = ((pz or {}).get("1") or {}).get("") or {}
+        if all(k in ms for k in TARAF):
+            v = {k: ms[k] for k in TARAF}
+    except Exception:
+        v = None
+    _vkc[mid] = (time.time(), v)
+    return v
+
+
+def _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now):
+    vk = _vk_oranlar(mid, ev, dep, ko)
+    if not vk or not vk.get(TARAF[i]):
+        return 0
+    o = vk[TARAF[i]]
+    fark = _vk_net(o) / adil - 1                      # vergi sonrası Volkano oranı vs Pinnacle adil
+    if fark < FARK:
+        return 0
+    r = c.execute("SELECT fark FROM vk_sinyal WHERE mid=? AND taraf=?", (mid, TARAF[i])).fetchone()
+    _vk_bahis_ac(c, mid, TARAF[i], o, 1 / adil, now)
+    if r and r[0] >= fark:
+        return 0
+    c.execute("""INSERT INTO vk_sinyal (mid, taraf, at, ko, ev, dep, lig, pin_ref, pin, pin_adil, vk, vk_net, fark, dusus, guncel)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 ON CONFLICT(mid, taraf) DO UPDATE SET pin=excluded.pin, pin_adil=excluded.pin_adil, vk=excluded.vk, vk_net=excluded.vk_net,
+                 fark=excluded.fark, dusus=excluded.dusus, guncel=excluded.guncel""",
+              (mid, TARAF[i], now.isoformat(), ko, ev, dep, lig, ref[i], pin["cur"][i], round(adil, 3), o, round(_vk_net(o), 3),
+               round(fark, 4), round(dusus, 4), now.isoformat()))
+    return 0 if r else 1
 
 
 def _oku(mid):
@@ -117,9 +202,15 @@ def _degerlendir(c, mid, ko, ev, dep, lig, pin, xb, now):
         dusus = 1 - pin["cur"][i] / ref[i]
         if dusus >= IZLE_DUSUS:
             izle = True
-        if dusus < SINYAL_DUSUS or not xb or not xb["cur"][i]:
+        if dusus < SINYAL_DUSUS:
             continue
         adil = t / q[i]                       # marjsiz adil oran = 1 / (q_i / t)
+        try:
+            yeni += _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now)
+        except Exception:
+            pass
+        if not xb or not xb["cur"][i]:
+            continue
         fark = xb["cur"][i] / adil - 1
         if fark < FARK:
             continue
@@ -230,14 +321,19 @@ def _sonuc_iddaa(ev, dep, ko):
 def sonuclandir(sure=60):
     c = db()
     now = datetime.now(timezone.utc)
-    A = c.execute("SELECT mid, taraf, ev, dep, ko FROM sinyal WHERE sonuc IS NULL AND ko < ?",
-                  ((now - timedelta(minutes=110)).isoformat(),)).fetchall()
+    T = [("sinyal", "bahis", "ROUND(tutar * oran, 2)"),
+         ("vk_sinyal", "vk_bahis", f"ROUND(tutar * (1 + (oran - 1) * {1 - VK_VERGI}), 2)")]
+    A = [(ts, tb, g, *x) for ts, tb, g in T for x in c.execute(f"SELECT mid, taraf, ev, dep, ko FROM {ts} WHERE sonuc IS NULL AND ko < ?",
+                                                                  ((now - timedelta(minutes=110)).isoformat(),)).fetchall()]
     if A:
         n = sqlite3.connect(f"file:{ng.DB_FILE}?mode=ro", uri=True, timeout=20)
         t0 = time.time()
-        for mid, taraf, ev, dep, ko in A:
+        bulunan = {}
+        for ts, tb, getiri, mid, taraf, ev, dep, ko in A:
             r = n.execute("SELECT status, ft_h, ft_a FROM ng_match WHERE mid=?", (mid,)).fetchone()
-            if not (r and r[0] in ("finished", "void")) and _dt(ko) < now - timedelta(minutes=130) and time.time() - t0 < sure:
+            if not (r and r[0] in ("finished", "void")) and mid in bulunan:
+                r = bulunan[mid]
+            elif not (r and r[0] in ("finished", "void")) and _dt(ko) < now - timedelta(minutes=130) and time.time() - t0 < sure:
                 try:                         # NowGoal engelli/eksik: önce 7M, olmazsa iddaa
                     s7 = _sonuc_7m(mid, ev, dep, ko)
                     time.sleep(0.5)
@@ -250,16 +346,17 @@ def sonuclandir(sure=60):
                         s7 = None
                 if s7:
                     r = ("finished", s7[0], s7[1])
+                    bulunan[mid] = r
             if r and r[0] == "finished" and r[1] is not None:
                 s = "1" if r[1] > r[2] else "2" if r[2] > r[1] else "X"
-                c.execute("UPDATE sinyal SET sonuc=? WHERE mid=? AND taraf=?", (f"{r[1]}-{r[2]}|{'tuttu' if s == taraf else 'yattı'}", mid, taraf))
+                c.execute(f"UPDATE {ts} SET sonuc=? WHERE mid=? AND taraf=?", (f"{r[1]}-{r[2]}|{'tuttu' if s == taraf else 'yattı'}", mid, taraf))
                 if s == taraf:
-                    c.execute("UPDATE bahis SET durum='kazandı', getiri=ROUND(tutar * oran, 2) WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
+                    c.execute(f"UPDATE {tb} SET durum='kazandı', getiri={getiri} WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
                 else:
-                    c.execute("UPDATE bahis SET durum='kaybetti', getiri=0 WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
+                    c.execute(f"UPDATE {tb} SET durum='kaybetti', getiri=0 WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
             elif r and r[0] == "void":
-                c.execute("UPDATE sinyal SET sonuc='iptal' WHERE mid=? AND taraf=?", (mid, taraf))
-                c.execute("UPDATE bahis SET durum='iptal', getiri=tutar WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
+                c.execute(f"UPDATE {ts} SET sonuc='iptal' WHERE mid=? AND taraf=?", (mid, taraf))
+                c.execute(f"UPDATE {tb} SET durum='iptal', getiri=tutar WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
         n.close()
         c.commit()
     c.close()
@@ -267,7 +364,7 @@ def sonuclandir(sure=60):
 
 def get_page_data():
     if not os.path.exists(DB):
-        return {"last": _last, "L": [], "karne": None, "kasa": kasa(), "kasa0": KASA0}
+        return {"last": _last, "L": [], "karne": None, "kasa": kasa(), "kasa0": KASA0, "vk": vk_sayfa()}
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
     c.row_factory = sqlite3.Row
     L = [dict(r) for r in c.execute("""SELECT s.*, b.tutar AS b_tutar, b.oran AS b_oran, b.durum AS b_durum, b.getiri AS b_getiri
@@ -286,7 +383,34 @@ def get_page_data():
             w += x["durum"] == "tuttu"
             kar += (x["xb"] - 1) if x["durum"] == "tuttu" else -1
     return {"last": _last, "L": L, "karne": {"n": n, "w": w, "roi": round(100 * kar / n, 1) if n else None, "kar": round(kar, 2)},
-            "kasa": kasa(), "kasa0": KASA0}
+            "kasa": kasa(), "kasa0": KASA0, "vk": vk_sayfa()}
+
+
+def vk_sayfa():
+    if not os.path.exists(DB):
+        return {"L": [], "kasa": vk_kasa(), "kasa0": VK_KASA0, "karne": None}
+    c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+    c.row_factory = sqlite3.Row
+    try:
+        L = [dict(r) for r in c.execute("""SELECT s.*, b.tutar AS b_tutar, b.oran AS b_oran, b.durum AS b_durum, b.getiri AS b_getiri
+                                             FROM vk_sinyal s LEFT JOIN vk_bahis b ON b.mid = s.mid AND b.taraf = s.taraf ORDER BY s.at DESC LIMIT 200""")]
+    except sqlite3.OperationalError:
+        L = []
+    c.close()
+    n = w = 0
+    kar = 0.0
+    for x in L:
+        x["saat"] = _dt(x["ko"]).astimezone(TR).strftime("%d.%m %H:%M")
+        x["yakalandi"] = _dt(x["at"]).astimezone(TR).strftime("%H:%M")
+        x["kalan"] = round((_dt(x["ko"]) - _dt(x["at"])).total_seconds() / 60)
+        s = (x["sonuc"] or "").split("|")
+        x["skor"], x["durum"] = (s[0], s[1]) if len(s) == 2 else (None, x["sonuc"])
+        if x["durum"] in ("tuttu", "yattı"):
+            n += 1
+            w += x["durum"] == "tuttu"
+            kar += (x["vk_net"] - 1) if x["durum"] == "tuttu" else -1
+    return {"L": L, "kasa": vk_kasa(), "kasa0": VK_KASA0,
+            "karne": {"n": n, "w": w, "roi": round(100 * kar / n, 1) if n else None, "kar": round(kar, 2)}}
 
 
 def _loop():
