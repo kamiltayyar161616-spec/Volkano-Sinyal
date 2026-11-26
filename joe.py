@@ -103,6 +103,12 @@ def hesap():
         H["xf"] = {"K": [], "bekle": [], "kasa": XF_KASA0, "bekleyen": 0, "toplam": XF_KASA0, "kasa0": XF_KASA0, "n": 0, "biten": 0, "w": 0,
                    "net": 0, "roi": None, "basla": "", "hata": str(e)[:150]}
     try:
+        import volki
+        H["volki"] = volki.get_page_data()
+    except Exception as e:
+        H["volki"] = {"K": [], "kasa": 20.0, "bekleyen": 0, "toplam": 20.0, "kasa0": 20.0, "n": 0, "biten": 0, "w": 0, "net": 0, "roi": None,
+                      "karne_canli": [], "karne_gozlem": [], "karne_deger": [], "n_gozlem": 0, "n_cift": 0, "hata": str(e)[:150]}
+    try:
         H["xx"] = xx_hesap()
     except Exception as e:
         H["xx"] = {"K": [], "bekle": [], "kasa": XX_KASA0, "bekleyen": 0, "toplam": XX_KASA0, "kasa0": XX_KASA0, "n": 0, "biten": 0, "w": 0,
@@ -353,6 +359,11 @@ def start_background():
     if not _started:
         _started = True
         __import__("threading").Thread(target=_loop, daemon=True, name="joe_vk").start()
+        try:
+            import volki
+            volki.start_background()
+        except Exception:
+            pass
 
 
 # ---- X/F KUPON (25.11 kullanıcı): belirgin favorili maçta (MS farkı ≥ %15) İY/MS "X/favori" tekli, iddaa son 5 dk oranıyla.
