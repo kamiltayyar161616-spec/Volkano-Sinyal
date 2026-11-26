@@ -2,6 +2,8 @@
 
 Kurallar Joe ile aynı: kasa 50 €, en az 0.50 €, yarım Kelly (vergi net kârdan %12), üst sınır yok.
 Her seçenek bir kez oynanır (kayıt: /root/volkano-bot/oynanan.jsonl). Maç başlamış ya da 2 dk'dan az kalmışsa oynanmaz.
+CANLI (26.11): Joe 🦊 Volki canlı kuponları (canlı botun Pinnacle/SBOBET adili vs Volkano canlı Üst, değer ≥ 0.92), 10 sn'de bir;
+oran gönderimden hemen önce yeniden okunur, değer hâlâ eşikteyse 1 € tekli, AcceptPriceChanges kapalı (düşen oran kabul edilmez).
 
 Token: telefondaki tarayıcıda Volkano'ya giriş yapılır, localStorage "x-auth" içeriği
 /root/volkano-bot/x-auth.json dosyasına yapıştırılır (şifre sunucuda tutulmaz).
@@ -202,6 +204,10 @@ def kupon_kur(x):
         return None, "Volkano'da bu pazar yok"
     b, mk, o = sec["b"], sec["m"], sec["od"]
     tutar, kasa = _tutar(o, float(x["p"]))
+    return _govde(b, mk, o, e, m, tutar, kasa, True)
+
+
+def _govde(b, mk, o, e, m, tutar, kasa, kabul):
     e, m = e or {}, m or {}
     ev_id = next((v for k in ("ai", "aggregatorId", "id", "mac_id", "event_id") for v in (e.get(k), m.get(k)) if v), None)
     bet = {
@@ -223,7 +229,7 @@ def kupon_kur(x):
     govde = {
         "ActionCreatedDatetime": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "ActionId": str(uuid.uuid4()),
-        "AcceptPriceChanges": True,                   # sitede açık/kapalı düğme; oran saniyeler önce okundu
+        "AcceptPriceChanges": kabul,                  # maç önü True (oran saniyeler önce okundu); canlıda False (düşen oranı kabul etme)
         "ClientFingerprint": None,
         "Systems": None,
         "Amount": tutar,
@@ -277,7 +283,71 @@ def gonder(g, at, d):
     return sonuc.get("durum") not in (None, "Rejected", "Cancelled"), sonuc
 
 
+# ---- CANLI (26.11): Volki kuponları (bot adili vs Volkano canlı Üst, değer ≥ eşik) → Volkano'ya tekli
+CANLI_TUTAR, CANLI_YAS = 1.0, 45                     # € düz · sinyal en fazla 45 sn eski
+BASLA_CANLI = datetime(2026, 11, 26, 20, 0, tzinfo=timezone.utc).timestamp()
+
+
+def _canli_sinyaller():
+    import sqlite3
+    import volki
+    if not os.path.exists(volki.DB):
+        return []
+    c = sqlite3.connect(f"file:{volki.DB}?mode=ro", uri=True, timeout=20)
+    R = c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger FROM kupon WHERE t >= ? AND t >= ?",
+                  (BASLA_CANLI, int(time.time()) - CANLI_YAS)).fetchall()
+    c.close()
+    return R
+
+
+def canli_kupon(iid, cz, t, mac, dk, adil):
+    """Volki sinyali -> (gövde, bilgi) ya da (None, neden); oran ŞİMDİ yeniden okunur, değer hâlâ eşikteyse"""
+    import volki
+    h, _, a = mac.partition(" - ")
+    pz, e, m = joe._vk_pazarlar(h, a, volki._ko_tahmin(t, dk), ham=True)
+    sec = (((pz or {}).get("18") or {}).get(str(float(cz))) or {}).get("OVER")
+    if not sec:
+        return None, "Volkano'da maç/çizgi yok (askıda olabilir)"
+    o = sec["od"]
+    if o / adil < volki.CANLI_ESIK:
+        return None, f"oran düştü: {o} (değer {o / adil:.2f})"
+    return _govde(sec["b"], sec["m"], o, e, m, CANLI_TUTAR, None, False)
+
+
+def canli_tur(canli):
+    S = _kayit()
+    for iid, cz, t, mac, dk, skor, adil, vk, d in _canli_sinyaller():
+        k = f"V|{iid}|{cz:g}"
+        if k in S:
+            continue
+        kayit = {"key": k, "t": int(time.time()), "mac": mac, "bahis": f"Üst {cz:g} (canlı {dk:.0f}' {skor})", "adil": adil, "sinyal_o": vk, "tur": "canlı"}
+        g, bilgi = canli_kupon(iid, cz, t, mac, dk, adil)
+        if not g:
+            _yaz(dict(kayit, durum="atla", neden=bilgi))
+            log("CANLI atla", mac, kayit["bahis"], "-", bilgi)
+            continue
+        kayit.update(o=bilgi["o"], tutar=bilgi["tutar"])
+        if not canli or not os.path.exists(CANLI_ANAHTAR):
+            _yaz(dict(kayit, durum="kuru"))
+            log("CANLI KURU", mac, kayit["bahis"], f"@{bilgi['o']}", f"{bilgi['tutar']} €")
+            continue
+        at, dd = token()
+        ok, sonuc = gonder(g, at, dd)
+        _yaz(dict(kayit, durum="oynandi" if ok else "hata", **sonuc))
+        log("CANLI OYNANDI" if ok else "CANLI HATA", mac, kayit["bahis"], f"@{bilgi['o']}", f"{bilgi['tutar']} €", sonuc)
+
+
+def canli_dongu(canli):
+    while True:
+        try:
+            canli_tur(canli)
+        except Exception as ex:
+            log("canlı hata:", repr(ex)[:300])
+        time.sleep(10)
+
+
 def dongu(canli):
+    __import__("threading").Thread(target=canli_dongu, args=(canli,), daemon=True).start()
     log("Volkano botu başladı:", "CANLI (gerçek para)" if canli else "KURU (göndermez)")
     while True:
         try:
