@@ -154,7 +154,12 @@ def _vk_oranlar(mid, ev, dep, ko):
     return {k: ms[k] for k in TARAF} if all(k in ms for k in TARAF) else None
 
 
-def kazandi(taraf, h, a):
+def kazandi(taraf, h, a, iy=None):
+    """iy = (ev, dep) ilk yarı skoru; İY seçeneğinde yoksa None döner (sonuç bekler)"""
+    if taraf.startswith("İY "):
+        if not iy or iy[0] is None:
+            return None
+        return kazandi(taraf[3:], iy[0], iy[1])
     s = "1" if h > a else "2" if a > h else "X"
     if taraf in TARAF:
         return s == taraf
@@ -279,6 +284,17 @@ def _vk_ou(c, mid, ko, ev, dep, lig, now):
             if o and 0.02 < po < 0.98:
                 y += _vk_yakala(c, mid, ko, ev, dep, lig, f"{yon} {T:g}", o, 1 / (po if yon == "Üst" else 1 - po), rf, cr, d,
                                 ac + ("" if T == L else f" · Pinnacle {L:g} çizgisi {T:g}'e çevrildi"), now)
+    # İY Alt/Üst (26.11): aynı gerçek Pinnacle hareketi; İY gol beklentisi = 1.035 + 0.243·(maç beklentisi − 2.6) (5.092 maçta ölçülen pay)
+    li = max(0.3, 1.035 + 0.243 * (lt - 2.6))
+    ph = P.pois(li)
+    for T in (0.5, 1.5, 2.5):
+        vk = ((pz.get("68") or {}).get(str(float(T))) or {})
+        po = 1 - sum(ph[:int(T) + 1])
+        for yon, rf, cr, d, ac in hedef:
+            o = vk.get("OVER" if yon == "Üst" else "UNDER")
+            if o and 0.02 < po < 0.98:
+                y += _vk_yakala(c, mid, ko, ev, dep, lig, f"İY {yon} {T:g}", o, 1 / (po if yon == "Üst" else 1 - po), rf, cr, d,
+                                ac + f" · İY gol beklentisi {li:.2f}", now)
     return y
 
 
@@ -417,17 +433,17 @@ def _sonuc_7m(mid, ev, dep, ko):
     return tuple(int(v) for v in skor.split("-")) if skor else None
 
 
-def _sonuc_iddaa(ev, dep, ko):
+def _sonuc_iddaa(ev, dep, ko, iy=False):
     """iddaa sonuç sayfası kaydından (iddaa_skor.db, bitmiş maç): aynı başlama (±20 dk) + takım adı benzerliği -> (ev, dep) ya da None"""
     import iddaa_skor as I
     import kelly_tab as K
     t = _dt(ko)
     gun = [(t.astimezone(I.TR) + timedelta(days=d)).date().isoformat() for d in (-1, 0, 1)]
     c = sqlite3.connect(f"file:{I.DB}?mode=ro", uri=True, timeout=20)
-    R = c.execute(f"SELECT ev_ad, dep_ad, baslama, ev, dep FROM s WHERE phase=2 AND gun IN (?,?,?)", gun).fetchall()
+    R = c.execute(f"SELECT ev_ad, dep_ad, baslama, ev, dep, iy_ev, iy_dep FROM s WHERE phase=2 AND gun IN (?,?,?)", gun).fetchall()
     c.close()
     best = None
-    for a, b, bas, h, g in R:
+    for a, b, bas, h, g, ih, ig in R:
         try:
             bt = datetime.fromtimestamp(int(bas) / 1000, timezone.utc) if str(bas).isdigit() else _dt(bas)
         except Exception:
@@ -436,8 +452,10 @@ def _sonuc_iddaa(ev, dep, ko):
             continue
         s1, s2 = K._benz(ev, a) + K._benz(a, ev), K._benz(dep, b) + K._benz(b, dep)
         if s1 > 0 and s2 > 0 and (not best or s1 + s2 > best[0]):
-            best = (s1 + s2, h, g)
-    return (best[1], best[2]) if best else None
+            best = (s1 + s2, h, g, ih, ig)
+    if not best:
+        return None
+    return (best[1], best[2], best[3], best[4]) if iy else (best[1], best[2])
 
 
 def sonuclandir(sure=60):
@@ -452,7 +470,7 @@ def sonuclandir(sure=60):
         t0 = time.time()
         bulunan = {}
         for ts, tb, getiri, mid, taraf, ev, dep, ko in A:
-            r = n.execute("SELECT status, ft_h, ft_a FROM ng_match WHERE mid=?", (mid,)).fetchone()
+            r = n.execute("SELECT status, ft_h, ft_a, ht_h, ht_a FROM ng_match WHERE mid=?", (mid,)).fetchone()
             if not (r and r[0] in ("finished", "void")) and mid in bulunan:
                 r = bulunan[mid]
             elif not (r and r[0] in ("finished", "void")) and _dt(ko) < now - timedelta(minutes=130) and time.time() - t0 < sure:
@@ -467,10 +485,19 @@ def sonuclandir(sure=60):
                     except Exception:
                         s7 = None
                 if s7:
-                    r = ("finished", s7[0], s7[1])
+                    r = ("finished", s7[0], s7[1], *(s7[2:4] if len(s7) >= 4 else (None, None)))
                     bulunan[mid] = r
+            if r and r[0] == "finished" and taraf.startswith("İY ") and (len(r) < 5 or r[3] is None):
+                try:                         # İY skoru: iddaa sonuç kaydı
+                    si = _sonuc_iddaa(ev, dep, ko, iy=True)
+                except Exception:
+                    si = None
+                if si and si[2] is not None:
+                    r = ("finished", r[1], r[2], si[2], si[3])
             if r and r[0] == "finished" and r[1] is not None:
-                k = kazandi(taraf, r[1], r[2])
+                k = kazandi(taraf, r[1], r[2], (r[3], r[4]) if len(r) >= 5 else None)
+                if k is None:
+                    continue
                 c.execute(f"UPDATE {ts} SET sonuc=? WHERE mid=? AND taraf=?", (f"{r[1]}-{r[2]}|{'tuttu' if k else 'yattı'}", mid, taraf))
                 if k:
                     c.execute(f"UPDATE {tb} SET durum='kazandı', getiri={getiri} WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
@@ -528,7 +555,8 @@ def vk_sayfa():
         x["kalan"] = round((_dt(x["ko"]) - _dt(x["at"])).total_seconds() / 60)
         s = (x["sonuc"] or "").split("|")
         x["skor"], x["durum"] = (s[0], s[1]) if len(s) == 2 else (None, x["sonuc"])
-        x["pazar"] = "MS" if x["taraf"] in TARAF else "Çifte şans" if x["taraf"] in ("1X", "12", "X2") else "Alt/Üst"
+        x["pazar"] = ("MS" if x["taraf"] in TARAF else "Çifte şans" if x["taraf"] in ("1X", "12", "X2")
+                      else "İY Alt/Üst" if x["taraf"].startswith("İY ") else "Alt/Üst")
         x["etiket"] = f"MS {x['taraf']}" if x["taraf"] in TARAF else f"ÇŞ {x['taraf']}" if x["pazar"] == "Çifte şans" else x["taraf"]
         if x["durum"] in ("tuttu", "yattı"):
             n += 1

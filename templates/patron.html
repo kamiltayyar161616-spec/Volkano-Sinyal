@@ -57,7 +57,7 @@
 </div>
 {% set vv = av.vk or {} %}{% set vkk = vv.kasa or {} %}
 <div id="av-vk" style="display:none">
-<div class="section-sub">🌋 <b>Pinnacle – Volkano</b> (1xBet'ten bağımsız, gerçek Pinnacle oranları): <b>MS</b> tarafı %25+ düşerse o taraf ve onu içeren <b>çifte şanslar</b>; Pinnacle <b>Alt/Üst</b> (7M) aynı çizgide %10+ düşerse ya da çizgi yarım gol+ kayarsa Volkano'da aynı çizgi. Volkano, Pinnacle'ın marjsız adil oranından %10+ yüksek verirse <b>YAKALA</b>.</div>
+<div class="section-sub">🌋 <b>Pinnacle – Volkano</b> (1xBet'ten bağımsız, gerçek Pinnacle oranları): <b>MS</b> tarafı %25+ düşerse o taraf ve onu içeren <b>çifte şanslar</b>; Pinnacle <b>Alt/Üst</b> (7M) aynı çizgide %10+ düşerse ya da çizgi yarım gol+ kayarsa Volkano'da aynı/komşu buçuklu çizgi ve <b>İY Alt/Üst</b> (0.5/1.5/2.5; İY gol beklentisi maç beklentisinden). Volkano, Pinnacle'ın marjsız adil oranından %10+ yüksek verirse <b>YAKALA</b>.</div>
 <div class="section-sub">Son tur: {{ av.last.log if av.last and av.last.log else 'henüz yok' }}{% if vv.karne and vv.karne.n %} · <b>Karne: {{ vv.karne.w }}/{{ vv.karne.n }} tuttu · Volkano (vergili) ROI {{ '%+.1f'|format(vv.karne.roi) }}%</b>{% endif %}</div>
 <table class="tt"><tr><th>Volkano kasası</th><th>açıkta</th><th>kupon</th><th>biten / kazanan</th><th>kâr</th><th>ROI</th></tr>
 <tr><td><b>{{ '%.2f'|format(vkk.bakiye or 0) }}€</b></td><td>{{ '%.2f'|format(vkk.acik or 0) }}€</td><td>{{ vkk.n or 0 }}</td><td>{{ vkk.biten or 0 }} / {{ vkk.kazanan or 0 }}</td><td><b style="color:{{ '#3ccf7a' if (vkk.kar or 0) >= 0 else '#ff5a4f' }}">{{ '%+.2f'|format(vkk.kar or 0) }}€</b></td><td>{{ '%+.1f'|format(vkk.roi) ~ '%' if vkk.roi is not none else '-' }}</td></tr></table>
