@@ -10,6 +10,7 @@ Pinnacle–Volkano (26.11): aynı düşüş kuralı, Volkano oranı adilden %10+
   python3 avci.py        (özet)"""
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -54,6 +55,10 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS vk_sinyal (mid INTEGER, taraf TEXT, at TEXT, ko TEXT, ev TEXT, dep TEXT, lig TEXT,
                  pin_ref REAL, pin REAL, pin_adil REAL, vk REAL, vk_net REAL, fark REAL, dusus REAL, guncel TEXT, sonuc TEXT,
                  PRIMARY KEY (mid, taraf))""")
+    try:
+        c.execute("ALTER TABLE vk_sinyal ADD COLUMN aciklama TEXT")
+    except sqlite3.OperationalError:
+        pass
     c.execute("""CREATE TABLE IF NOT EXISTS vk_bahis (mid INTEGER, taraf TEXT, at TEXT, oran REAL, p REAL, tutar REAL, durum TEXT, getiri REAL,
                  PRIMARY KEY (mid, taraf))""")
     return c
@@ -124,43 +129,151 @@ def _vk_bahis_ac(c, mid, taraf, oran, p, now):
     c.execute("INSERT INTO vk_bahis VALUES (?,?,?,?,?,?,?,?)", (mid, taraf, now.isoformat(), oran, round(p, 4), tutar, "açık", None))
 
 
-def _vk_oranlar(mid, ev, dep, ko):
-    """Volkano MS 1/X/2 (60 sn önbellek); maç Volkano'da yoksa None"""
+OU_DUSUS, OU_CIZGI, OU_URL = 0.10, 0.5, "https://px-odds.7mdt.com/DataByLive2/{}_ou.js"
+CS = {"1": ("1X", "12"), "X": ("1X", "X2"), "2": ("12", "X2")}
+_ouc = {}                        # mid -> (t, [(t, çizgi, üst, alt), ...] Pinnacle 7M maç önü serisi)
+
+
+def _vk_pz(mid, ev, dep, ko):
+    """Volkano tüm pazarlar (60 sn önbellek); maç Volkano'da yoksa None"""
     t, v = _vkc.get(mid, (0, None))
     if time.time() - t < 60:
         return v
     v = None
     try:
         import joe
-        pz = joe._vk_pazarlar(ev, dep, _dt(ko).timestamp())
-        ms = ((pz or {}).get("1") or {}).get("") or {}
-        if all(k in ms for k in TARAF):
-            v = {k: ms[k] for k in TARAF}
+        v = joe._vk_pazarlar(ev, dep, _dt(ko).timestamp()) or None
     except Exception:
         v = None
     _vkc[mid] = (time.time(), v)
     return v
 
 
-def _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now):
-    vk = _vk_oranlar(mid, ev, dep, ko)
-    if not vk or not vk.get(TARAF[i]):
-        return 0
-    o = vk[TARAF[i]]
-    fark = o / adil - 1                               # Volkano oranı vs Pinnacle adil (1xBet ile aynı kural; vergi sadece kazançtan)
+def _vk_oranlar(mid, ev, dep, ko):
+    ms = (((_vk_pz(mid, ev, dep, ko) or {}).get("1") or {}).get("")) or {}
+    return {k: ms[k] for k in TARAF} if all(k in ms for k in TARAF) else None
+
+
+def kazandi(taraf, h, a):
+    s = "1" if h > a else "2" if a > h else "X"
+    if taraf in TARAF:
+        return s == taraf
+    if taraf in ("1X", "12", "X2"):
+        return s in taraf
+    if taraf.startswith(("Üst ", "Alt ")):
+        L = float(taraf.split()[1])
+        return (h + a > L) if taraf.startswith("Üst") else (h + a < L)
+    return False
+
+
+def _vk_yakala(c, mid, ko, ev, dep, lig, taraf, o, adil, ref, cur, dusus, aciklama, now):
+    """Volkano oranı Pinnacle adilinden %10+ yüksekse sinyal + kupon (vergi sadece kazançtan)"""
+    fark = o / adil - 1
     if fark < FARK:
         return 0
-    r = c.execute("SELECT fark FROM vk_sinyal WHERE mid=? AND taraf=?", (mid, TARAF[i])).fetchone()
-    _vk_bahis_ac(c, mid, TARAF[i], o, 1 / adil, now)
+    r = c.execute("SELECT fark FROM vk_sinyal WHERE mid=? AND taraf=?", (mid, taraf)).fetchone()
+    _vk_bahis_ac(c, mid, taraf, o, 1 / adil, now)
     if r and r[0] >= fark:
         return 0
-    c.execute("""INSERT INTO vk_sinyal (mid, taraf, at, ko, ev, dep, lig, pin_ref, pin, pin_adil, vk, vk_net, fark, dusus, guncel)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    c.execute("""INSERT INTO vk_sinyal (mid, taraf, at, ko, ev, dep, lig, pin_ref, pin, pin_adil, vk, vk_net, fark, dusus, guncel, aciklama)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(mid, taraf) DO UPDATE SET pin=excluded.pin, pin_adil=excluded.pin_adil, vk=excluded.vk, vk_net=excluded.vk_net,
-                 fark=excluded.fark, dusus=excluded.dusus, guncel=excluded.guncel""",
-              (mid, TARAF[i], now.isoformat(), ko, ev, dep, lig, ref[i], pin["cur"][i], round(adil, 3), o, round(_vk_net(o), 3),
-               round(fark, 4), round(dusus, 4), now.isoformat()))
+                 fark=excluded.fark, dusus=excluded.dusus, guncel=excluded.guncel, aciklama=excluded.aciklama""",
+              (mid, taraf, now.isoformat(), ko, ev, dep, lig, ref, cur, round(adil, 3), o, round(_vk_net(o), 3),
+               round(fark, 4), round(dusus, 4), now.isoformat(), aciklama))
     return 0 if r else 1
+
+
+def _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now):
+    """Pinnacle MS tarafı sert düştü: Volkano MS o taraf + o tarafı içeren çifte şanslar (Pinnacle 1X2'den marjsız)"""
+    pz = _vk_pz(mid, ev, dep, ko)
+    if not pz:
+        return 0
+    q = [1 / x for x in pin["cur"]]
+    t = sum(q)
+    p = {k: q[j] / t for j, k in enumerate(TARAF)}
+    ac = f"Pinnacle MS {TARAF[i]} {ref[i]} → {pin['cur'][i]} (%{round(100 * dusus)} düşüş)"
+    y = 0
+    o = ((pz.get("1") or {}).get("") or {}).get(TARAF[i])
+    if o:
+        y += _vk_yakala(c, mid, ko, ev, dep, lig, TARAF[i], o, adil, ref[i], pin["cur"][i], dusus, ac, now)
+    for cs in CS[TARAF[i]]:
+        o = ((pz.get("10") or {}).get("") or {}).get(cs)
+        if o:
+            y += _vk_yakala(c, mid, ko, ev, dep, lig, cs, o, 1 / (p[cs[0]] + p[cs[1]]), ref[i], pin["cur"][i], dusus, ac, now)
+    return y
+
+
+def _pin_ou(mid, ev, dep, ko):
+    """7M: Pinnacle maç önü Alt/Üst serisi [(t, çizgi, üst, alt)] (3 dk önbellek)"""
+    t0, v = _ouc.get(mid, (0, None))
+    if time.time() - t0 < 180:
+        return v
+    v = None
+    try:
+        import m7_arsiv as A
+        import skor_model as SM
+        i = SM._m7_id(ev, dep, _dt(ko))
+        if i:
+            st, body = A.get(OU_URL.format(i))
+            if st == 200:
+                for blk in re.split(r"p\['\d+'\]\s*=\s*", body)[1:]:
+                    nm = re.search(r"'name':'([^']*)'", blk)
+                    if not nm or "pinnacle" not in nm.group(1).lower():
+                        continue
+                    L = []
+                    for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
+                        g = dict(re.findall(r"'(\w+)':'([^']*)'", e))
+                        tt = A.t8(g.get("dt"))
+                        if g.get("htime") or not tt:
+                            continue
+                        try:
+                            L.append((tt, float(g["p3"]), float(g["p1"]), float(g["p2"])))
+                        except (KeyError, ValueError):
+                            continue
+                    v = sorted(L) or None
+                    break
+    except Exception:
+        v = None
+    _ouc[mid] = (time.time(), v)
+    return v
+
+
+def _vk_ou(c, mid, ko, ev, dep, lig, now):
+    """Pinnacle gerçek Alt/Üst: aynı çizgide oran %10+ düştü ya da çizgi yarım gol+ kaydı → Volkano aynı çizgi (x.5)"""
+    S = _pin_ou(mid, ev, dep, ko)
+    if not S:
+        return 0
+    tc, L, u, a = S[-1]
+    if L % 1 != 0.5 or min(u, a) <= 1:
+        return 0
+    R = [x for x in S if x[0] >= now - timedelta(minutes=REF_DK)] or S[-1:]
+    hedef = []
+    ayni = [x for x in R if x[1] == L]
+    if ayni:
+        mu, ma = max(x[2] for x in ayni), max(x[3] for x in ayni)
+        if 1 - u / mu >= OU_DUSUS:
+            hedef.append(("Üst", mu, u, 1 - u / mu, f"Pinnacle Üst {L:g}: {mu} → {u} (%{round(100 * (1 - u / mu))} düşüş)"))
+        if 1 - a / ma >= OU_DUSUS:
+            hedef.append(("Alt", ma, a, 1 - a / ma, f"Pinnacle Alt {L:g}: {ma} → {a} (%{round(100 * (1 - a / ma))} düşüş)"))
+    lo, hi = min(x[1] for x in R), max(x[1] for x in R)
+    if L - lo >= OU_CIZGI and not any(h[0] == "Üst" for h in hedef):
+        hedef.append(("Üst", lo, L, L - lo, f"Pinnacle çizgi {lo:g} → {L:g} (yukarı)"))
+    if hi - L >= OU_CIZGI and not any(h[0] == "Alt" for h in hedef):
+        hedef.append(("Alt", hi, L, hi - L, f"Pinnacle çizgi {hi:g} → {L:g} (aşağı)"))
+    if not hedef:
+        return 0
+    pz = _vk_pz(mid, ev, dep, ko)
+    if not pz:
+        return 0
+    pu = (1 / u) / (1 / u + 1 / a)
+    vk = ((pz.get("18") or {}).get(str(float(L))) or {})
+    y = 0
+    for yon, rf, cr, d, ac in hedef:
+        o = vk.get("OVER" if yon == "Üst" else "UNDER")
+        if o:
+            y += _vk_yakala(c, mid, ko, ev, dep, lig, f"{yon} {L:g}", o, 1 / (pu if yon == "Üst" else 1 - pu), rf, cr, d, ac, now)
+    return y
 
 
 def _oku(mid):
@@ -227,6 +340,10 @@ def _degerlendir(c, mid, ko, ev, dep, lig, pin, xb, now):
         yeni += not r
         if not r:
             _bahis_ac(c, mid, TARAF[i], xb["cur"][i], 1 / adil, now)
+    try:
+        yeni += _vk_ou(c, mid, ko, ev, dep, lig, now)
+    except Exception:
+        pass
     return izle, yeni
 
 
@@ -347,9 +464,9 @@ def sonuclandir(sure=60):
                     r = ("finished", s7[0], s7[1])
                     bulunan[mid] = r
             if r and r[0] == "finished" and r[1] is not None:
-                s = "1" if r[1] > r[2] else "2" if r[2] > r[1] else "X"
-                c.execute(f"UPDATE {ts} SET sonuc=? WHERE mid=? AND taraf=?", (f"{r[1]}-{r[2]}|{'tuttu' if s == taraf else 'yattı'}", mid, taraf))
-                if s == taraf:
+                k = kazandi(taraf, r[1], r[2])
+                c.execute(f"UPDATE {ts} SET sonuc=? WHERE mid=? AND taraf=?", (f"{r[1]}-{r[2]}|{'tuttu' if k else 'yattı'}", mid, taraf))
+                if k:
                     c.execute(f"UPDATE {tb} SET durum='kazandı', getiri={getiri} WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
                 else:
                     c.execute(f"UPDATE {tb} SET durum='kaybetti', getiri=0 WHERE mid=? AND taraf=? AND durum='açık'", (mid, taraf))
@@ -398,17 +515,25 @@ def vk_sayfa():
     c.close()
     n = w = 0
     kar = 0.0
+    PZ = {}
     for x in L:
         x["saat"] = _dt(x["ko"]).astimezone(TR).strftime("%d.%m %H:%M")
         x["yakalandi"] = _dt(x["at"]).astimezone(TR).strftime("%H:%M")
         x["kalan"] = round((_dt(x["ko"]) - _dt(x["at"])).total_seconds() / 60)
         s = (x["sonuc"] or "").split("|")
         x["skor"], x["durum"] = (s[0], s[1]) if len(s) == 2 else (None, x["sonuc"])
+        x["pazar"] = "MS" if x["taraf"] in TARAF else "Çifte şans" if x["taraf"] in ("1X", "12", "X2") else "Alt/Üst"
+        x["etiket"] = f"MS {x['taraf']}" if x["taraf"] in TARAF else f"ÇŞ {x['taraf']}" if x["pazar"] == "Çifte şans" else x["taraf"]
         if x["durum"] in ("tuttu", "yattı"):
             n += 1
             w += x["durum"] == "tuttu"
             kar += (x["vk_net"] - 1) if x["durum"] == "tuttu" else -1
+            pk = PZ.setdefault(x["pazar"], [0, 0, 0.0])
+            pk[0] += 1
+            pk[1] += x["durum"] == "tuttu"
+            pk[2] += (x["vk_net"] - 1) if x["durum"] == "tuttu" else -1
     return {"L": L, "kasa": vk_kasa(), "kasa0": VK_KASA0,
+            "pazar": [{"ad": k, "n": v[0], "w": v[1], "roi": round(100 * v[2] / v[0], 1)} for k, v in sorted(PZ.items())],
             "karne": {"n": n, "w": w, "roi": round(100 * kar / n, 1) if n else None, "kar": round(kar, 2)}}
 
 
