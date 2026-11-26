@@ -2,7 +2,7 @@
 CANLI: iddaa-m7bot her canlı Üst adayının adilini (Pinnacle/SBOBET, 7M) m7_adil.jsonl'a yazar; burada aynı maç + aynı çizgi
        Volkano canlı Üst oranı çekilir, değer = Volkano / adil. Her gözlem kaydedilir (bant analizi); değer ≥ CANLI_ESIK → sanal kupon.
 DEĞER: Değer 90 ▶ OYNA seçenekleri Volkano oranıyla (joe.vk_tara kaydı), Volkano değeri = Volkano oranı × model ihtimali.
-Kasa: sanal 20 €, yarım Kelly, en az 1 € (vergi %12 net kârdan). Karneler 1 € düz, banda göre."""
+Kasa: sanal 50 € (26.11: 20 → 50), yarım Kelly, en az 1 € (vergi %12 net kârdan). Karneler 1 € düz, banda göre."""
 import json
 import os
 import sqlite3
@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 ADIL = "/root/iddaa-bot/m7_adil.jsonl"
 KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "volki")
 DB = os.path.join(KLASOR, "volki.db")
-CANLI_ESIK, KASA0, MIN_T, VERGI = 0.92, 20.0, 1.0, 0.12
+CANLI_ESIK, KASA0, MIN_T, VERGI = 0.92, 50.0, 1.0, 0.12
 TAZE_SN, GOZLEM_SN = 90, 120                 # adil kaydı en çok 90 sn eski; aynı (maç, çizgi) gözlemi 2 dk'da bir
 BANTLAR = ((0.0, 0.92, "< 0.92"), (0.92, 0.97, "0.92–0.97"), (0.97, 1.05, "0.97–1.05"), (1.05, 1.15, "1.05–1.15"), (1.15, 99, "≥ 1.15"))
 TR = timezone(timedelta(hours=3))

@@ -106,7 +106,7 @@ def hesap():
         import volki
         H["volki"] = volki.get_page_data()
     except Exception as e:
-        H["volki"] = {"K": [], "kasa": 20.0, "bekleyen": 0, "toplam": 20.0, "kasa0": 20.0, "n": 0, "biten": 0, "w": 0, "net": 0, "roi": None,
+        H["volki"] = {"K": [], "kasa": 50.0, "bekleyen": 0, "toplam": 50.0, "kasa0": 50.0, "n": 0, "biten": 0, "w": 0, "net": 0, "roi": None,
                       "karne_canli": [], "karne_gozlem": [], "karne_deger": [], "n_gozlem": 0, "n_cift": 0, "hata": str(e)[:150]}
     try:
         H["xx"] = xx_hesap()
