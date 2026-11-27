@@ -14,7 +14,7 @@ def main():
     c.close()
     ilk, X, yok = set(), [], 0
     for iid, cz, t, dk, vk, io, d in G:
-        if (iid, cz) in ilk or V.supheli(d, vk, io):
+        if (iid, cz) in ilk or V.supheli(d, vk, io, vk / d if d else None):
             continue
         ilk.add((iid, cz))
         r = S.get(iid)

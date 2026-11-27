@@ -39,8 +39,11 @@ def db():
     return c
 
 
-def supheli(d, vk, io):
-    return d > SUPHE_DEGER or (io and vk > io * SUPHE_IDD)
+ADIL_MAX = 50.0                              # botun adili 5151, 10300 gibi çıkabiliyor (Pinnacle/SBOBET verisi bozuk/askıda) → geçersiz
+
+
+def supheli(d, vk, io, adil=None):
+    return d > SUPHE_DEGER or (io and vk > io * SUPHE_IDD) or (adil is not None and not 1.0 < adil <= ADIL_MAX)
 
 
 def _ko_tahmin(t, dk):
@@ -158,7 +161,7 @@ def tur():
             x = json.loads(l)
         except ValueError:
             continue
-        if now - x["t"] <= TAZE_SN:
+        if now - x["t"] <= TAZE_SN and 1.0 < x.get("adil", 0) <= ADIL_MAX:
             son[(x["iid"], x["cz"])] = x
     c = db()
     n_g = n_k = 0
@@ -223,8 +226,8 @@ def get_page_data():
             K = c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger, lig FROM kupon ORDER BY t").fetchall()
         except sqlite3.OperationalError:
             K = [r + (None,) for r in c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger FROM kupon ORDER BY t").fetchall()]
-        G = c.execute("SELECT iid, cz, vk, deger FROM gozlem WHERE NOT (deger > ? OR (io IS NOT NULL AND vk > io * ?))",
-                      (SUPHE_DEGER, SUPHE_IDD)).fetchall()
+        G = c.execute("SELECT iid, cz, vk, deger FROM gozlem WHERE NOT (deger > ? OR (io IS NOT NULL AND vk > io * ?)) AND adil > 1 AND adil <= ?",
+                      (SUPHE_DEGER, SUPHE_IDD, ADIL_MAX)).fetchall()
         c.close()
     S = {}
     if os.path.exists(DB):
@@ -251,7 +254,7 @@ def get_page_data():
     n_suphe = 0
     canli = []
     for iid, cz, t, mac, dk, skor, adil, vk, d, lig in K:
-        if supheli(d, vk, io_k.get((iid, cz))):
+        if supheli(d, vk, io_k.get((iid, cz)), adil):
             n_suphe += 1
             continue
         r = sonuc(iid)
