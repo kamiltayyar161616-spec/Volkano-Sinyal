@@ -51,6 +51,7 @@ LOOKAHEAD_H = 36             # bu kadar saat icindeki maclarin istatistigi cekil
 NEIGHBOR = 8                 # bilinen mac ID'sinin +-8 komsusu yoklanir (ayni lig/hafta ID'leri ardisik)
 MAX_PROBE_PER_CYCLE = 250    # tur basina komsu yoklama
 PROBE_WINDOW_H = 48          # bu kadar saat icindeki maclar eklenir
+TOTO_WINDOW_D = 7            # Toto bülteni liglerinde (daha önce Toto maçı olan ligler) 7 gün ileri
 RESULT_AFTER_MIN = 130       # baslamadan bu kadar dk sonra skor sorulur
 VOID_AFTER_H = 30            # bu kadar saat gecti, skor yoksa 'void'
 
@@ -1090,8 +1091,13 @@ def sweep_leagues(log):
                                              (LG_PER_CYCLE,)).fetchall() if r[0] not in {a[0] for a in acil}]
         known = {r[0]: r[1] for r in c.execute("SELECT mid, kickoff_utc FROM ng_match WHERE kickoff_utc > ?",
                                                (_iso(now - timedelta(days=2)),))}
+        try:                     # 27.11: Toto bülteninde maçı olmuş ligler 7 gün ileriden eklenir (bülten kapanışı maçlardan günler önce)
+            toto_lid = {r[0] for r in c.execute("SELECT DISTINCT lid FROM ng_match WHERE lid IS NOT NULL AND mid IN (SELECT mid FROM ng_toto)")}
+        except Exception:
+            toto_lid = set()
         c.close()
     lo, hi = now - timedelta(hours=3), now + timedelta(hours=PROBE_WINDOW_H)
+    hi_toto = now + timedelta(days=TOTO_WINDOW_D)
     n_new = n_upd = n_err = 0
     for row in todo:
         lid, path, path_at = row["lid"], row["path"], row["path_at"]
@@ -1117,8 +1123,9 @@ def sweep_leagues(log):
                 sb = (0, {})
             recs = {m: r for m, r in recs.items() if m in found and lo - timedelta(days=2) <= found[m] <= hi}
             add, upd = [], []
+            hl = hi_toto if lid in toto_lid else hi
             for mid, ko in found.items():
-                if not (lo <= ko <= hi):
+                if not (lo <= ko <= hl):
                     continue
                 win += 1
                 k = _iso(ko)
