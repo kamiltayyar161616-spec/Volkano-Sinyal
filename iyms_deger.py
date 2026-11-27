@@ -19,15 +19,27 @@ DB = [(0, 0.6, "<0.60"), (0.6, 0.8, "0.60-0.80"), (0.8, 0.9, "0.80-0.90"), (0.9,
 
 
 def lt_bul(vmk):
+    """Volkano Alt/Üst (pazar 18) -> toplam gol beklentisi. Seçenek adları 'Under@2.5' / 'Over@2.5' (çok çizgi); 2.5 öncelikli."""
     for e in vmk:
-        if str(e[0]) == "18" and e[1] is not None:
-            try:
-                L = float(e[1]); O = {str(n).lower()[:1]: float(o) for n, o in e[2]}
-                u, a = O.get("o") or O.get("ü"), O.get("u") or O.get("a")
-                if u and a and L in (1.5, 2.5, 3.5):
-                    return P.coz(lambda x: P.p_ust(x, L), (1 / u) / (1 / u + 1 / a), 0.2, 7.0)
-            except Exception:
+        if str(e[0]) != "18":
+            continue
+        C = {}
+        for n, o in e[2]:
+            n = str(n)
+            if "@" in n:
+                y, L = n.split("@", 1)
+            elif e[1] is not None:
+                y, L = n, e[1]
+            else:
                 continue
+            try:
+                C.setdefault(float(L), {})[y.strip().lower()[:1]] = float(o)
+            except ValueError:
+                continue
+        for L in (2.5, 1.5, 3.5):
+            u, a = (C.get(L) or {}).get("o"), (C.get(L) or {}).get("u")
+            if u and a and u > 1 and a > 1:
+                return P.coz(lambda x: P.p_ust(x, L), (1 / u) / (1 / u + 1 / a), 0.2, 7.0)
     return None
 
 
