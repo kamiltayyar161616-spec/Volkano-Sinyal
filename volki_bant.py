@@ -10,11 +10,11 @@ import volki as V
 def main():
     c = sqlite3.connect(f"file:{V.DB}?mode=ro", uri=True, timeout=20)
     S = {i: (h, a) for i, h, a in c.execute("SELECT iid, h, a FROM sonuc")}
-    G = c.execute("SELECT iid, cz, t, dk, vk, io, deger FROM gozlem ORDER BY t").fetchall()
+    G = c.execute("SELECT iid, cz, t, dk, vk, io, deger, adil FROM gozlem ORDER BY t").fetchall()
     c.close()
     ilk, X, yok = set(), [], 0
-    for iid, cz, t, dk, vk, io, d in G:
-        if (iid, cz) in ilk or V.supheli(d, vk, io, vk / d if d else None):
+    for iid, cz, t, dk, vk, io, d, adil in G:
+        if (iid, cz) in ilk or V.supheli(d, vk, io, adil):
             continue
         ilk.add((iid, cz))
         r = S.get(iid)
