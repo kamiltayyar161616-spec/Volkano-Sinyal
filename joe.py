@@ -199,6 +199,23 @@ def _vk_pazarlar(ev, dep, ko_ts, ham=False):
     ko = datetime.fromtimestamp(ko_ts, timezone.utc).isoformat()
     e1, d1 = IK._ing(ev or ""), IK._ing(dep or "")
     m = O.vk_fx_esle(fx, [(ev, dep), (e1, d1), (IK._U.get(e1.lower(), e1), IK._U.get(d1.lower(), d1))], ko)
+    if not m:                                      # 27.11: öğrenen eşleştirme (NowGoal↔Volkano sözlüğü + aynı saat, tek aday)
+        try:
+            import vk_alias
+            kd = datetime.fromtimestamp(ko_ts, timezone.utc)
+            evs = []
+            for f in fx or []:
+                try:
+                    evs.append((datetime.fromisoformat(str(f.get("baslama")).replace("Z", "+00:00")).astimezone(timezone.utc),
+                                dict(f, home_team=f.get("ev"), away_team=f.get("dep"))))
+                except (TypeError, ValueError):
+                    continue
+            for h_, a_ in ((ev, dep), (e1, d1)):
+                m = vk_alias.find(evs, h_, a_, kd)
+                if m:
+                    break
+        except Exception:
+            m = None
     i = next((m[k] for k in ("id", "mac_id", "ai", "event_id") if m.get(k)), None) if m else None
     if i is None:
         return (None, None, None) if ham else None
