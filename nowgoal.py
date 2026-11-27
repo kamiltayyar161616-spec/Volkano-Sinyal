@@ -1091,8 +1091,10 @@ def sweep_leagues(log):
                                              (LG_PER_CYCLE,)).fetchall() if r[0] not in {a[0] for a in acil}]
         known = {r[0]: r[1] for r in c.execute("SELECT mid, kickoff_utc FROM ng_match WHERE kickoff_utc > ?",
                                                (_iso(now - timedelta(days=2)),))}
-        try:                     # 27.11: Toto bülteninde maçı olmuş ligler 7 gün ileriden eklenir (bülten kapanışı maçlardan günler önce)
-            toto_lid = {r[0] for r in c.execute("SELECT DISTINCT lid FROM ng_match WHERE lid IS NOT NULL AND mid IN (SELECT mid FROM ng_toto)")}
+        try:                     # 27.11: Toto BÜLTENİNDE (haftalık 15 maç listesi) maçı olmuş ligler TOTO_WINDOW_D gün ileriden eklenir
+            H = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toto_listeler.json"))).get("haftalar", [])
+            tm = sorted({m["mid"] for h in H for m in h.get("maclar", []) if m.get("mid")})
+            toto_lid = {r[0] for r in c.execute(f"SELECT DISTINCT lid FROM ng_match WHERE lid IS NOT NULL AND mid IN ({','.join(map(str, tm)) or '0'})")}
         except Exception:
             toto_lid = set()
         c.close()
