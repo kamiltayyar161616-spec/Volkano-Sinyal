@@ -29,6 +29,7 @@ def db():
                  vk REAL, deger REAL, PRIMARY KEY (iid, cz, t))""")
     c.execute("""CREATE TABLE IF NOT EXISTS kupon (iid INTEGER, cz REAL, t INTEGER, mac TEXT, dk REAL, skor TEXT, adil REAL, vk REAL,
                  deger REAL, PRIMARY KEY (iid, cz))""")
+    c.execute("CREATE TABLE IF NOT EXISTS sonuc (iid INTEGER PRIMARY KEY, h INTEGER, a INTEGER, kaynak TEXT, at INTEGER)")
     for tb in ("gozlem", "kupon"):
         try:
             c.execute(f"ALTER TABLE {tb} ADD COLUMN lig TEXT")
@@ -103,6 +104,37 @@ def _lig_doldur(c):
             _ligad[iid] = None
 
 
+def _sonuc_doldur(c, en_cok=6):
+    """iddaa sonuç kaydında olmayan (alt lig vb.) maçlar: 7M, sonra iddaa ad eşlemesi; maçtan 2.5 sa sonra, tur başına en çok 6"""
+    import avci
+    import iddaa_skor as I
+    R = c.execute("""SELECT iid, MIN(mac), MIN(t), MIN(dk) FROM (SELECT iid, mac, t, dk FROM kupon UNION ALL SELECT iid, mac, t, dk FROM gozlem)
+                     WHERE iid NOT IN (SELECT iid FROM sonuc) AND t < ? GROUP BY iid ORDER BY MIN(t) DESC LIMIT 40""",
+                  (int(time.time()) - 2 * 3600,)).fetchall()
+    n = 0
+    for iid, mac, t, dk in R:
+        try:
+            r = I.sonuc(iid)
+        except Exception:
+            r = None
+        kay = "iddaa"
+        if not r and n < en_cok:
+            n += 1
+            ev, _, dep = mac.partition(" - ")
+            ko = datetime.fromtimestamp(_ko_tahmin(t, dk), timezone.utc).isoformat()
+            try:
+                r, kay = avci._sonuc_7m(-iid, ev, dep, ko), "7M"
+            except Exception:
+                r = None
+            if not r:
+                try:
+                    r, kay = avci._sonuc_iddaa(ev, dep, ko), "iddaa ad"
+                except Exception:
+                    r = None
+        if r:
+            c.execute("INSERT OR REPLACE INTO sonuc VALUES (?,?,?,?,?)", (iid, int(r[0]), int(r[1]), kay, int(time.time())))
+
+
 def tur():
     """m7_adil.jsonl'daki yeni satırlar → Volkano canlı oranı → gözlem / kupon"""
     if not os.path.exists(ADIL):
@@ -147,6 +179,10 @@ def tur():
         _lig_doldur(c)
     except Exception:
         pass
+    try:
+        _sonuc_doldur(c)
+    except Exception as ex:
+        _last["hata"] = f"sonuç: {type(ex).__name__} {str(ex)[:100]}"
     c.commit()
     c.close()
     return f"{datetime.now(TR):%H:%M} taze aday {len(son)} · yeni gözlem {n_g} · yeni kupon {n_k}"
@@ -183,6 +219,13 @@ def get_page_data():
         G = c.execute("SELECT iid, cz, vk, deger FROM gozlem").fetchall()
         c.close()
     S = {}
+    if os.path.exists(DB):
+        try:
+            c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+            S = {i: (h, a) for i, h, a in c.execute("SELECT iid, h, a FROM sonuc")}
+            c.close()
+        except sqlite3.OperationalError:
+            S = {}
 
     def sonuc(iid):
         if iid not in S:
