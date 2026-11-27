@@ -52,7 +52,7 @@
 <div class="kc {{ 'ok' if x.son and x.kaz and x.tutar else 'no' if x.son and x.tutar else '' }}">
   <div class="r1"><span>{{ x.mac }}</span><span>{% if x.net is not none %}<span class="{{ 'p' if x.net > 0 else 'n' }}">{{ '%+d'|format(x.net) }} TL</span>{% elif not x.tutar %}<span class="n">kasa yetmedi</span>{% else %}⏳{% endif %}</span></div>
   <div class="r1" style="font-weight:600"><span>{{ x.bahis }} @{{ x.o }} · {{ x.tutar|int }} TL</span><span>{% if x.son %}{{ x.son }} {{ '✓' if x.kaz else '✗' }}{% endif %}</span></div>
-  <div class="r2"><span>{{ x.saat }} · {{ x.dk|int }}' {{ x.skor }} · değer x{{ x.deger }} · yarım Kelly %{{ x.kelly }}{{ ' (min 50)' if x.kelly <= 0 }}</span><span>kasa {{ x.kasa_sonra|int }}</span></div>
+  <div class="r2"><span>{{ x.saat }} · {{ x.dk|int }}' {{ x.skor }} · {% if x.deger %}değer x{{ x.deger }}{% else %}kural {{ x.kural }}{% endif %} · yarım Kelly %{{ x.kelly }}{{ ' (min 50)' if x.kelly <= 0 }}</span><span>kasa {{ x.kasa_sonra|int }}</span></div>
 </div>
 {% else %}<div class="section-sub">Henüz kupon yok. Bot bir sinyal verdiğinde burada görünür.</div>{% endfor %}
 
