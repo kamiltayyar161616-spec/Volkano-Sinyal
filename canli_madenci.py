@@ -247,7 +247,9 @@ def tara(X):
     return secilen
 
 
-def main():
+def hazirla(anahtar_dk=None):
+    """kayıtlar + sonuçlar + pazar yorumu -> oynanabilir durumlar X (her durumun ilk anı; anahtar_dk: dakika anahtarı fonksiyonu)"""
+    anahtar_dk = anahtar_dk or (lambda d: _bant(d, DK_B))
     log("test_tum okunuyor:", F)
     R, K = [], {}
     for l in open(F, encoding="utf-8", errors="ignore"):
@@ -272,7 +274,7 @@ def main():
         r = S.get(x["iid"])
         if not r or r[2] is None or x["st"] not in P:
             continue
-        k = (x["iid"], x["st"], x["L"], x["n"], x["g1"], x["g2"], _bant(x["dk"], DK_B))   # her skor + dakika bandında ilk an
+        k = (x["iid"], x["st"], x["L"], x["n"], x["g1"], x["g2"], anahtar_dk(x["dk"]))   # her skor + dakika (bandı) için ilk an
         if k in ilk:
             continue
         ilk.add(k)
@@ -284,6 +286,11 @@ def main():
             continue
         x["w"], x["pazar"] = w, P[x["st"]]
         X.append(x)
+    return X
+
+
+def main():
+    X = hazirla()
     genel = sum((x["odd"] - 1) if x["w"] else -1 for x in X) / max(1, len(X))
     log(f"sonucu belli oynanabilir durum: {len(X)} · hepsini oynasaydık ROI {100 * genel:+.1f}%")
     for pz, c in Counter(x["pazar"] for x in X).most_common():
@@ -305,5 +312,86 @@ def main():
     print("\nNot: sınama dönemi kurallar seçilirken görülmedi; orada da kârlı olması şansı azaltır ama yok etmez.")
 
 
+def _durum(x):
+    if x["L"] is not None and x["n"] in ("Üst", "Alt") and "alt/üst" in x["pazar"]:
+        base = x["g1"] + x["g2"] if x["pazar"].startswith(("MS", "2Y", "İY alt")) else x["g1"] if "ev" in x["pazar"] else x["g2"]
+        return f"{x['n']} {x['L']:g} (çizgiye {x['L'] - base:+.1f})"
+    return f"{x['n']}" + (f" {x['L']:g}" if x["L"] is not None else "")
+
+
+def dakika():
+    """DAKİKA DAKİKA: her dakika × pazar × seçenek(çizgi farkı) × skor × oran bandı hücresi — isabet ve ROI.
+    Çıktı: data/madenci_dakika.csv (tüm hücreler) + log'da: (A) iki dönemde +ROI, (B) %80+ gerçekleşen, (C) %100 gerçekleşen."""
+    import csv
+    X = hazirla(lambda d: int(d))
+    X.sort(key=lambda x: x["t"])
+    kes = int(len(X) * 0.6)
+    H = defaultdict(lambda: [[0, 0, 0.0, 0.0], [0, 0, 0.0, 0.0]])
+    for i, x in enumerate(X):
+        d = 0 if i < kes else 1
+        skor = f"{min(x['g1'], 4)}-{min(x['g2'], 4)}"
+        kz = (x["odd"] - 1) if x["w"] else -1.0
+        for dk in (f"{int(x['dk']):02d}'", _bant(x["dk"], DK_B)):         # tek dakika ve dakika bandı
+            for sk in (skor, "her skor"):
+                for ob in (_bant(x["odd"], OR_B), "her oran"):
+                    h = H[(dk, x["pazar"], _durum(x), sk, ob)][d]
+                    h[0] += 1
+                    h[1] += x["w"]
+                    h[2] += kz
+                    h[3] += x["odd"]
+    yol = os.path.join(KOK, "data", "madenci_dakika.csv")
+    with open(yol, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["dakika", "pazar", "seçenek", "skor", "oran bandı", "n", "tuttu", "isabet %", "ort oran", "ROI %",
+                    "öğrenme n", "öğrenme ROI %", "sınama n", "sınama ROI %"])
+        for k, ((n0, w0, k0, o0), (n1, w1, k1, o1)) in sorted(H.items()):
+            n = n0 + n1
+            if n < 10:
+                continue
+            w.writerow([*k, n, w0 + w1, round(100 * (w0 + w1) / n, 1), round((o0 + o1) / n, 2), round(100 * (k0 + k1) / n, 1),
+                        n0, round(100 * k0 / n0, 1) if n0 else "", n1, round(100 * k1 / n1, 1) if n1 else ""])
+    log(f"tüm hücreler (n≥10) yazıldı: {yol}")
+
+    def satir(k, v):
+        (n0, w0, k0, o0), (n1, w1, k1, o1) = v
+        n = n0 + n1
+        return (f"  {k[0]:7s} | {k[1]:14s} | {k[2]:26s} | skor {k[3]:8s} | {k[4]:9s} | n {n:4d} | isabet %{100 * (w0 + w1) / n:3.0f} | "
+                f"ort oran {(o0 + o1) / n:4.2f} | ROI {100 * (k0 + k1) / n:+6.1f}% (öğr {100 * k0 / n0 if n0 else 0:+.0f}% / sın {100 * k1 / n1 if n1 else 0:+.0f}%)")
+
+    nmin = int(os.environ.get("N_DK", 25))
+    gor = set()
+
+    def tekil(L):
+        """aynı maç kümesini gösteren tekrarları at (tek dakika = bant, skor = her skor gibi)"""
+        out = []
+        for z in L:
+            k, v = z[-2], z[-1]
+            imza = (k[1], k[2], k[4], tuple(map(tuple, v)))
+            if imza in gor:
+                continue
+            gor.add(imza)
+            out.append(z)
+        return out
+    A = [(min(v[0][2] / v[0][0], v[1][2] / v[1][0]), k, v) for k, v in H.items()
+         if v[0][0] >= nmin // 2 and v[1][0] >= nmin // 3 and v[0][0] + v[1][0] >= nmin and v[0][2] > 0 and v[1][2] > 0]
+    A.sort(key=lambda z: -z[0])
+    print("\n" + "=" * 120 + f"\n(A) İKİ DÖNEMDE DE +ROI — dakika/pazar/seçenek/skor/oran (n ≥ {nmin}) · ilk 40\n" + "=" * 120)
+    for _, k, v in tekil(A)[:40]:
+        print(satir(k, v))
+    B = [(k, v) for k, v in H.items() if v[0][0] + v[1][0] >= nmin and (v[0][1] + v[1][1]) / (v[0][0] + v[1][0]) >= 0.8]
+    B.sort(key=lambda z: (-(z[1][0][1] + z[1][1][1]) / (z[1][0][0] + z[1][1][0]), -(z[1][0][0] + z[1][1][0])))
+    print("\n" + "=" * 120 + f"\n(B) %80+ GERÇEKLEŞEN OLAYLAR (ROI'den bağımsız, n ≥ {nmin}) · ilk 60\n" + "=" * 120)
+    gor.clear()
+    for k, v in tekil(B)[:60]:
+        print(satir(k, v))
+    C = [(k, v) for k, v in H.items() if v[0][0] + v[1][0] >= max(15, nmin // 2) and v[0][1] + v[1][1] == v[0][0] + v[1][0]]
+    C.sort(key=lambda z: -(z[1][0][0] + z[1][1][0]))
+    print("\n" + "=" * 120 + f"\n(C) %100 GERÇEKLEŞEN (hiç kaçmayan, n ≥ {max(15, nmin // 2)}) · ilk 40\n" + "=" * 120)
+    gor.clear()
+    for k, v in tekil(C)[:40]:
+        print(satir(k, v))
+    print("\nNot: %80-%100 olaylar genelde düşük oranlıdır; ROI sütunu iddaa oranıyla oynanınca ne kazandırdığını gösterir.")
+
+
 if __name__ == "__main__":
-    main()
+    dakika() if sys.argv[1:2] == ["dakika"] else main()
