@@ -309,6 +309,8 @@ def canli_kupon(iid, cz, t, mac, dk, adil):
     if not sec:
         return None, "Volkano'da maç/çizgi yok (askıda olabilir)"
     o = sec["od"]
+    if volki.supheli(o / adil, o, None):
+        return None, f"şüpheli oran {o} (değer {o / adil:.2f})"
     if o / adil < volki.CANLI_ESIK:
         return None, f"oran düştü: {o} (değer {o / adil:.2f})"
     return _govde(sec["b"], sec["m"], o, e, m, CANLI_TUTAR, None, False)

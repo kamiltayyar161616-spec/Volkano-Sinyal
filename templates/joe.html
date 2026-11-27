@@ -89,7 +89,7 @@
 {% if d.volki %}{% set v = d.volki %}<div class="tab" id="t-volki">
 <h2 class="section">🦊 VOLKİ</h2>
 <div class="section-sub">Volkano için <b>canlı + değer</b> sinyalleri, veri biriktirme. <b>Canlı:</b> canlı botun Pinnacle/SBOBET adil oranı, aynı maç ve aynı Üst çizgisinde Volkano canlı oranıyla karşılaştırılır (değer = Volkano / adil); her gözlem kaydedilir, değer ≥ {{ v.esik }} sanal kupon. <b>Değer:</b> Değer 90 ▶ OYNA seçenekleri Volkano oranıyla (değer = Volkano oranı × model ihtimali). Kasa <b>{{ '%.0f'|format(v.kasa0) }} €</b>, yarım Kelly, en az 1 €, vergi %12 net kârdan. Sanal, gerçek bahis yok.{% if v.hata %} ⚠ {{ v.hata }}{% endif %}</div>
-<div class="section-sub">Son tur: {{ v.log or 'henüz yok' }} · toplam gözlem {{ v.n_gozlem }} ({{ v.n_cift }} maç-çizgi)</div>
+<div class="section-sub">Son tur: {{ v.log or 'henüz yok' }} · toplam gözlem {{ v.n_gozlem }} ({{ v.n_cift }} maç-çizgi){% if v.n_suphe %} · <b>{{ v.n_suphe }} şüpheli kupon çıkarıldı</b> (değer > 1.50 ya da Volkano > iddaa ×1.6: askıdaki market / eski oran){% endif %}</div>
 {{ kasa(v, '€') }}
 {{ bkarne(v.karne_canli, '📡 CANLI kuponlar — banda göre') }}
 {{ bkarne(v.karne_gozlem, '🔬 CANLI tüm gözlemler (eşik altı dahil, her maç-çizginin ilk gözlemi) — hangi bant kazanıyor?') }}

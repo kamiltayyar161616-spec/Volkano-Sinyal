@@ -14,7 +14,8 @@ ADIL = "/root/iddaa-bot/m7_adil.jsonl"
 KLASOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "volki")
 DB = os.path.join(KLASOR, "volki.db")
 CANLI_ESIK, KASA0, MIN_T, VERGI = 0.92, 50.0, 1.0, 0.12
-TAZE_SN, GOZLEM_SN = 90, 120                 # adil kaydı en çok 90 sn eski; aynı (maç, çizgi) gözlemi 2 dk'da bir
+TAZE_SN, GOZLEM_SN = 90, 120
+SUPHE_DEGER, SUPHE_IDD = 1.50, 1.60          # değer > 1.50 ya da Volkano > iddaa × 1.60 → şüpheli okuma (askıdaki market / eski oran): kupon yok, karnede yok                 # adil kaydı en çok 90 sn eski; aynı (maç, çizgi) gözlemi 2 dk'da bir
 BANTLAR = ((0.0, 0.92, "< 0.92"), (0.92, 0.97, "0.92–0.97"), (0.97, 1.05, "0.97–1.05"), (1.05, 1.15, "1.05–1.15"), (1.15, 99, "≥ 1.15"))
 TR = timezone(timedelta(hours=3))
 _last = {"log": None, "hata": None}
@@ -36,6 +37,10 @@ def db():
         except sqlite3.OperationalError:
             pass
     return c
+
+
+def supheli(d, vk, io):
+    return d > SUPHE_DEGER or (io and vk > io * SUPHE_IDD)
 
 
 def _ko_tahmin(t, dk):
@@ -171,6 +176,8 @@ def tur():
             c.execute("INSERT OR IGNORE INTO gozlem (t, iid, mac, dk, skor, cz, adil, io, vk, deger, lig) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                       (int(now), iid, x["mac"], x["dk"], f"{x['g1']}-{x['g2']}", cz, x["adil"], x["io"], o, d, _lig(x, pz)))
             n_g += 1
+        if supheli(d, o, x["io"]):
+            continue
         if d >= CANLI_ESIK and not kup:
             c.execute("INSERT OR IGNORE INTO kupon (iid, cz, t, mac, dk, skor, adil, vk, deger, lig) VALUES (?,?,?,?,?,?,?,?,?,?)",
                       (iid, cz, int(now), x["mac"], x["dk"], f"{x['g1']}-{x['g2']}", x["adil"], o, d, _lig(x, pz)))
@@ -216,7 +223,8 @@ def get_page_data():
             K = c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger, lig FROM kupon ORDER BY t").fetchall()
         except sqlite3.OperationalError:
             K = [r + (None,) for r in c.execute("SELECT iid, cz, t, mac, dk, skor, adil, vk, deger FROM kupon ORDER BY t").fetchall()]
-        G = c.execute("SELECT iid, cz, vk, deger FROM gozlem").fetchall()
+        G = c.execute("SELECT iid, cz, vk, deger FROM gozlem WHERE NOT (deger > ? OR (io IS NOT NULL AND vk > io * ?))",
+                      (SUPHE_DEGER, SUPHE_IDD)).fetchall()
         c.close()
     S = {}
     if os.path.exists(DB):
@@ -235,8 +243,17 @@ def get_page_data():
                 S[iid] = None
         return S[iid]
 
+    io_k = {}
+    if os.path.exists(DB):
+        c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+        io_k = {(i, z): io for i, z, io in c.execute("SELECT iid, cz, MAX(io) FROM gozlem GROUP BY iid, cz")}
+        c.close()
+    n_suphe = 0
     canli = []
     for iid, cz, t, mac, dk, skor, adil, vk, d, lig in K:
+        if supheli(d, vk, io_k.get((iid, cz))):
+            n_suphe += 1
+            continue
         r = sonuc(iid)
         canli.append({"t": t, "bitis": t + max(10, 100 - dk) * 60, "o": vk, "p": min(0.97, 1 / adil), "mac": mac, "bahis": f"Üst {cz:g} (canlı {dk:.0f}' {skor})",
                       "tur": "canlı", "deger": d, "lig": lig, "son": f"{r[0]}-{r[1]}" if r else None, "kaz": (r[0] + r[1] > cz) if r else None,
@@ -266,7 +283,7 @@ def get_page_data():
                       "saat": datetime.fromtimestamp(x["baslama"], TR).strftime("%d.%m %H:%M")})
     T = sorted(canli + deger, key=lambda x: x["t"])
     H = joe._kasa(T, KASA0, MIN_T, 2, VERGI)
-    H.update(K=list(reversed(T))[:150], kasa0=KASA0, esik=CANLI_ESIK, log=_last["log"], hata=_last["hata"],
+    H.update(K=list(reversed(T))[:150], kasa0=KASA0, esik=CANLI_ESIK, n_suphe=n_suphe, log=_last["log"], hata=_last["hata"],
              karne_canli=_karne([(x["deger"], x["o"], x["kaz"]) for x in canli]),
              karne_gozlem=_karne(gk), n_gozlem=len(G), n_cift=len(ilk),
              karne_deger=_karne([(x["deger"], x["o"], x["kaz"]) for x in deger]))
