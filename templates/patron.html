@@ -72,6 +72,10 @@
     <div class="meta">{{ s.aciklama or ('Pinnacle ' ~ s.pin_ref ~ ' → ' ~ s.pin) }} · Pinnacle adil {{ s.pin_adil }} · Volkano farkı <b>+%{{ (100 * s.fark)|round|int }}</b></div></div>
 </div>
 {% else %}<div class="section-sub">Henüz Volkano sinyali yok.</div>{% endfor %}
+{% if vv.hata %}<div class="section-sub" style="color:#ff5a4f">⚠ Volkano kontrol hataları: {% for h in vv.hata[:8] %}{{ h }}{{ ' · ' if not loop.last }}{% endfor %}</div>{% endif %}
+<div class="section-sub"><b>🔎 Son Volkano kontrolleri</b> (Pinnacle tetik verdi → Volkano'ya bakıldı):</div>
+{% for k in vv.kontrol or [] %}<div class="meta" style="margin:0 16px">{{ k.saat }} · {{ k.ev }} – {{ k.dep }} · <b>{{ k.taraf }}</b> · {% if k.vk %}Volkano {{ k.vk }} / adil {{ k.adil }} ({{ '%+.0f'|format(100 * k.fark) }}%) · {% endif %}<b style="color:{{ '#3ccf7a' if k.neden == 'YAKALA' else '#e0a030' }}">{{ k.neden }}</b></div>
+{% else %}<div class="section-sub">Henüz kontrol yok (Pinnacle sert düşüş/çizgi kayması olmadı ya da kod henüz çalışmadı).</div>{% endfor %}
 </div>
 <script>
 (function(){

@@ -33,6 +33,7 @@ TARAF = ("1", "X", "2")
 # Pinnacle–Volkano (26.11 kullanıcı): aynı Pinnacle düşüş kuralı, Volkano oranı adilden %10+ yüksekse YAKALA (vergi sadece kazançtan düşülür).
 VK_KASA0, VK_MIN, VK_VERGI = 20.0, 1.0, 0.12       # € · en az 1 € · üst sınır yok (yarım Kelly) · Volkano net kârdan %12
 _vkc = {}                        # mid -> (t, {"1","X","2"} Volkano oranı ya da None)
+_vk_hata = []                    # Volkano kontrolünde yakalanan hatalar (son 20, sayfada)
 _last = {"at": None, "log": "", "hata": None, "izle": 0}
 _izle = {}                       # mid -> ko
 
@@ -59,6 +60,8 @@ def db():
         c.execute("ALTER TABLE vk_sinyal ADD COLUMN aciklama TEXT")
     except sqlite3.OperationalError:
         pass
+    c.execute("""CREATE TABLE IF NOT EXISTS vk_kontrol (mid INTEGER, taraf TEXT, at TEXT, ev TEXT, dep TEXT, ko TEXT, vk REAL, adil REAL,
+                 fark REAL, neden TEXT, PRIMARY KEY (mid, taraf))""")
     c.execute("""CREATE TABLE IF NOT EXISTS vk_bahis (mid INTEGER, taraf TEXT, at TEXT, oran REAL, p REAL, tutar REAL, durum TEXT, getiri REAL,
                  PRIMARY KEY (mid, taraf))""")
     return c
@@ -171,9 +174,16 @@ def kazandi(taraf, h, a, iy=None):
     return False
 
 
+def _vk_not(c, mid, taraf, ev, dep, ko, vk, adil, neden, now):
+    """her Volkano kontrolünün sonucu (tetik geldi ama neden sinyal yok?) — sayfada gösterilir"""
+    c.execute("INSERT OR REPLACE INTO vk_kontrol VALUES (?,?,?,?,?,?,?,?,?,?)",
+              (mid, taraf, now.isoformat(), ev, dep, ko, vk, round(adil, 3) if adil else None, round(vk / adil - 1, 4) if vk and adil else None, neden))
+
+
 def _vk_yakala(c, mid, ko, ev, dep, lig, taraf, o, adil, ref, cur, dusus, aciklama, now):
     """Volkano oranı Pinnacle adilinden %10+ yüksekse sinyal + kupon (vergi sadece kazançtan)"""
     fark = o / adil - 1
+    _vk_not(c, mid, taraf, ev, dep, ko, o, adil, "YAKALA" if fark >= FARK else f"Volkano yetersiz (+%{round(100 * fark)} < +%{round(100 * FARK)})", now)
     if fark < FARK:
         return 0
     r = c.execute("SELECT fark FROM vk_sinyal WHERE mid=? AND taraf=?", (mid, taraf)).fetchone()
@@ -193,6 +203,7 @@ def _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now):
     """Pinnacle MS tarafı sert düştü: Volkano MS o taraf + o tarafı içeren çifte şanslar (Pinnacle 1X2'den marjsız)"""
     pz = _vk_pz(mid, ev, dep, ko)
     if not pz:
+        _vk_not(c, mid, TARAF[i], ev, dep, ko, None, adil, "Volkano'da maç bulunamadı", now)
         return 0
     q = [1 / x for x in pin["cur"]]
     t = sum(q)
@@ -200,6 +211,8 @@ def _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now):
     ac = f"Pinnacle MS {TARAF[i]} {ref[i]} → {pin['cur'][i]} (%{round(100 * dusus)} düşüş)"
     y = 0
     o = ((pz.get("1") or {}).get("") or {}).get(TARAF[i])
+    if not o:
+        _vk_not(c, mid, TARAF[i], ev, dep, ko, None, adil, "Volkano'da MS pazarı yok", now)
     if o:
         y += _vk_yakala(c, mid, ko, ev, dep, lig, TARAF[i], o, adil, ref[i], pin["cur"][i], dusus, ac, now)
     for cs in CS[TARAF[i]]:
@@ -341,8 +354,8 @@ def _degerlendir(c, mid, ko, ev, dep, lig, pin, xb, now):
         adil = t / q[i]                       # marjsiz adil oran = 1 / (q_i / t)
         try:
             yeni += _vk_degerlendir(c, mid, ko, ev, dep, lig, i, ref, pin, adil, dusus, now)
-        except Exception:
-            pass
+        except Exception as ex:
+            _vk_hata.append(f"{ev}-{dep}: {type(ex).__name__} {str(ex)[:80]}")
         if not xb or not xb["cur"][i]:
             continue
         fark = xb["cur"][i] / adil - 1
@@ -364,8 +377,8 @@ def _degerlendir(c, mid, ko, ev, dep, lig, pin, xb, now):
             _bahis_ac(c, mid, TARAF[i], xb["cur"][i], 1 / adil, now)
     try:
         yeni += _vk_ou(c, mid, ko, ev, dep, lig, now)
-    except Exception:
-        pass
+    except Exception as ex:
+        _vk_hata.append(f"{ev}-{dep} A/Ü: {type(ex).__name__} {str(ex)[:80]}")
     return izle, yeni
 
 
@@ -566,7 +579,17 @@ def vk_sayfa():
             pk[0] += 1
             pk[1] += x["durum"] == "tuttu"
             pk[2] += (x["vk_net"] - 1) if x["durum"] == "tuttu" else -1
-    return {"L": L, "kasa": vk_kasa(), "kasa0": VK_KASA0,
+    try:
+        c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=20)
+        KN = [dict(zip(("mid", "taraf", "at", "ev", "dep", "ko", "vk", "adil", "fark", "neden"), r))
+              for r in c.execute("SELECT * FROM vk_kontrol ORDER BY at DESC LIMIT 30")]
+        c.close()
+        for k in KN:
+            k["saat"] = _dt(k["at"]).astimezone(TR).strftime("%d.%m %H:%M")
+    except Exception:
+        KN = []
+    del _vk_hata[:-20]
+    return {"L": L, "kasa": vk_kasa(), "kasa0": VK_KASA0, "kontrol": KN, "hata": list(reversed(_vk_hata)),
             "pazar": [{"ad": k, "n": v[0], "w": v[1], "roi": round(100 * v[2] / v[0], 1)} for k, v in sorted(PZ.items())],
             "karne": {"n": n, "w": w, "roi": round(100 * kar / n, 1) if n else None, "kar": round(kar, 2)}}
 
