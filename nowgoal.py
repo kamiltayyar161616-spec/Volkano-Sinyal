@@ -51,7 +51,7 @@ LOOKAHEAD_H = 36             # bu kadar saat icindeki maclarin istatistigi cekil
 NEIGHBOR = 8                 # bilinen mac ID'sinin +-8 komsusu yoklanir (ayni lig/hafta ID'leri ardisik)
 MAX_PROBE_PER_CYCLE = 250    # tur basina komsu yoklama
 PROBE_WINDOW_H = 48          # bu kadar saat icindeki maclar eklenir
-TOTO_WINDOW_D = 7            # Toto bülteni liglerinde (daha önce Toto maçı olan ligler) 7 gün ileri
+TOTO_WINDOW_D = 9            # Toto bülteni liglerinde (Süper Lig dahil, daha önce Toto maçı olan ligler) 9 gün ileri — liste salı gelse pazartesi maçı da girer
 RESULT_AFTER_MIN = 130       # baslamadan bu kadar dk sonra skor sorulur
 VOID_AFTER_H = 30            # bu kadar saat gecti, skor yoksa 'void'
 
