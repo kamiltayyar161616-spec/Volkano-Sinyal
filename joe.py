@@ -60,9 +60,12 @@ def _sonuclandir(K, sonuc):
         x["son"], x["kaz"] = None, None
         if r and r[0] is not None:
             g = r[0] + r[1]
-            c = float(x["cizgi"])
             x["son"] = f"{r[0]}-{r[1]}"
-            x["kaz"] = g > c if "st" in x["bahis"].lower() else g < c
+            if x["bahis"].startswith("MS"):                  # 28.11 kural C/D: MS 1
+                x["kaz"] = r[0] > r[1] if x["bahis"] == "MS 1" else r[0] == r[1] if x["bahis"] == "MS X" else r[1] > r[0]
+            else:
+                c = float(x["cizgi"])
+                x["kaz"] = g > c if "st" in x["bahis"].lower() else g < c
     for x in K:
         x["p"] = 1 / float(x["adil"]) if x.get("adil") else 1 / x["o"]
         x["kaz"] = x.get("kaz") if x["son"] is not None else None

@@ -119,23 +119,3 @@ def tur():
 open(B, "w").write(s)
 print("m7_bot.py: kurallar A C D E eklendi")
 
-# joe.py: MS 1 kuponlarini sonuclandir (cizgi yok)
-J = "/root/Volkano-Sinyal/joe.py"
-j = open(J).read()
-a = '''            c = float(x["cizgi"])
-            x["son"] = f"{r[0]}-{r[1]}"
-            x["kaz"] = g > c if "st" in x["bahis"].lower() else g < c
-'''
-if a in j:
-    shutil.copy(J, J + ".yedek_kural")
-    j = j.replace(a, '''            x["son"] = f"{r[0]}-{r[1]}"
-            if x["bahis"].startswith("MS"):                  # 28.11 kural C/D: MS 1
-                x["kaz"] = r[0] > r[1] if x["bahis"] == "MS 1" else r[0] == r[1] if x["bahis"] == "MS X" else r[1] > r[0]
-            else:
-                c = float(x["cizgi"])
-                x["kaz"] = g > c if "st" in x["bahis"].lower() else g < c
-''')
-    open(J, "w").write(j)
-    print("joe.py: MS 1 sonuclandirma eklendi")
-else:
-    print("joe.py: blok bulunamadi (atlandi)")
