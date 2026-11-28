@@ -1,6 +1,7 @@
 """CANLI AVCI — Pinnacle (7M _hda.js gerçek canlı 1X2) × Volkano canlı MS. SANAL: bahis yok, kupon göndermez.
 Her TUR_SN: 7M canlı maçlar -> Volkano'da eşleşen maç -> Pinnacle son kaydı + Volkano 1/X/2 oranı kaydedilir (seri; sonradan bant taraması için).
-Sinyal: skor değişmeden Pinnacle son 5 dk'da en az DUS düştü + Volkano değeri (Volkano oranı × Pinnacle marjsız ihtimal) >= ESIK -> sanal kupon
+Sinyal (28.11 KESKİN): skor değişmeden Pinnacle son KESKIN_SN (90 sn) içinde en az DUS (%10) düştü, düşüş taze (Pinnacle kaydı ≤ 60 sn),
+Volkano henüz oynamadı (oranı düşüşten önceki Volkano oranının en az %97'si) ve Volkano değeri (Volkano × Pinnacle marjsız ihtimal) >= ESIK -> sanal kupon
 (maç+seçenek+skor başına bir kez). Değer ham Volkano oranıyla; %12 vergi sadece kazançtan (raporda net).
   calis : sürekli döngü (servis)     rapor : sanal kuponlar + kayıtlı seriden eşik taraması
 Çalıştır: cd /root/Volkano-Sinyal && python3 vk_canli_avci.py rapor"""
@@ -11,9 +12,10 @@ import requests
 KOK = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, KOK)
 DB = os.path.join(KOK, "data", "vk_avci.db")
-TUR_SN = 20
-DUS, ESIK = 0.08, 1.00
+TUR_SN = 6
+DUS, ESIK, KESKIN_SN, TAZE_SN = 0.10, 1.00, 90, 60
 VK_MIN, VK_MAX, DK_MAX, PIN_TAZE = 1.50, 15.0, 85, 120
+VK_GECMIS = {}       # mid -> [(t, v1, vx, v2)] son 10 dk Volkano
 VERGI = 0.12
 TR = timezone(timedelta(hours=3))
 GMT8 = timezone(timedelta(hours=8))
@@ -111,7 +113,7 @@ _vk_cache = {}          # mid -> (t, pazarlar | None)
 def vk_ms(mid, ta, tb, ko):
     import joe
     t, v = _vk_cache.get(mid, (0, "yok"))
-    bekle = 15 if v not in ("yok", None) else 600
+    bekle = 4 if v not in ("yok", None) else 600
     if time.time() - t < bekle and v != "yok":
         return v
     try:
@@ -145,7 +147,10 @@ def tur(c):
         n_es += 1
         cur = L[-1]
         iv = [1 / cur[1], 1 / cur[2], 1 / cur[3]]; s = sum(iv); p = [q / s for q in iv]
-        once = [r for r in L if cur[0] - 300 <= r[0] < cur[0]]
+        once = [r for r in L if cur[0] - KESKIN_SN <= r[0] < cur[0]]
+        G = VK_GECMIS.setdefault(mid, [])
+        G.append((now, *v)); G[:] = [g for g in G if now - g[0] <= 600]
+        vk_eski = [g for g in G if g[0] < cur[0] - 5]             # Pinnacle düşüşünden önce gördüğümüz Volkano
         dus = [(1 - cur[1 + k] / max(r[1 + k] for r in once)) if once else 0.0 for k in range(3)]
         d = [round((v[k] or 0) * p[k], 3) for k in range(3)]
         c.execute("INSERT INTO seri VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (now, mid, cur[6], sk[0], sk[1], cur[0], *cur[1:4], *v, *d))
@@ -159,12 +164,13 @@ def tur(c):
                 continue
             if vo > 1.6 * cur[1 + k] or d[k] > 1.5:                 # eski/donmuş Volkano oranı (gol sonrası) — şüpheli
                 continue
-            if dus[k] >= DUS and d[k] >= ESIK:
+            ve = vk_eski[-1][1 + k] if vk_eski and vk_eski[-1][1 + k] else None
+            if dus[k] >= DUS and d[k] >= ESIK and now - cur[0] <= TAZE_SN and ve and vo >= 0.97 * ve:
                 try:
                     c.execute("INSERT INTO kupon VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)",
                               (mid, SEC[k], sk[0], sk[1], now, f"{a[0]} - {a[1]}", a[2], cur[6], cur[1 + k], round(p[k], 4), round(dus[k], 3), vo, d[k]))
                     n_k += 1
-                    log(f"SANAL KUPON {a[0]} - {a[1]} | {cur[6]}' {sk[0]}-{sk[1]} | MS {SEC[k]} Volkano {vo} · Pinnacle {cur[1 + k]} (düşüş %{100 * dus[k]:.0f}) · değer x{d[k]:.3f}")
+                    log(f"SANAL KUPON {a[0]} - {a[1]} | {cur[6]}' {sk[0]}-{sk[1]} | MS {SEC[k]} Volkano {vo} · Pinnacle {cur[1 + k]} (düşüş %{100 * dus[k]:.0f}, {now - cur[0]} sn önce) · Volkano önce {ve} · değer x{d[k]:.3f}")
                 except sqlite3.IntegrityError:
                     pass
         time.sleep(0.3)
@@ -193,14 +199,14 @@ kaz = lambda sec, h, a: (h > a) if sec == "1" else (h == a) if sec == "X" else (
 
 def calis():
     c = db()
-    log(f"Canlı Avcı (Pinnacle × Volkano) SANAL başladı · düşüş ≥ %{100 * DUS:.0f} · değer ≥ {ESIK}")
+    log(f"Canlı Avcı (Pinnacle × Volkano) SANAL başladı · KESKİN düşüş ≥ %{100 * DUS:.0f} / {KESKIN_SN} sn · Volkano oynamamış · değer ≥ {ESIK} · tur {TUR_SN} sn")
     n, son_s = 0, 0
     while True:
         t0 = time.time()
         try:
             a, b, k = tur(c)
             n += 1
-            if n % 30 == 1:
+            if n % 100 == 1:
                 log(f"7M canlı {a} · Volkano+Pinnacle eşleşen {b} · yeni sanal kupon {k}")
             if time.time() - son_s > 900:
                 sonuc_doldur(c); son_s = time.time()
@@ -241,8 +247,10 @@ def rapor():
                         vo, d = z[8 + k], z[11 + k]
                         if not vo or not d or d < e or d > 1.5 or not (VK_MIN <= vo <= VK_MAX):
                             continue
-                        prev = [y for y in L[max(0, j - 30):j] if z[0] - 300 <= y[0] < z[0] and (y[3], y[4]) == (z[3], z[4])]
-                        du = 1 - z[5 + k] / max(y[5 + k] for y in prev) if prev else 0.0
+                        prev = [y for y in L[max(0, j - 40):j] if z[5] and z[0] - 120 <= y[0] < z[0] and (y[3], y[4]) == (z[3], z[4])]
+                        du = 1 - z[5 + k] / max(y[5 + k] for y in prev) if prev else 0.0       # keskin: son 2 dk
+                        if dmin and prev and prev[-1][8 + k] and vo < 0.97 * prev[-1][8 + k]:
+                            continue                                                       # Volkano zaten düşürmüş
                         key = (mid, k, z[3], z[4])
                         if du < dmin or key in gor:
                             continue

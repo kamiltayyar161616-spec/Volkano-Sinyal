@@ -17,6 +17,7 @@ URL = "https://odds.7m.com.cn/DataByLive2/{}_hda.js?f={}"
 BURO = {"Pinnacle Sports": "PIN", "SBOBET": "SBO", "s2": "CRO"}
 GMT8 = timezone(timedelta(hours=8))
 N_MIN = int(os.environ.get("N_MIN", 25))
+KESKIN_SN = int(os.environ.get("KESKIN_SN", 90))      # Avcı: düşüş bu kadar sn içinde olmalı (keskin)
 
 
 def t8(x):
@@ -231,7 +232,7 @@ def avci(buro="PIN"):
                 if not Y:
                     continue
                 for j, (t, *o, g1, g2) in enumerate(L):
-                    once = [z for z in L[max(0, j - 60):j] if t - 300 <= z[0] < t and (z[4], z[5]) == (g1, g2)]
+                    once = [z for z in L[max(0, j - 60):j] if t - KESKIN_SN <= z[0] < t and (z[4], z[5]) == (g1, g2)]     # 28.11 keskin
                     if not once:
                         continue
                     eski = max(z[1 + k] for z in once)
@@ -242,7 +243,7 @@ def avci(buro="PIN"):
                     key = (iid, k, g1, g2, db_)            # her düşüş bandı kendi ilk anında
                     if key in gor:
                         continue
-                    x = next((x for x in Y if t <= x["t"] <= t + 120 and (x["g1"], x["g2"]) == (g1, g2)), None)
+                    x = next((x for x in Y if t <= x["t"] <= t + 60 and (x["g1"], x["g2"]) == (g1, g2)), None)
                     if not x:
                         continue
                     gor.add(key); n_dus += 1
