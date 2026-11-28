@@ -308,6 +308,145 @@ def gecikme(buro="PIN"):
     print("  not: eksi/0'a yakın = iddaa, 7M'nin Pinnacle kaydından önce/aynı anda tepki vermiş (7M gecikmesi)")
 
 
+DKB_INCE = [(0, 15, "0-15'"), (15, 30, "15-30'"), (30, 46, "30-45'"), (46, 60, "46-60'"), (60, 70, "60-70'"), (70, 80, "70-80'"),
+            (80, 85, "80-85'"), (85, 200, "85'+")]
+OUURL = "https://odds.7m.com.cn/DataByLive2/{}_ou.js?f={}"
+
+
+def indir_ou():
+    """Pinnacle / SBOBET / Crown canlı Alt/Üst geçmişi (7M _ou.js) -> data/pin_hda.db tablo ou"""
+    c = db()
+    c.execute("CREATE TABLE IF NOT EXISTS ou (mid INTEGER, buro TEXT, t INTEGER, cz REAL, ust REAL, alt REAL, g1 INTEGER, g2 INTEGER, dk TEXT)")
+    c.execute("CREATE INDEX IF NOT EXISTS ix_ou ON ou(mid, buro, t)")
+    c.execute("CREATE TABLE IF NOT EXISTS ok_ou (mid INTEGER PRIMARY KEY, at INTEGER, n INTEGER)")
+    var = {r[0] for r in c.execute("SELECT mid FROM ok_ou")}
+    ids = [r[0] for r in c.execute("SELECT mid FROM ok") if r[0] not in var]
+    print(f"Alt/Üst indirilecek {len(ids)}", flush=True)
+    ss = requests.Session(); ss.headers.update({"User-Agent": "Mozilla/5.0", "Referer": "https://www.7msport.com/"})
+    for j, m in enumerate(ids, 1):
+        try:
+            b = ss.get(OUURL.format(m, int(time.time() * 1000)), timeout=15).text
+        except Exception:
+            time.sleep(2); continue
+        rows = []
+        for blk in re.split(r"p\['\d+'\]\s*=\s*", b)[1:]:
+            nm = re.search(r"'name':'([^']*)'", blk)
+            if not nm or nm.group(1) not in BURO:
+                continue
+            for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
+                g = dict(re.findall(r"'(\w+)':'([^']*)'", e))
+                sk = re.findall(r"\d+", g.get("score", ""))
+                try:
+                    u, a, cz = float(g["p1"]), float(g["p2"]), float(g["p3"])
+                except (KeyError, ValueError):
+                    continue
+                t = t8(g.get("dt"))
+                if t and len(sk) >= 2 and u > 1 and a > 1:
+                    rows.append((m, BURO[nm.group(1)], t, cz, u, a, int(sk[0]), int(sk[1]), g.get("htime", "")))
+        c.executemany("INSERT INTO ou VALUES (?,?,?,?,?,?,?,?,?)", rows)
+        c.execute("INSERT OR REPLACE INTO ok_ou VALUES (?,?,?)", (m, int(time.time()), len(rows)))
+        if j % 50 == 0:
+            c.commit(); print(f"  {j}/{len(ids)}", flush=True)
+        time.sleep(0.35)
+    c.commit()
+
+
+def _sonuclar_mid():
+    import canli_madenci as CM
+    K = {}
+    for l in open(F, errors="ignore"):
+        try:
+            x = json.loads(l)
+        except ValueError:
+            continue
+        if x.get("mid") and x.get("iid"):
+            k = K.get(x["iid"])
+            K[x["iid"]] = (int(x["mid"]), min(x["t"], k[1]) if k else x["t"], max(int(x["g1"]), k[2] if k else 0), max(int(x["g2"]), k[3] if k else 0))
+    S = CM.sonuclar(K)
+    return {mid: S[iid][:2] for iid, (mid, *_r) in K.items() if S.get(iid) and S[iid][0] is not None}
+
+
+def _tara(E, baslik, nm):
+    import itertools
+    E.sort(key=lambda e: e["t"])
+    kes = E[int(len(E) * 0.6)]["t"] if E else 0
+    print(f"düşüş olayı {len(E)}")
+    C = defaultdict(lambda: [[], []])
+    for e in E:
+        it = sorted(e["f"].items()); d = int(e["t"] >= kes)
+        for r in (1, 2, 3):
+            for kom in itertools.combinations(it, r):
+                C[kom][d].append(e)
+    Rr = []
+    for kom, (A, B) in C.items():
+        if len(A) < nm * 0.6 or len(B) < nm * 0.3:
+            continue
+        st = []
+        for L in (A, B):
+            st.append((len(L), sum(e["w"] for e in L) / len(L), sum(e["p"] for e in L) / len(L), sum((e["o"] - 1) if e["w"] else -1 for e in L) / len(L)))
+        if all(x[1] - x[2] > 0 and x[3] > 0 for x in st):
+            Rr.append((min(x[3] for x in st), kom, st))
+    Rr.sort(key=lambda z: -z[0])
+    fm = lambda x: f"n={x[0]:4d} %{100 * x[1]:3.0f}/p%{100 * x[2]:3.0f} ROI {100 * x[3]:+6.1f}%"
+    print(f"\n==== {baslik} — iki dönemde de Pinnacle'ın KENDİ oranıyla + ({len(Rr)}) · öğrenme | sınama")
+    for _, kom, st in Rr[:40]:
+        print(f"  {' · '.join(v for _, v in kom):58s} {fm(st[0])} | {fm(st[1])}")
+    for anahtar in ("dk", "düş", "gerek"):
+        print(f"\n---- {anahtar} özeti (hepsi)")
+        for kom in sorted(k for k in C if len(k) == 1 and k[0][0] == anahtar):
+            L = C[kom][0] + C[kom][1]
+            if len(L) >= 30:
+                wr = sum(e["w"] for e in L) / len(L); pr = sum(e["p"] for e in L) / len(L)
+                print(f"  {kom[0][1]:12s} n={len(L):5d} tutan %{100 * wr:4.1f} Pinnacle %{100 * pr:4.1f} fark {100 * (wr - pr):+5.1f} ROI {100 * sum((e['o'] - 1) if e['w'] else -1 for e in L) / len(L):+6.1f}%")
+
+
+def tersine_ou():
+    """TERSİNE (GOL): Pinnacle canlı Üst oranı ardışık iki kayıtta (≤120 sn, aynı çizgi, aynı skor) ≥%5 düştü -> Üst tuttu mu?
+    Özellikler: dakika (ince), gerek gol, düşüş, Üst oranı, ard arda, ortak (SBOBET/Crown), son golden beri. Yalnız .5 çizgileri."""
+    c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=30)
+    T = defaultdict(lambda: defaultdict(list))
+    for mid, buro, t, cz, u, a, g1, g2, dk in c.execute("SELECT mid, buro, t, cz, ust, alt, g1, g2, dk FROM ou ORDER BY t"):
+        T[mid][buro].append((t, cz, u, a, g1, g2, dk))
+    SON = _sonuclar_mid()
+    print(f"Alt/Üst'lü maç {len(T)} · sonucu olan {len(set(T) & set(SON))}")
+    b_ = lambda v, B: next((ad for a, b, ad in B if a <= v < b), None)
+    DUSB = [(0.05, 0.08, "düş5-8"), (0.08, 0.12, "düş8-12"), (0.12, 0.2, "düş12-20"), (0.2, 1, "düş20+")]
+    ORB = [(1, 1.5, "o<1.5"), (1.5, 1.9, "o1.5-1.9"), (1.9, 2.5, "o1.9-2.5"), (2.5, 4, "o2.5-4"), (4, 999, "o4+")]
+    E = []
+    for mid, B in T.items():
+        L = B.get("PIN")
+        if not L or mid not in SON:
+            continue
+        top = sum(SON[mid]); gor = set()
+        for j in range(1, len(L)):
+            r0, r1 = L[j - 1], L[j]
+            if r0[1] != r1[1] or (r0[4], r0[5]) != (r1[4], r1[5]) or r1[0] - r0[0] > 120 or abs(r1[1] * 2 - round(r1[1] * 2)) > 1e-9 or round(r1[1] * 2) % 2 == 0:
+                continue
+            dus = 1 - r1[2] / r0[2]
+            db_ = b_(dus, DUSB)
+            try:
+                dk = int(re.findall(r"\d+", str(r1[6]))[0])
+            except (IndexError, ValueError):
+                continue
+            g = r1[4] + r1[5]; ger = round(r1[1] + 0.5 - g)
+            if not db_ or ger < 1 or (r1[1], g, db_) in gor:
+                continue
+            gor.add((r1[1], g, db_))
+            p = (1 / r1[2]) / (1 / r1[2] + 1 / r1[3])
+            onc = [r for r in L[max(0, j - 40):j - 1] if r1[0] - 300 <= r[0] < r0[0] and r[1] == r1[1] and (r[4], r[5]) == (r1[4], r1[5])]
+            ard = "ard arda" if onc and r0[2] < 0.97 * max(r[2] for r in onc) else "ilk düşüş"
+            ort = 0
+            for bb in ("SBO", "CRO"):
+                Y = [y for y in B.get(bb, []) if y[1] == r1[1] and (y[4], y[5]) == (r1[4], r1[5]) and r1[0] - 90 <= y[0] <= r1[0] + 60]
+                if len(Y) >= 2 and min(y[2] for y in Y[1:]) <= 0.95 * Y[0][2]:
+                    ort += 1
+            gol_t = next((r[0] for r in L if (r[4], r[5]) == (r1[4], r1[5])), r1[0]); sg = r1[0] - gol_t
+            E.append({"t": r1[0], "w": top > r1[1], "p": p, "o": r1[2], "f": {
+                "dk": b_(dk, DKB_INCE) or "85'+", "gerek": f"+{min(ger, 3)}{'+' if ger >= 3 else ''} gol", "düş": db_, "oran": b_(r1[2], ORB) or "o4+",
+                "ard": ard, "ortak": "ortak düşüş" if ort else "tek Pinnacle", "gol": "golden <5dk" if sg < 300 else "golden 5-15dk" if sg < 900 else "golden 15dk+"}})
+    _tara(E, "KAZANDIRAN ÜST DÜŞÜŞLERİ", int(os.environ.get("N_MIN", 60)))
+
+
 def tersine():
     """TERSİNE MÜHENDİSLİK: kazandıran Pinnacle düşüşleri hangileri?
     Olay = Pinnacle canlı 1X2'de ardışık iki kayıt arasında (≤120 sn, skor aynı) bir seçeneğin oranı ≥%5 düştü.
@@ -338,7 +477,7 @@ def tersine():
     print(f"Pinnacle'lı maç {sum(1 for m in T if T[m].get('PIN'))} · sonucu olan {len(SON)}")
     b_ = lambda v, B: next((ad for a, b, ad in B if a <= v < b), None)
     DUSB = [(0.05, 0.08, "düş5-8"), (0.08, 0.12, "düş8-12"), (0.12, 0.2, "düş12-20"), (0.2, 0.3, "düş20-30"), (0.3, 1, "düş30+")]
-    DKB = [(0, 20, "0-20'"), (20, 46, "20-45'"), (46, 61, "46-60'"), (61, 76, "61-75'"), (76, 200, "76'+")]
+    DKB = DKB_INCE
     ORB = [(1, 1.5, "o<1.5"), (1.5, 2.2, "o1.5-2.2"), (2.2, 3.5, "o2.2-3.5"), (3.5, 6, "o3.5-6"), (6, 999, "o6+")]
     E = []
     for mid, B in T.items():
@@ -423,6 +562,10 @@ if __name__ == "__main__":
     ne = sys.argv[1] if len(sys.argv) > 1 else "test"
     if ne == "tersine":
         tersine(); sys.exit()
+    if ne == "indir_ou":
+        indir_ou(); sys.exit()
+    if ne == "tersine_ou":
+        tersine_ou(); sys.exit()
     if ne == "gecikme":
         gecikme(); sys.exit()
     b = sys.argv[2] if len(sys.argv) > 2 else "PIN"
