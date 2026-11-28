@@ -40,6 +40,8 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS kupon (mid INTEGER, sec TEXT, g1 INTEGER, g2 INTEGER, t INTEGER, mac TEXT, lig TEXT, dk TEXT,
                  pin REAL, p REAL, dus REAL, vk REAL, deger REAL, h INTEGER, a INTEGER, PRIMARY KEY (mid, sec, g1, g2))""")
     c.execute("CREATE TABLE IF NOT EXISTS sonuc (mid INTEGER PRIMARY KEY, h INTEGER, a INTEGER, at INTEGER)")
+    c.execute("""CREATE TABLE IF NOT EXISTS isin (mid INTEGER, sec TEXT, cz REAL, g1 INTEGER, g2 INTEGER, t INTEGER, mac TEXT, dk TEXT,
+                 idd REAL, pin_adil REAL, vk REAL, r REAL, hazir INTEGER, PRIMARY KEY (mid, sec, cz, g1, g2))""")
     c.execute("""CREATE TABLE IF NOT EXISTS tema (mid INTEGER, sec TEXT, g1 INTEGER, g2 INTEGER, tm TEXT, t INTEGER, mac TEXT, lig TEXT, dk TEXT,
                  pin REAL, p REAL, dus REAL, vk REAL, PRIMARY KEY (mid, sec, g1, g2, tm))""")
     return c
@@ -114,7 +116,8 @@ def pin_seri(mid):
     return []
 
 
-_vk_cache = {}          # mid -> (t, pazarlar | None)
+_vk_cache = {}          # mid -> (t, MS üçlüsü | None)
+VK_PZ = {}             # mid -> Volkano tüm pazarlar (son okunan)
 
 
 def vk_ms(mid, ta, tb, ko):
@@ -127,6 +130,8 @@ def vk_ms(mid, ta, tb, ko):
         pz = joe._vk_pazarlar(ta, tb, ko)
         ms = ((pz or {}).get("1") or {}).get("") or {}
         v = (ms.get("1"), ms.get("X"), ms.get("2")) if ms.get("1") and ms.get("2") else None
+        if v:
+            VK_PZ[mid] = pz
     except Exception:
         v = None
     _vk_cache[mid] = (time.time(), v)
@@ -147,6 +152,7 @@ def tur(c):
         if not v:
             continue
         TUM = pin_seri(mid)
+        PIN_SON[mid] = TUM
         sk = (x["ev"], x["dep"])
         L = [r for r in TUM if (r[4], r[5]) == sk]
         if not L or now - L[-1][0] > PIN_TAZE:
@@ -187,6 +193,104 @@ def tur(c):
 
 
 SON_ISLENEN = {}       # mid -> işlenen son Pinnacle kayıt zamanı
+PIN_SON = {}           # mid -> son okunan Pinnacle 1X2 serisi
+TT = "/root/iddaa-bot/test_tum.jsonl"
+_tt_pos = [None]
+_ou_cache = {}         # mid -> (t, [(t, cz, ust, alt, g1, g2)])
+
+
+def _pin_ou(mid):
+    t, L = _ou_cache.get(mid, (0, None))
+    if L is not None and time.time() - t < 6:
+        return L
+    L = []
+    try:
+        b = S.get(f"https://odds.7m.com.cn/DataByLive2/{mid}_ou.js?f={int(time.time() * 1000)}", timeout=12).text
+    except Exception:
+        b = ""
+    for blk in re.split(r"p\['\d+'\]\s*=\s*", b)[1:]:
+        if "'name':'Pinnacle Sports'" not in blk[:120]:
+            continue
+        for e in re.findall(r"\{([^{}]*'dt':[^{}]*)\}", blk):
+            g = dict(re.findall(r"'(\w+)':'([^']*)'", e)); sk = re.findall(r"\d+", g.get("score", ""))
+            try:
+                tt = t8(g.get("dt"))
+                if tt and len(sk) >= 2:
+                    L.append((tt, float(g["p3"]), float(g["p1"]), float(g["p2"]), int(sk[0]), int(sk[1])))
+            except (KeyError, ValueError):
+                continue
+    L.sort()
+    _ou_cache[mid] = (time.time(), L)
+    return L
+
+
+def iddaa_sinyal(c, now):
+    """28.11 İ1: iddaa bir seçeneği Pinnacle adil oranının %55'inden ucuz veriyor (r < 0.55) -> iddaa bir şey biliyor.
+    Aynı anda Volkano hâlâ eski fiyatta mı (Volkano ≥ Pinnacle adil × 0.90)? Evet -> sanal Volkano kuponu. Her olay isin tablosuna (hazir=0/1).
+    Pazarlar: MS 1/X/2 ve MS Alt/Üst (.5 çizgiler). iddaa kaydı: test_tum (son 30 sn)."""
+    import pin_canli as PC
+    if not os.path.exists(TT):
+        return 0
+    with open(TT, "rb") as f:
+        f.seek(0, 2); son = f.tell()
+        if _tt_pos[0] is None or _tt_pos[0] > son:
+            _tt_pos[0] = max(0, son - 2_000_000)
+        f.seek(_tt_pos[0]); veri = f.read(); _tt_pos[0] = son
+    n = 0
+    for l in veri.decode("utf-8", "ignore").splitlines():
+        try:
+            x = json.loads(l)
+        except ValueError:
+            continue
+        if now - x.get("t", 0) > 30 or not x.get("mid") or not x.get("odd"):
+            continue
+        mid = int(x["mid"]); pz = VK_PZ.get(mid)
+        if not pz:
+            continue
+        g1, g2, st, nn, od = int(x["g1"]), int(x["g2"]), str(x["st"]), str(x["n"]), float(x["odd"])
+        try:
+            dk = float(x["dk"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        cz = None
+        if st == "4" and nn in ("1", "0", "X", "2"):
+            L = [r for r in PIN_SON.get(mid, []) if (r[4], r[5]) == (g1, g2) and now - r[0] <= 600]
+            if not L:
+                continue
+            k = {"1": 0, "0": 1, "X": 1, "2": 2}[nn]; iv = [1 / q for q in L[-1][1:4]]; p = iv[k] / sum(iv)
+            sec = ("MS 1", "MS X", "MS 2")[k]; vo = (((pz.get("1") or {}).get("") or {}).get(("1", "X", "2")[k]))
+        elif st == "14" and nn in ("Üst", "Alt") and x.get("sov") not in (None, "None", ""):
+            cz = float(x["sov"])
+            if cz <= g1 + g2 or abs(cz * 2 - round(cz * 2)) > 1e-9 or round(cz * 2) % 2 == 0:
+                continue
+            O = [o for o in _pin_ou(mid) if (o[4], o[5]) == (g1, g2) and now - o[0] <= 600]
+            if not O:
+                continue
+            o = O[-1]
+            try:
+                lam = PC._lam(o[1], g1 + g2, o[2], o[3]); pu = 1 / PC._ust_adil(cz, g1 + g2, lam)
+            except Exception:
+                continue
+            p = pu if nn == "Üst" else 1 - pu
+            sec = f"{nn} {cz:g}"; vo = (((pz.get("18") or {}).get(str(float(cz))) or {}).get("OVER" if nn == "Üst" else "UNDER"))
+        else:
+            continue
+        if not 0.03 <= p <= 0.97:
+            continue
+        r = od * p
+        if r >= 0.55 or dk > 88:
+            continue
+        adil = 1 / p
+        hazir = int(bool(vo) and 0.90 * adil <= vo <= 15)
+        a = c.execute("SELECT ta, tb FROM ad WHERE mid=?", (mid,)).fetchone() or ("?", "?")
+        try:
+            c.execute("INSERT INTO isin VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (mid, sec, cz if cz is not None else -1, g1, g2, int(now), f"{a[0]} - {a[1]}",
+                                                                           f"{dk:.0f}", od, round(adil, 2), vo, round(r, 3), hazir))
+            n += 1
+            log(f"İ1 {'SANAL KUPON' if hazir else 'gözlem'} {a[0]} - {a[1]} | {dk:.0f}' {g1}-{g2} | {sec} iddaa {od} · Pinnacle adil {adil:.2f} (r {r:.2f}) · Volkano {vo}")
+        except sqlite3.IntegrityError:
+            pass
+    return n
 
 
 def temalar(c, mid, a, TUM, v, now):
@@ -266,6 +370,10 @@ def calis():
         t0 = time.time()
         try:
             a, b, k = tur(c)
+            try:
+                k += iddaa_sinyal(c, int(time.time())); c.commit()
+            except Exception as ex:
+                log("İ1 hata", type(ex).__name__, str(ex)[:150])
             n += 1
             if n % 100 == 1:
                 log(f"7M canlı {a} · Volkano+Pinnacle eşleşen {b} · yeni sanal kupon {k}")
@@ -300,6 +408,20 @@ def rapor():
     for x in TM[-15:]:
         so = f"{x[3]}-{x[4]} {'✓' if kaz(x[1], x[3], x[4]) else '✗'}" if x[3] is not None else "bekliyor"
         print(f"    {datetime.fromtimestamp(x[9], TR):%d.%m %H:%M} {x[0]} {x[5][:30]:30s} {x[6]}' {x[7]}-{x[8]} MS {x[1]} vk {x[2]} pin {x[10]} | {so}")
+    I = c.execute("SELECT i.sec, i.cz, i.vk, s.h, s.a, i.mac, i.dk, i.g1, i.g2, i.t, i.idd, i.pin_adil, i.r, i.hazir FROM isin i LEFT JOIN sonuc s ON s.mid=i.mid ORDER BY i.t").fetchall()
+    def ik(sec, cz, h, a):
+        if sec.startswith("MS"):
+            return kaz(sec[-1], h, a)
+        return (h + a > cz) if sec.startswith("Üst") else (h + a < cz)
+    print("\nİ1 (iddaa Pinnacle'dan çok ucuz -> Volkano):")
+    for hz, ad in ((1, "Volkano hâlâ eski fiyatta (SANAL KUPON)"), (0, "Volkano zaten düşürmüş (gözlem)")):
+        L = [x for x in I if x[13] == hz]; Bt = [x for x in L if x[3] is not None]
+        w = sum(ik(x[0], x[1], x[3], x[4]) for x in Bt)
+        nt = sum(((x[2] - 1) * (1 - VERGI)) if ik(x[0], x[1], x[3], x[4]) else -1 for x in Bt if x[2]) if hz else 0
+        print(f"  {ad}: {len(L)} · biten {len(Bt)} · tutan {w}" + (f" · net {nt:+.2f} birim · ROI {100 * nt / len(Bt):+.1f}%" if hz and Bt else ""))
+    for x in I[-15:]:
+        so = f"{x[3]}-{x[4]} {'✓' if ik(x[0], x[1], x[3], x[4]) else '✗'}" if x[3] is not None else "bekliyor"
+        print(f"    {datetime.fromtimestamp(x[9], TR):%d.%m %H:%M} {'K' if x[13] else 'g'} {x[5][:28]:28s} {x[6]}' {x[7]}-{x[8]} {x[0]:8s} idd {x[10]} pin {x[11]} vk {x[2]} r {x[12]} | {so}")
     # kayıtlı seriden eşik taraması: (maç, seçenek, skor) başına eşiği ilk geçtiği an
     R = {r[0]: (r[1], r[2]) for r in c.execute("SELECT mid, h, a FROM sonuc")}
     Z = c.execute("SELECT t, mid, dk, g1, g2, p1, px, p2, v1, vx, v2, d1, dx, d2 FROM seri WHERE mid IN (SELECT mid FROM sonuc) ORDER BY mid, t").fetchall()
