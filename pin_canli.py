@@ -400,18 +400,60 @@ def _tara(E, baslik, nm):
                 print(f"  {kom[0][1]:12s} n={len(L):5d} tutan %{100 * wr:4.1f} Pinnacle %{100 * pr:4.1f} fark {100 * (wr - pr):+5.1f} ROI {100 * sum((e['o'] - 1) if e['w'] else -1 for e in L) / len(L):+6.1f}%")
 
 
+def _pmf(k, lam):
+    import math
+    return math.exp(-lam) * lam ** k / math.factorial(k) if k >= 0 else 0.0
+
+
+def _ge(k, lam):
+    return 1.0 if k <= 0 else max(0.0, 1.0 - sum(_pmf(i, lam) for i in range(k)))
+
+
+def _ust_adil(cz, gol, lam):
+    import math
+    P = [cz - 0.25, cz + 0.25] if round(cz * 4) % 4 in (1, 3) else [cz]
+    W = Q = 0.0
+    for l in P:
+        if abs(l - round(l)) < 1e-9:
+            k = int(round(l)) - gol
+            W += _ge(k + 1, lam); Q += _pmf(k, lam)
+        else:
+            W += _ge(math.floor(l) + 1 - gol, lam)
+    W, Q = W / len(P), Q / len(P)
+    return (1 - Q) / W if W > 1e-9 else 999.0
+
+
+def _lam(cz, gol, ust, alt):
+    """botla aynı: Pinnacle çizgi + Üst/Alt oranı -> kalan gol beklentisi (çeyrek çizgiler dahil)"""
+    hedef = ust * (1 / ust + 1 / alt)
+    lo, hi = 1e-4, 8.0
+    for _ in range(60):
+        mm = (lo + hi) / 2
+        if _ust_adil(cz, gol, mm) > hedef:
+            lo = mm
+        else:
+            hi = mm
+    return (lo + hi) / 2
+
+
 def tersine_ou():
-    """TERSİNE (GOL): Pinnacle canlı Üst oranı ardışık iki kayıtta (≤120 sn, aynı çizgi, aynı skor) ≥%5 düştü -> Üst tuttu mu?
-    Özellikler: dakika (ince), gerek gol, düşüş, Üst oranı, ard arda, ortak (SBOBET/Crown), son golden beri. Yalnız .5 çizgileri."""
+    """TERSİNE (GOL): Pinnacle canlı Alt/Üst'ünden kalan gol beklentisi λ (çizgi kayması + oran, çeyrek çizgiler dahil — botun yöntemi).
+    Olay = ardışık iki kayıt (≤120 sn, aynı skor) arasında λ en az %5 arttı (Pinnacle'a 'gol gelecek' parası).
+    Bahis: +1 gol (Üst g+0.5) ve +2 gol (Üst g+1.5); ihtimal Poisson(λ). ROI 'adil oran × 0.95' ile (%5 kâr payı, Volkano/Pinnacle seviyesi).
+    Özellikler: dakika (ince), λ artışı, ihtimal bandı, ard arda, ortak (SBOBET/Crown λ da arttı), son golden beri."""
+    import math
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=30)
     T = defaultdict(lambda: defaultdict(list))
     for mid, buro, t, cz, u, a, g1, g2, dk in c.execute("SELECT mid, buro, t, cz, ust, alt, g1, g2, dk FROM ou ORDER BY t"):
-        T[mid][buro].append((t, cz, u, a, g1, g2, dk))
+        try:
+            T[mid][buro].append((t, _lam(cz, g1 + g2, u, a), g1, g2, dk))
+        except Exception:
+            continue
     SON = _sonuclar_mid()
     print(f"Alt/Üst'lü maç {len(T)} · sonucu olan {len(set(T) & set(SON))}")
     b_ = lambda v, B: next((ad for a, b, ad in B if a <= v < b), None)
-    DUSB = [(0.05, 0.08, "düş5-8"), (0.08, 0.12, "düş8-12"), (0.12, 0.2, "düş12-20"), (0.2, 1, "düş20+")]
-    ORB = [(1, 1.5, "o<1.5"), (1.5, 1.9, "o1.5-1.9"), (1.9, 2.5, "o1.9-2.5"), (2.5, 4, "o2.5-4"), (4, 999, "o4+")]
+    ARB = [(0.05, 0.08, "λ+5-8%"), (0.08, 0.12, "λ+8-12%"), (0.12, 0.2, "λ+12-20%"), (0.2, 9, "λ+20%+")]
+    PB = [(0, 0.3, "p<30"), (0.3, 0.5, "p30-50"), (0.5, 0.7, "p50-70"), (0.7, 0.85, "p70-85"), (0.85, 1, "p85+")]
     E = []
     for mid, B in T.items():
         L = B.get("PIN")
@@ -420,31 +462,34 @@ def tersine_ou():
         top = sum(SON[mid]); gor = set()
         for j in range(1, len(L)):
             r0, r1 = L[j - 1], L[j]
-            if r0[1] != r1[1] or (r0[4], r0[5]) != (r1[4], r1[5]) or r1[0] - r0[0] > 120 or abs(r1[1] * 2 - round(r1[1] * 2)) > 1e-9 or round(r1[1] * 2) % 2 == 0:
+            if (r0[2], r0[3]) != (r1[2], r1[3]) or r1[0] - r0[0] > 120 or r0[1] <= 0.02:
                 continue
-            dus = 1 - r1[2] / r0[2]
-            db_ = b_(dus, DUSB)
+            art = r1[1] / r0[1] - 1
+            ab = b_(art, ARB)
             try:
-                dk = int(re.findall(r"\d+", str(r1[6]))[0])
+                dk = int(re.findall(r"\d+", str(r1[4]))[0])
             except (IndexError, ValueError):
                 continue
-            g = r1[4] + r1[5]; ger = round(r1[1] + 0.5 - g)
-            if not db_ or ger < 1 or (r1[1], g, db_) in gor:
+            g = r1[2] + r1[3]
+            if not ab or (g, ab) in gor:
                 continue
-            gor.add((r1[1], g, db_))
-            p = (1 / r1[2]) / (1 / r1[2] + 1 / r1[3])
-            onc = [r for r in L[max(0, j - 40):j - 1] if r1[0] - 300 <= r[0] < r0[0] and r[1] == r1[1] and (r[4], r[5]) == (r1[4], r1[5])]
-            ard = "ard arda" if onc and r0[2] < 0.97 * max(r[2] for r in onc) else "ilk düşüş"
+            gor.add((g, ab))
+            lam = r1[1]
+            onc = [r for r in L[max(0, j - 40):j - 1] if r1[0] - 300 <= r[0] < r0[0] and (r[2], r[3]) == (r1[2], r1[3])]
+            ard = "ard arda" if onc and r0[1] > 1.03 * min(r[1] for r in onc) else "ilk artış"
             ort = 0
             for bb in ("SBO", "CRO"):
-                Y = [y for y in B.get(bb, []) if y[1] == r1[1] and (y[4], y[5]) == (r1[4], r1[5]) and r1[0] - 90 <= y[0] <= r1[0] + 60]
-                if len(Y) >= 2 and min(y[2] for y in Y[1:]) <= 0.95 * Y[0][2]:
+                Y = [y for y in B.get(bb, []) if (y[2], y[3]) == (r1[2], r1[3]) and r1[0] - 90 <= y[0] <= r1[0] + 60]
+                if len(Y) >= 2 and max(y[1] for y in Y[1:]) >= 1.05 * Y[0][1]:
                     ort += 1
-            gol_t = next((r[0] for r in L if (r[4], r[5]) == (r1[4], r1[5])), r1[0]); sg = r1[0] - gol_t
-            E.append({"t": r1[0], "w": top > r1[1], "p": p, "o": r1[2], "f": {
-                "dk": b_(dk, DKB_INCE) or "85'+", "gerek": f"+{min(ger, 3)}{'+' if ger >= 3 else ''} gol", "düş": db_, "oran": b_(r1[2], ORB) or "o4+",
-                "ard": ard, "ortak": "ortak düşüş" if ort else "tek Pinnacle", "gol": "golden <5dk" if sg < 300 else "golden 5-15dk" if sg < 900 else "golden 15dk+"}})
-    _tara(E, "KAZANDIRAN ÜST DÜŞÜŞLERİ", int(os.environ.get("N_MIN", 60)))
+            gol_t = next((r[0] for r in L if (r[2], r[3]) == (r1[2], r1[3])), r1[0]); sg = r1[0] - gol_t
+            for ger, p in ((1, 1 - math.exp(-lam)), (2, 1 - math.exp(-lam) * (1 + lam))):
+                if not 0.03 <= p <= 0.97:
+                    continue
+                E.append({"t": r1[0], "w": top >= g + ger, "p": p, "o": 0.95 / p, "f": {
+                    "dk": b_(dk, DKB_INCE) or "85'+", "gerek": f"+{ger} gol", "düş": ab, "ihtimal": b_(p, PB) or "p85+",
+                    "ard": ard, "ortak": "ortak artış" if ort else "tek Pinnacle", "gol": "golden <5dk" if sg < 300 else "golden 5-15dk" if sg < 900 else "golden 15dk+"}})
+    _tara(E, "KAZANDIRAN GOL PARASI (Pinnacle λ artışı) — ROI adil×0.95 oranla", int(os.environ.get("N_MIN", 60)))
 
 
 def tersine():
