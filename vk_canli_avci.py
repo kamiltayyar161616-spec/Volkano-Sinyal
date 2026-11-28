@@ -40,6 +40,8 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS kupon (mid INTEGER, sec TEXT, g1 INTEGER, g2 INTEGER, t INTEGER, mac TEXT, lig TEXT, dk TEXT,
                  pin REAL, p REAL, dus REAL, vk REAL, deger REAL, h INTEGER, a INTEGER, PRIMARY KEY (mid, sec, g1, g2))""")
     c.execute("CREATE TABLE IF NOT EXISTS sonuc (mid INTEGER PRIMARY KEY, h INTEGER, a INTEGER, at INTEGER)")
+    c.execute("""CREATE TABLE IF NOT EXISTS tema (mid INTEGER, sec TEXT, g1 INTEGER, g2 INTEGER, tm TEXT, t INTEGER, mac TEXT, lig TEXT, dk TEXT,
+                 pin REAL, p REAL, dus REAL, vk REAL, PRIMARY KEY (mid, sec, g1, g2, tm))""")
     return c
 
 
@@ -83,8 +85,11 @@ def adlar(c, mid):
     return None
 
 
+ACILIS = {}            # mid -> Pinnacle maç önü ilk kayıt (p1, px, p2)
+
+
 def pin_seri(mid):
-    """Pinnacle canlı 1X2 kayıtları [(t, p1, px, p2, g1, g2, dk)] eskiden yeniye"""
+    """Pinnacle canlı 1X2 kayıtları [(t, p1, px, p2, g1, g2, dk)] eskiden yeniye (açılış ACILIS'e)"""
     try:
         b = S.get(HDA.format(mid, int(time.time() * 1000)), timeout=12).text
     except Exception:
@@ -103,6 +108,8 @@ def pin_seri(mid):
             t = t8(g.get("dt"))
             if t and len(sk) >= 2 and min(p) > 1:
                 L.append((t, *p, int(sk[0]), int(sk[1]), g.get("htime", "")))
+            elif t and not sk and min(p) > 1 and (mid not in ACILIS or t < ACILIS[mid][0]):
+                ACILIS[mid] = (t, *p)
         return sorted(L)
     return []
 
@@ -139,9 +146,9 @@ def tur(c):
         v = vk_ms(mid, a[0], a[1], x["ko"])
         if not v:
             continue
-        L = pin_seri(mid)
+        TUM = pin_seri(mid)
         sk = (x["ev"], x["dep"])
-        L = [r for r in L if (r[4], r[5]) == sk]
+        L = [r for r in TUM if (r[4], r[5]) == sk]
         if not L or now - L[-1][0] > PIN_TAZE:
             continue
         n_es += 1
@@ -173,9 +180,63 @@ def tur(c):
                     log(f"SANAL KUPON {a[0]} - {a[1]} | {cur[6]}' {sk[0]}-{sk[1]} | MS {SEC[k]} Volkano {vo} · Pinnacle {cur[1 + k]} (düşüş %{100 * dus[k]:.0f}, {now - cur[0]} sn önce) · Volkano önce {ve} · değer x{d[k]:.3f}")
                 except sqlite3.IntegrityError:
                     pass
+        n_k += temalar(c, mid, a, TUM, v, now)
         time.sleep(0.3)
     c.commit()
     return len(P), n_es, n_k
+
+
+SON_ISLENEN = {}       # mid -> işlenen son Pinnacle kayıt zamanı
+
+
+def temalar(c, mid, a, TUM, v, now):
+    """28.11 tersine mühendislik temaları (Pinnacle'ın kendi oranıyla iki dönemde de +). Olay = ardışık iki Pinnacle kaydı (≤120 sn, aynı skor),
+    bir seçenek ≥%5 düştü. T1: 20-45', skor eşit, son golden 15 dk+, düşüş sonrası Pinnacle oranı 3.5-6 (her seçenek)
+    T2: açılışta orta (Pinnacle maç önü %28-45) MS 1, 20-45'   T3: ≥%30 düşüş, MS 1 (≤85').  Volkano oranı ≥ Pinnacle'ın %98'i şart."""
+    n = 0
+    son = SON_ISLENEN.get(mid, 0)
+    for j in range(1, len(TUM)):
+        r0, r1 = TUM[j - 1], TUM[j]
+        if r1[0] <= son or now - r1[0] > 90:
+            continue
+        if (r0[4], r0[5]) != (r1[4], r1[5]) or r1[0] - r0[0] > 120:
+            continue
+        try:
+            dk = int(re.findall(r"\d+", str(r1[6]))[0])
+        except (IndexError, ValueError):
+            continue
+        g1, g2 = r1[4], r1[5]
+        gol_t = next((r[0] for r in TUM if (r[4], r[5]) == (g1, g2)), r1[0])
+        ac = ACILIS.get(mid)
+        for k in range(3):
+            dus = 1 - r1[1 + k] / r0[1 + k]
+            if dus < 0.05:
+                continue
+            po = None
+            if ac:
+                iv = [1 / q for q in ac[1:4]]; po = iv[k] / sum(iv)
+            T = []
+            if 20 <= dk < 46 and g1 == g2 and r1[0] - gol_t >= 900 and 3.5 <= r1[1 + k] < 6:
+                T.append("T1")
+            if k == 0 and 20 <= dk < 46 and po is not None and 0.28 <= po < 0.45:
+                T.append("T2")
+            if k == 0 and dus >= 0.30 and dk <= DK_MAX:
+                T.append("T3")
+            vo = v[k]
+            if not T or not vo or vo < 0.98 * r1[1 + k] or vo > 1.6 * r1[1 + k] or not (1.30 <= vo <= VK_MAX):
+                continue
+            iv = [1 / q for q in r1[1:4]]; p = iv[k] / sum(iv)
+            for tm in T:
+                try:
+                    c.execute("INSERT INTO tema VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (mid, SEC[k], g1, g2, tm, now, f"{a[0]} - {a[1]}", a[2], str(dk),
+                                                                                   r1[1 + k], round(p, 4), round(dus, 3), vo))
+                    n += 1
+                    log(f"SANAL {tm} {a[0]} - {a[1]} | {dk}' {g1}-{g2} | MS {SEC[k]} Volkano {vo} · Pinnacle {r0[1 + k]}→{r1[1 + k]} (%{100 * dus:.0f}, {now - r1[0]} sn önce)")
+                except sqlite3.IntegrityError:
+                    pass
+    if TUM:
+        SON_ISLENEN[mid] = max(son, TUM[-1][0])
+    return n
 
 
 def sonuc_doldur(c):
@@ -230,6 +291,15 @@ def rapor():
     for k in K[-25:]:
         so = f"{k[13]}-{k[14]} {'✓' if kaz(k[1], k[13], k[14]) else '✗'}" if k[13] is not None else "bekliyor"
         print(f"  {datetime.fromtimestamp(k[4], TR):%d.%m %H:%M} {k[5][:34]:34s} {k[7]}' {k[2]}-{k[3]} MS {k[1]} vk {k[11]} pin {k[8]} düş %{100 * k[10]:.0f} x{k[12]:.2f} | {so}")
+    TM = c.execute("SELECT t.tm, t.sec, t.vk, s.h, s.a, t.mac, t.dk, t.g1, t.g2, t.t, t.pin FROM tema t LEFT JOIN sonuc s ON s.mid=t.mid ORDER BY t.t").fetchall()
+    print("\nTEMALAR (tersine mühendislik):")
+    for tm in ("T1", "T2", "T3"):
+        L = [x for x in TM if x[0] == tm]; Bt = [x for x in L if x[3] is not None]
+        nt = sum(((x[2] - 1) * (1 - VERGI)) if kaz(x[1], x[3], x[4]) else -1 for x in Bt)
+        print(f"  {tm}: {len(L)} sanal kupon · biten {len(Bt)} · tutan {sum(kaz(x[1], x[3], x[4]) for x in Bt)} · net {nt:+.2f} birim" + (f" · ROI {100 * nt / len(Bt):+.1f}%" if Bt else ""))
+    for x in TM[-15:]:
+        so = f"{x[3]}-{x[4]} {'✓' if kaz(x[1], x[3], x[4]) else '✗'}" if x[3] is not None else "bekliyor"
+        print(f"    {datetime.fromtimestamp(x[9], TR):%d.%m %H:%M} {x[0]} {x[5][:30]:30s} {x[6]}' {x[7]}-{x[8]} MS {x[1]} vk {x[2]} pin {x[10]} | {so}")
     # kayıtlı seriden eşik taraması: (maç, seçenek, skor) başına eşiği ilk geçtiği an
     R = {r[0]: (r[1], r[2]) for r in c.execute("SELECT mid, h, a FROM sonuc")}
     Z = c.execute("SELECT t, mid, dk, g1, g2, p1, px, p2, v1, vx, v2, d1, dx, d2 FROM seri WHERE mid IN (SELECT mid FROM sonuc) ORDER BY mid, t").fetchall()
