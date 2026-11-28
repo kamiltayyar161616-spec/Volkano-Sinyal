@@ -239,7 +239,7 @@ def avci(buro="PIN"):
                     db_ = bant(dus, DB_)
                     if not db_:
                         continue
-                    key = (iid, k, g1, g2)
+                    key = (iid, k, g1, g2, db_)            # her düşüş bandı kendi ilk anında
                     if key in gor:
                         continue
                     x = next((x for x in Y if t <= x["t"] <= t + 120 and (x["g1"], x["g2"]) == (g1, g2)), None)
