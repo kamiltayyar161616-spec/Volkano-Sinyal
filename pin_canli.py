@@ -308,8 +308,121 @@ def gecikme(buro="PIN"):
     print("  not: eksi/0'a yakın = iddaa, 7M'nin Pinnacle kaydından önce/aynı anda tepki vermiş (7M gecikmesi)")
 
 
+def tersine():
+    """TERSİNE MÜHENDİSLİK: kazandıran Pinnacle düşüşleri hangileri?
+    Olay = Pinnacle canlı 1X2'de ardışık iki kayıt arasında (≤120 sn, skor aynı) bir seçeneğin oranı ≥%5 düştü.
+    Her olayın özellikleri (yalnız o ana kadar bilinenler): seçenek, düşüş büyüklüğü, dakika, seçeneğe göre skor durumu, düşüş sonrası oran,
+    önceki 5 dk'da da düşmüş mü (ard arda), SBOBET/Crown da ±60 sn içinde düşmüş mü (ortak), açılışta favori mi, son golden beri geçen süre.
+    Sonuç: seçenek maç sonunda tuttu mu. Ölçü: tutan % − Pinnacle'ın düşüş sonrası ihtimali (avantaj) ve Pinnacle'ın KENDİ oranıyla ROI.
+    Pinnacle'ın kendi oranıyla bile kârlıysa daha yüksek oran veren her büroda (Volkano) kârlıdır. 1-3 özellik birleşimi, iki dönemde de + olanlar."""
+    import itertools
+    import canli_madenci as CM
+    c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=30)
+    T = defaultdict(lambda: defaultdict(list))
+    for mid, buro, t, p1, p2, p3, g1, g2, dk in c.execute("SELECT mid, buro, t, p1, p2, p3, g1, g2, dk FROM h ORDER BY t"):
+        T[mid][buro].append((t, p1, p2, p3, g1, g2, dk))
+    K = {}
+    for l in open(F, errors="ignore"):
+        try:
+            x = json.loads(l)
+        except ValueError:
+            continue
+        if x.get("mid") and x.get("iid"):
+            k = K.get(x["iid"])
+            K[x["iid"]] = (int(x["mid"]), min(x["t"], k[1]) if k else x["t"], max(int(x["g1"]), k[2] if k else 0), max(int(x["g2"]), k[3] if k else 0))
+    S = CM.sonuclar(K)
+    SON = {}
+    for iid, (mid, *_r) in K.items():
+        if S.get(iid) and S[iid][0] is not None:
+            SON[mid] = S[iid][:2]
+    print(f"Pinnacle'lı maç {sum(1 for m in T if T[m].get('PIN'))} · sonucu olan {len(SON)}")
+    b_ = lambda v, B: next((ad for a, b, ad in B if a <= v < b), None)
+    DUSB = [(0.05, 0.08, "düş5-8"), (0.08, 0.12, "düş8-12"), (0.12, 0.2, "düş12-20"), (0.2, 0.3, "düş20-30"), (0.3, 1, "düş30+")]
+    DKB = [(0, 20, "0-20'"), (20, 46, "20-45'"), (46, 61, "46-60'"), (61, 76, "61-75'"), (76, 200, "76'+")]
+    ORB = [(1, 1.5, "o<1.5"), (1.5, 2.2, "o1.5-2.2"), (2.2, 3.5, "o2.2-3.5"), (3.5, 6, "o3.5-6"), (6, 999, "o6+")]
+    E = []
+    for mid, B in T.items():
+        L = B.get("PIN")
+        if not L or mid not in SON:
+            continue
+        h, a = SON[mid]
+        ac = next((r for r in L if r[4] is None), None)
+        canli = [r for r in L if r[4] is not None]
+        gor = set()
+        for j in range(1, len(canli)):
+            r0, r1 = canli[j - 1], canli[j]
+            if (r0[4], r0[5]) != (r1[4], r1[5]) or r1[0] - r0[0] > 120:
+                continue
+            try:
+                dk = int(re.findall(r"\d+", str(r1[6]))[0])
+            except (IndexError, ValueError):
+                continue
+            g1, g2 = r1[4], r1[5]
+            gol_t = next((r[0] for r in canli if (r[4], r[5]) == (g1, g2)), r1[0])
+            for k in range(3):
+                dus = 1 - r1[1 + k] / r0[1 + k]
+                db_ = b_(dus, DUSB)
+                if not db_ or (k, g1, g2, db_) in gor:
+                    continue
+                gor.add((k, g1, g2, db_))
+                iv = [1 / v for v in r1[1:4]]; p = iv[k] / sum(iv)
+                w = (h > a) if k == 0 else (h == a) if k == 1 else (a > h)
+                fark = (g1 - g2) if k == 0 else (g2 - g1) if k == 2 else abs(g1 - g2)
+                durum = (("önde" if fark > 0 else "geride" if fark < 0 else "berabere") if k != 1 else ("berabere" if fark == 0 else f"fark{min(fark, 2)}"))
+                onc = [r for r in canli[max(0, j - 40):j - 1] if r1[0] - 300 <= r[0] < r0[0] and (r[4], r[5]) == (g1, g2)]
+                ard = "ard arda" if onc and r0[1 + k] < 0.97 * max(r[1 + k] for r in onc) else "ilk düşüş"
+                ort = 0
+                for bb in ("SBO", "CRO"):
+                    Y = [y for y in B.get(bb, []) if y[4] == g1 and y[5] == g2 and r1[0] - 90 <= y[0] <= r1[0] + 60]
+                    if len(Y) >= 2 and min(y[1 + k] for y in Y[1:]) <= 0.95 * Y[0][1 + k]:
+                        ort += 1
+                fav = "açılış ?"
+                if ac:
+                    ivo = [1 / v for v in ac[1:4]]; po = ivo[k] / sum(ivo)
+                    fav = "açılış favori" if po >= 0.45 else "açılış orta" if po >= 0.28 else "açılış sürpriz"
+                sg = r1[0] - gol_t
+                E.append({"t": r1[0], "w": w, "p": p, "o": r1[1 + k], "f": {
+                    "seç": ("MS 1", "MS X", "MS 2")[k], "düş": db_, "dk": b_(dk, DKB) or "76'+", "durum": durum, "oran": b_(r1[1 + k], ORB) or "o6+",
+                    "ard": ard, "ortak": "ortak düşüş" if ort else "tek Pinnacle", "açılış": fav,
+                    "gol": "golden <5dk" if sg < 300 else "golden 5-15dk" if sg < 900 else "golden 15dk+"}})
+    E.sort(key=lambda e: e["t"])
+    kes = E[int(len(E) * 0.6)]["t"] if E else 0
+    print(f"düşüş olayı {len(E)}")
+    C = defaultdict(lambda: [[], []])
+    for e in E:
+        it = sorted(e["f"].items()); d = int(e["t"] >= kes)
+        for r in (1, 2, 3):
+            for kom in itertools.combinations(it, r):
+                C[kom][d].append(e)
+    nm = int(os.environ.get("N_MIN", 60))
+    R = []
+    for kom, (A, B) in C.items():
+        if len(A) < nm * 0.6 or len(B) < nm * 0.3:
+            continue
+        st = []
+        for L in (A, B):
+            wr = sum(e["w"] for e in L) / len(L); pr = sum(e["p"] for e in L) / len(L)
+            roi = sum((e["o"] - 1) if e["w"] else -1 for e in L) / len(L)
+            st.append((len(L), wr, pr, roi))
+        if all(x[1] - x[2] > 0 and x[3] > 0 for x in st):
+            R.append((min(x[3] for x in st), kom, st))
+    R.sort(key=lambda z: -z[0])
+    fm = lambda x: f"n={x[0]:4d} %{100 * x[1]:3.0f}/p%{100 * x[2]:3.0f} ROI(Pinnacle oranı) {100 * x[3]:+6.1f}%"
+    print(f"\n==== KAZANDIRAN DÜŞÜŞLER — iki dönemde de Pinnacle'ın KENDİ oranıyla + ({len(R)}) · öğrenme | sınama")
+    for _, kom, st in R[:40]:
+        print(f"  {' · '.join(v for _, v in kom):58s} {fm(st[0])} | {fm(st[1])}")
+    print("\n==== tek özellik özeti (hepsi)")
+    for kom in sorted(k for k in C if len(k) == 1):
+        L = C[kom][0] + C[kom][1]
+        if len(L) >= 100:
+            wr = sum(e["w"] for e in L) / len(L); pr = sum(e["p"] for e in L) / len(L)
+            print(f"  {kom[0][1]:16s} n={len(L):5d} tutan %{100 * wr:4.1f} Pinnacle %{100 * pr:4.1f} fark {100 * (wr - pr):+5.1f} ROI {100 * sum((e['o'] - 1) if e['w'] else -1 for e in L) / len(L):+6.1f}%")
+
+
 if __name__ == "__main__":
     ne = sys.argv[1] if len(sys.argv) > 1 else "test"
+    if ne == "tersine":
+        tersine(); sys.exit()
     if ne == "gecikme":
         gecikme(); sys.exit()
     b = sys.argv[2] if len(sys.argv) > 2 else "PIN"
