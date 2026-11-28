@@ -265,7 +265,52 @@ def avci(buro="PIN"):
             print(f"  {' · '.join(kk):28s} n={len(L):4d} tutan %{100 * sum(w for _, w, _ in L) / len(L):3.0f} Pinnacle %{100 * sum(p for *_, p in L) / len(L):3.0f} ROI {100 * net / len(L):+6.1f}%")
 
 
+def gecikme(buro="PIN"):
+    """Pinnacle tek seferde (bir güncellemede) en az %8 düştüğünde iddaa aynı seçenekte kaç sn sonra oranı düşürüyor?
+    7M kayıt zamanı = Pinnacle değişim anı (7M'nin yazdığı). iddaa = test_tum kayıt anı. Skor aynı, gol yok."""
+    import canli_madenci as CM
+    H, _ = pin_yukle(buro)
+    X = CM.hazirla(lambda d: d)
+    I = defaultdict(list)
+    for x in X:
+        if x["pazar"] == "MS 1X2" and x["n"] in SEC and x.get("mid") and int(x["mid"]) in H:
+            I[(int(x["mid"]), SEC[x["n"]])].append(x)
+    for L in I.values():
+        L.sort(key=lambda x: x["t"])
+    G, tepkisiz = [], 0
+    for (mid, k), Y in I.items():
+        L = H[mid]
+        for j in range(1, len(L)):
+            a, b = L[j - 1], L[j]
+            if (a[4], a[5]) != (b[4], b[5]) or b[0] - a[0] > 120:
+                continue
+            dus = 1 - b[1 + k] / a[1 + k]
+            if dus < 0.08:
+                continue
+            once = [y for y in Y if b[0] - 300 <= y["t"] < b[0] and (y["g1"], y["g2"]) == (b[4], b[5])]
+            sonra = [y for y in Y if b[0] <= y["t"] <= b[0] + 600 and (y["g1"], y["g2"]) == (b[4], b[5])]
+            if not once or not sonra:
+                continue
+            ref = once[-1]["odd"]
+            tep = next((y for y in sonra if y["odd"] <= ref * (1 - dus / 2)), None)
+            if tep is None:
+                tepkisiz += 1
+            else:
+                G.append(tep["t"] - b[0])
+    G.sort()
+    if not G:
+        return print("ölçülecek düşüş yok")
+    q = lambda f: G[min(len(G) - 1, int(len(G) * f))]
+    print(f"Pinnacle tek güncellemede ≥%8 düşüş (aynı skor) ve iddaa'nın tepkisi: {len(G)} ölçüm · 10 dk içinde tepki vermeyen {tepkisiz}")
+    print(f"  iddaa gecikmesi (sn, 7M kayıt zamanına göre): en hızlı %10 {q(.1)} · %25 {q(.25)} · ortanca {q(.5)} · %75 {q(.75)} · %90 {q(.9)}")
+    for a, b in ((0, 10), (10, 20), (20, 30), (30, 60), (60, 120), (120, 600)):
+        print(f"  {a:3d}-{b:3d} sn: {sum(a <= g < b for g in G)}")
+    print("  not: eksi/0'a yakın = iddaa, 7M'nin Pinnacle kaydından önce/aynı anda tepki vermiş (7M gecikmesi)")
+
+
 if __name__ == "__main__":
     ne = sys.argv[1] if len(sys.argv) > 1 else "test"
+    if ne == "gecikme":
+        gecikme(); sys.exit()
     b = sys.argv[2] if len(sys.argv) > 2 else "PIN"
     indir() if ne == "indir" else avci(b) if ne == "avci" else test(b)
