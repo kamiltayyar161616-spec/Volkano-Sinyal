@@ -520,10 +520,26 @@ def tersine():
                     ivo = [1 / v for v in ac[1:4]]; po = ivo[k] / sum(ivo)
                     fav = "açılış favori" if po >= 0.45 else "açılış orta" if po >= 0.28 else "açılış sürpriz"
                 sg = r1[0] - gol_t
-                E.append({"t": r1[0], "w": w, "p": p, "o": r1[1 + k], "f": {
+                E.append({"t": r1[0], "w": w, "p": p, "o": r1[1 + k], "mid": mid, "k": k, "sk": (g1, g2), "f": {
                     "seç": ("MS 1", "MS X", "MS 2")[k], "düş": db_, "dk": b_(dk, DKB) or "76'+", "durum": durum, "oran": b_(r1[1 + k], ORB) or "o6+",
                     "ard": ard, "ortak": "ortak düşüş" if ort else "tek Pinnacle", "açılış": fav,
                     "gol": "golden <5dk" if sg < 300 else "golden 5-15dk" if sg < 900 else "golden 15dk+"}})
+    if os.environ.get("ORAN") == "iddaa":                  # iddaa canlı MS oranıyla: düşüşten sonraki 60 sn içindeki ilk iddaa kaydı
+        X = CM.hazirla(lambda d: d)
+        I = defaultdict(list)
+        for x in X:
+            if x["pazar"] == "MS 1X2" and x["n"] in SEC and x.get("mid"):
+                I[(int(x["mid"]), SEC[x["n"]])].append(x)
+        for L_ in I.values():
+            L_.sort(key=lambda x: x["t"])
+        E2 = []
+        for e in E:
+            Y = I.get((e["mid"], e["k"])) or []
+            x = next((x for x in Y if e["t"] <= x["t"] <= e["t"] + 60 and (x["g1"], x["g2"]) == e["sk"]), None)
+            if x and 1.2 <= x["odd"] <= 30:
+                e["o"] = x["odd"]; E2.append(e)
+        print(f"iddaa oranı bulunan düşüş: {len(E2)} / {len(E)}")
+        E = E2
     E.sort(key=lambda e: e["t"])
     kes = E[int(len(E) * 0.6)]["t"] if E else 0
     print(f"düşüş olayı {len(E)}")
@@ -546,8 +562,9 @@ def tersine():
         if all(x[1] - x[2] > 0 and x[3] > 0 for x in st):
             R.append((min(x[3] for x in st), kom, st))
     R.sort(key=lambda z: -z[0])
-    fm = lambda x: f"n={x[0]:4d} %{100 * x[1]:3.0f}/p%{100 * x[2]:3.0f} ROI(Pinnacle oranı) {100 * x[3]:+6.1f}%"
-    print(f"\n==== KAZANDIRAN DÜŞÜŞLER — iki dönemde de Pinnacle'ın KENDİ oranıyla + ({len(R)}) · öğrenme | sınama")
+    on = "iddaa" if os.environ.get("ORAN") == "iddaa" else "Pinnacle"
+    fm = lambda x: f"n={x[0]:4d} %{100 * x[1]:3.0f}/p%{100 * x[2]:3.0f} ROI({on}) {100 * x[3]:+6.1f}%"
+    print(f"\n==== KAZANDIRAN DÜŞÜŞLER — iki dönemde de {on} oranıyla + ({len(R)}) · öğrenme | sınama")
     for _, kom, st in R[:40]:
         print(f"  {' · '.join(v for _, v in kom):58s} {fm(st[0])} | {fm(st[1])}")
     print("\n==== tek özellik özeti (hepsi)")
