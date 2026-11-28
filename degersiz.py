@@ -5,6 +5,8 @@ Tutuyorsa aynı seçenek Pinnacle seviyesinde oran veren bir büroda (Volkano) o
   canli  : şu an oynanan maçlarda iddaa'nın en değersiz 30 oranı (test_tum son 2 dk + 7M canlı Pinnacle)
 Çalıştır: cd /root/Volkano-Sinyal && python3 degersiz.py canli   |   python3 degersiz.py gecmis"""
 import itertools, json, math, os, re, sys, time
+from datetime import datetime, timedelta, timezone
+TR = timezone(timedelta(hours=3))
 from collections import defaultdict
 import requests
 import pin_canli as PC
@@ -125,7 +127,7 @@ def canli():
             if k not in son or x["t"] > son[k]["t"]:
                 son[k] = x
     if not son:
-        return print(f"test_tum son 2.5 dk'da kayıt yok (dosya en son {time.strftime('%H:%M', time.localtime(os.path.getmtime(F)))} güncellenmiş) — test kaydı çalışmıyor olabilir")
+        return print(f"test_tum son 2.5 dk'da kayıt yok (dosya en son {datetime.fromtimestamp(os.path.getmtime(F), TR).strftime('%d.%m %H:%M')} güncellenmiş) — test kaydı çalışmıyor olabilir")
     mids = {int(x["mid"]) for x in son.values()}
     print(f"son 2.5 dk iddaa kaydı {len(son)} · maç {len(mids)}")
     PH, PO, AD = {}, {}, {}
@@ -173,7 +175,7 @@ def canli():
         if 0.03 <= p <= 0.97:
             out.append((od * p, AD.get(m, m), x["dk"], f"{g1}-{g2}", ad, od, 1 / p, po))
     out.sort()
-    print(f"\nŞU AN EN DEĞERSİZ iddaa ORANLARI (r = iddaa × Pinnacle ihtimali; normal ~0.80) — {time.strftime('%H:%M')}")
+    print(f"\nŞU AN EN DEĞERSİZ iddaa ORANLARI (r = iddaa × Pinnacle ihtimali; normal ~0.80) — {datetime.now(TR):%H:%M}")
     for r, mac, dk, sk, ad, od, adil, po in out[:30]:
         print(f"  r {r:.2f} · {str(mac)[:38]:38s} {float(dk):.0f}' {sk} · {ad:9s} iddaa {od:.2f} · Pinnacle adil {adil:.2f}" + (f" (Pinnacle {po})" if po else ""))
 
