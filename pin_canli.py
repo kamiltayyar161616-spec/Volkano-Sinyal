@@ -3,7 +3,8 @@
   test  : iddaa canlı MS oranı (test_tum) × Pinnacle'ın AYNI ANDAKİ gerçek marjsız ihtimali = değer
           A) skor × dakika × değer bandı × seçenek   B) devre arası skoru (İY/MS)   C) Pinnacle açılış oranı × canlı skor
           Bot gibi: her (maç, seçenek, skor, bant) ilk an, tek kupon, 1 birim. Öğrenme %60 / sınama %40, ikisi de + olanlar.
-Çalıştır: cd /root/Volkano-Sinyal && python3 pin_canli.py indir && python3 pin_canli.py test"""
+  avci  : canlı Avcı — Pinnacle düşüşü anında iddaa (aşağıda)
+Çalıştır: cd /root/Volkano-Sinyal && python3 pin_canli.py indir && python3 pin_canli.py avci"""
 import json, os, re, sqlite3, sys, time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -202,6 +203,68 @@ def test(buro="PIN"):
     yaz("C) PINNACLE AÇILIŞ EV ORANI × CANLI SKOR × SEÇENEK", C)
 
 
+def avci(buro="PIN"):
+    """CANLI AVCI: Pinnacle canlı 1X2'de skor değişmeden belirgin oran düşüşü olduğu an iddaa o seçenekte hâlâ eski/yüksek oranı veriyor mu?
+    Düşüş = son 5 dk içinde (aynı skor) Pinnacle oranı en az D% indi. Düşüşten sonraki 120 sn içindeki ilk iddaa kaydı oynanır (maç+seçenek+skor başına bir kez).
+    Bantlar: düşüş %, iddaa değeri (iddaa × Pinnacle yeni ihtimal), iddaa'nın kendi oranı düşüşten önceye göre ne kadar oynamış."""
+    import canli_madenci as CM
+    H, _ = pin_yukle(buro)
+    X = CM.hazirla(lambda d: d)
+    I = defaultdict(list)                                   # (iid, seçenek) -> iddaa kayıtları zamana göre
+    for x in X:
+        if x["pazar"] == "MS 1X2" and x["n"] in SEC and x.get("mid") and int(x["mid"]) in H:
+            I[(x["iid"], SEC[x["n"]])].append(x)
+    for L in I.values():
+        L.sort(key=lambda x: x["t"])
+    T = sorted(x["t"] for L in I.values() for x in L)
+    kes = T[int(len(T) * 0.6)] if T else 0
+    mid_iid = {}
+    for (iid, k), L in I.items():
+        mid_iid.setdefault(int(L[0]["mid"]), set()).add(iid)
+    DB_ = [(0.05, 0.10, "düşüş 5-10%"), (0.10, 0.15, "düşüş 10-15%"), (0.15, 0.25, "düşüş 15-25%"), (0.25, 1, "düşüş 25%+")]
+    VB = [(0, 0.95, "d<0.95"), (0.95, 1.0, "d0.95-1.00"), (1.0, 1.05, "d1.00-1.05"), (1.05, 1.15, "d1.05-1.15"), (1.15, 1.6, "d1.15+")]
+    C, gor, n_dus = defaultdict(lambda: ([], [])), set(), 0
+    for mid, L in H.items():
+        for iid in mid_iid.get(mid, ()):
+            for k in range(3):
+                Y = I.get((iid, k))
+                if not Y:
+                    continue
+                for j, (t, *o, g1, g2) in enumerate(L):
+                    once = [z for z in L[max(0, j - 60):j] if t - 300 <= z[0] < t and (z[4], z[5]) == (g1, g2)]
+                    if not once:
+                        continue
+                    eski = max(z[1 + k] for z in once)
+                    dus = 1 - o[k] / eski
+                    db_ = bant(dus, DB_)
+                    if not db_:
+                        continue
+                    key = (iid, k, g1, g2)
+                    if key in gor:
+                        continue
+                    x = next((x for x in Y if t <= x["t"] <= t + 120 and (x["g1"], x["g2"]) == (g1, g2)), None)
+                    if not x:
+                        continue
+                    gor.add(key); n_dus += 1
+                    iv = [1 / v for v in o]; p = iv[k] / sum(iv); r = x["odd"] * p
+                    onc = [y for y in Y if t - 300 <= y["t"] < t and (y["g1"], y["g2"]) == (g1, g2)]
+                    io_hareket = "iddaa sabit" if onc and x["odd"] >= 0.97 * max(y["odd"] for y in onc) else "iddaa da düştü" if onc else "iddaa önce yok"
+                    it = (x["odd"], bool(x["w"]), p); d = int(x["t"] >= kes)
+                    sec = ("MS 1", "MS X", "MS 2")[k]
+                    for kk in ((db_,), (db_, bant(r, VB) or "?"), (db_, io_hareket), (sec, db_), (db_, bant(r, VB) or "?", io_hareket), (sec, db_, bant(r, VB) or "?")):
+                        C[kk][d].append(it)
+    print(f"Pinnacle düşüş anı + iddaa kaydı eşleşen: {n_dus}")
+    yaz("CANLI AVCI — Pinnacle düşüşü, iddaa hâlâ ne veriyor", C, max(15, N_MIN // 2))
+    print("\n---- tüm hücreler (+ olmasa da), düşüş bandı ve değer:")
+    for kk in sorted(k for k in C if len(k) == 2 and k[1].startswith("d")):
+        a, b = C[kk]
+        L = a + b
+        if len(L) >= 10:
+            net = sum((o - 1) if w else -1 for o, w, p in L)
+            print(f"  {' · '.join(kk):28s} n={len(L):4d} tutan %{100 * sum(w for _, w, _ in L) / len(L):3.0f} Pinnacle %{100 * sum(p for *_, p in L) / len(L):3.0f} ROI {100 * net / len(L):+6.1f}%")
+
+
 if __name__ == "__main__":
     ne = sys.argv[1] if len(sys.argv) > 1 else "test"
-    indir() if ne == "indir" else test(sys.argv[2] if len(sys.argv) > 2 else "PIN")
+    b = sys.argv[2] if len(sys.argv) > 2 else "PIN"
+    indir() if ne == "indir" else avci(b) if ne == "avci" else test(b)
